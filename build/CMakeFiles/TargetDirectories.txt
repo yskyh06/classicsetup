@@ -1,0 +1,3 @@
+/home/yskyh06/linux-workspace/classicsetup/build/CMakeFiles/classicsetup.dir
+/home/yskyh06/linux-workspace/classicsetup/build/CMakeFiles/edit_cache.dir
+/home/yskyh06/linux-workspace/classicsetup/build/CMakeFiles/rebuild_cache.dir
