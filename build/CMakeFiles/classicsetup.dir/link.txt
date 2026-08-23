@@ -1,1 +1,0 @@
-/usr/bin/cc -Wl,--dependency-file=CMakeFiles/classicsetup.dir/link.d CMakeFiles/classicsetup.dir/src/main.c.o -o classicsetup
