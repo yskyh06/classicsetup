@@ -1,0 +1,42 @@
+#include "classicsetup/after_format.h"
+
+#include <ncurses.h>
+
+#include "classicsetup/tui.h"
+
+enum classicsetup_after_format_result classicsetup_show_after_format(
+    int partitions_applied)
+{
+    classicsetup_tui_begin_screen("ClassicSetup - Partition Step Complete");
+    classicsetup_tui_add_centered(
+        LINES / 2 - 2,
+        partitions_applied
+            ? "The GPT partition layout was applied and verified."
+            : "The partition apply step has not completed.");
+    classicsetup_tui_add_centered(
+        LINES / 2,
+        "The filesystem format plan is still stored only in memory.");
+    classicsetup_tui_add_centered(
+        LINES / 2 + 1,
+        "Later installation steps are not implemented yet.");
+    attron(A_BOLD);
+    classicsetup_tui_add_centered(
+        LINES - 3,
+        "ENTER=Finish    B=Back    F3=Quit");
+    attroff(A_BOLD);
+    refresh();
+
+    for (;;) {
+        int key = getch();
+
+        if (key == '\n' || key == '\r' || key == KEY_ENTER) {
+            return CLASSICSETUP_AFTER_FORMAT_FINISH;
+        }
+        if (key == 'b' || key == 'B') {
+            return CLASSICSETUP_AFTER_FORMAT_BACK;
+        }
+        if (key == KEY_F(3)) {
+            return CLASSICSETUP_AFTER_FORMAT_QUIT;
+        }
+    }
+}

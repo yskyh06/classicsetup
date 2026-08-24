@@ -1,0 +1,497 @@
+#define _POSIX_C_SOURCE 200809L
+
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "classicsetup/apply.h"
+
+#ifndef CLASSICSETUP_TEST_FIXTURE_DIR
+#define CLASSICSETUP_TEST_FIXTURE_DIR "tests/fixtures"
+#endif
+
+static void make_fixture_path(
+    char *path,
+    size_t path_size,
+    const char *environment,
+    const char *file)
+{
+    int written = snprintf(
+        path,
+        path_size,
+        "%s/environment/%s/%s",
+        CLASSICSETUP_TEST_FIXTURE_DIR,
+        environment,
+        file);
+
+    assert(written >= 0 && (size_t)written < path_size);
+}
+
+static enum classicsetup_environment detect_fixture(const char *name)
+{
+    char version[512];
+    char osrelease[512];
+    char dmi[512];
+    enum classicsetup_environment environment;
+
+    make_fixture_path(version, sizeof(version), name, "version");
+    make_fixture_path(osrelease, sizeof(osrelease), name, "osrelease");
+    make_fixture_path(dmi, sizeof(dmi), name, "dmi");
+    assert(classicsetup_detect_environment_from(
+               version,
+               osrelease,
+               dmi,
+               &environment) == 0);
+    return environment;
+}
+
+static struct classicsetup_apply_plan make_apply_plan(void)
+{
+    struct classicsetup_disk_info disk = {0};
+    struct classicsetup_partition_plan partition_plan;
+    struct classicsetup_apply_plan apply_plan;
+    size_t target_index;
+
+    strcpy(disk.name, "sdz");
+    strcpy(disk.device_path, "/dev/sdz");
+    strcpy(disk.model, "ClassicSetup Test Disk");
+    disk.size_bytes = 8192ULL * CLASSICSETUP_SECTORS_PER_MB *
+                      CLASSICSETUP_SECTOR_SIZE_BYTES;
+
+    assert(classicsetup_plan_init(&disk, NULL, 0, &partition_plan) == 0);
+    assert(classicsetup_plan_prepare_install_target(
+               &partition_plan,
+               0,
+               &target_index) == 0);
+    assert(partition_plan.items[target_index].role ==
+           CLASSICSETUP_PARTITION_ROLE_WINDOWS);
+    assert(classicsetup_build_apply_plan(
+               &disk,
+               &partition_plan,
+               0,
+               &apply_plan) == 0);
+    return apply_plan;
+}
+
+static void test_environment_detection(void)
+{
+    char virtualbox_dmi[512];
+    enum classicsetup_environment environment;
+
+    assert(detect_fixture("wsl") == CLASSICSETUP_ENV_WSL);
+    assert(detect_fixture("virtualbox") == CLASSICSETUP_ENV_VIRTUALBOX);
+    assert(detect_fixture("vmware") == CLASSICSETUP_ENV_VMWARE);
+    assert(detect_fixture("unknown") == CLASSICSETUP_ENV_UNKNOWN);
+    assert(!classicsetup_environment_allows_apply(CLASSICSETUP_ENV_WSL));
+    assert(!classicsetup_environment_allows_apply(CLASSICSETUP_ENV_UNKNOWN));
+    assert(classicsetup_environment_allows_apply(
+        CLASSICSETUP_ENV_VIRTUALBOX));
+    assert(classicsetup_environment_allows_apply(CLASSICSETUP_ENV_VMWARE));
+    assert(classicsetup_destructive_unlock_enabled("YES"));
+    assert(!classicsetup_destructive_unlock_enabled(NULL));
+    assert(!classicsetup_destructive_unlock_enabled("yes"));
+    assert(!classicsetup_destructive_unlock_enabled("YES "));
+
+    make_fixture_path(
+        virtualbox_dmi,
+        sizeof(virtualbox_dmi),
+        "virtualbox",
+        "dmi");
+    assert(classicsetup_detect_environment_from(
+               "/missing/classicsetup-version",
+               "/missing/classicsetup-osrelease",
+               virtualbox_dmi,
+               &environment) == 0);
+    assert(environment == CLASSICSETUP_ENV_UNKNOWN);
+}
+
+static void test_apply_plan_and_golden_script(void)
+{
+    struct classicsetup_apply_plan apply_plan = make_apply_plan();
+    char script[CLASSICSETUP_SFDISK_SCRIPT_SIZE];
+    const char *expected =
+        "label: gpt\n"
+        "unit: sectors\n"
+        "\n"
+        "start=2048, size=532480, "
+        "type=c12a7328-f81f-11d2-ba4b-00a0c93ec93b, "
+        "name=\"EFI System Partition\"\n"
+        "start=534528, size=32768, "
+        "type=e3c9e316-0b5c-4db8-817d-f92df00215ae, "
+        "name=\"Microsoft Reserved Partition\"\n"
+        "start=567296, size=14110720, "
+        "type=ebd0a0a2-b9e5-4433-87c0-68b6b72699c7, "
+        "name=\"Windows Partition\"\n"
+        "start=14678016, size=2097152, "
+        "type=de94bba4-06d1-4d40-a16a-bfd50179d6ac, "
+        "name=\"Windows Recovery Partition\"\n";
+    enum classicsetup_partition_role roles[] = {
+        CLASSICSETUP_PARTITION_ROLE_EFI,
+        CLASSICSETUP_PARTITION_ROLE_MSR,
+        CLASSICSETUP_PARTITION_ROLE_WINDOWS,
+        CLASSICSETUP_PARTITION_ROLE_RECOVERY
+    };
+    const char *guids[] = {
+        CLASSICSETUP_GPT_TYPE_EFI,
+        CLASSICSETUP_GPT_TYPE_MSR,
+        CLASSICSETUP_GPT_TYPE_BASIC_DATA,
+        CLASSICSETUP_GPT_TYPE_RECOVERY
+    };
+    size_t index;
+
+    assert(classicsetup_validate_apply_plan(&apply_plan));
+    assert(apply_plan.partition_count == 4);
+    for (index = 0; index < apply_plan.partition_count; ++index) {
+        assert(apply_plan.partitions[index].role == roles[index]);
+        assert(strcmp(apply_plan.partitions[index].type_guid, guids[index]) == 0);
+    }
+    assert(classicsetup_render_sfdisk_script(
+               &apply_plan,
+               script,
+               sizeof(script)) == 0);
+    assert(strcmp(script, expected) == 0);
+    assert(classicsetup_render_sfdisk_script(
+               &apply_plan,
+               script,
+               16) == -1);
+}
+
+static void test_apply_plan_rejections(void)
+{
+    struct classicsetup_disk_info disk = {0};
+    struct classicsetup_partition_plan partition_plan;
+    struct classicsetup_partition_plan before;
+    struct classicsetup_apply_plan apply_plan;
+    struct classicsetup_apply_plan unchanged;
+    size_t target_index;
+    size_t efi_index;
+    size_t generic_index;
+
+    strcpy(disk.name, "sdz");
+    strcpy(disk.device_path, "/dev/sdz");
+    strcpy(disk.model, "ClassicSetup Test Disk");
+    disk.size_bytes = 8192ULL * CLASSICSETUP_SECTORS_PER_MB *
+                      CLASSICSETUP_SECTOR_SIZE_BYTES;
+    assert(classicsetup_plan_init(&disk, NULL, 0, &partition_plan) == 0);
+    memset(&apply_plan, 0x5a, sizeof(apply_plan));
+    unchanged = apply_plan;
+    before = partition_plan;
+    assert(classicsetup_build_apply_plan(
+               &disk,
+               &partition_plan,
+               0,
+               &apply_plan) == -1);
+    assert(memcmp(&partition_plan, &before, sizeof(partition_plan)) == 0);
+    assert(memcmp(&apply_plan, &unchanged, sizeof(apply_plan)) == 0);
+
+    assert(classicsetup_plan_prepare_install_target(
+               &partition_plan,
+               0,
+               &target_index) == 0);
+    assert(classicsetup_build_apply_plan(
+               &disk,
+               &partition_plan,
+               1,
+               &apply_plan) == -1);
+
+    for (efi_index = 0;
+         efi_index < partition_plan.item_count;
+         ++efi_index) {
+        if (partition_plan.items[efi_index].role ==
+            CLASSICSETUP_PARTITION_ROLE_EFI) {
+            break;
+        }
+    }
+    assert(efi_index < partition_plan.item_count);
+    assert(classicsetup_plan_delete_partition(
+               &partition_plan,
+               efi_index) == 0);
+    assert(classicsetup_build_apply_plan(
+               &disk,
+               &partition_plan,
+               0,
+               &apply_plan) == -1);
+
+    apply_plan = make_apply_plan();
+    apply_plan.partitions[0].start_sector = 0;
+    assert(!classicsetup_validate_apply_plan(&apply_plan));
+    apply_plan = make_apply_plan();
+    strcpy(apply_plan.partitions[0].name, "Injected\" name");
+    assert(!classicsetup_validate_apply_plan(&apply_plan));
+
+    assert(classicsetup_plan_init(&disk, NULL, 0, &partition_plan) == 0);
+    assert(classicsetup_plan_create_partition(
+               &partition_plan,
+               0,
+               1,
+               &generic_index) == 0);
+    assert(partition_plan.items[generic_index].role ==
+           CLASSICSETUP_PARTITION_ROLE_GENERIC);
+    for (target_index = 0;
+         target_index < partition_plan.item_count;
+         ++target_index) {
+        if (partition_plan.items[target_index].state ==
+                CLASSICSETUP_PLAN_UNALLOCATED &&
+            partition_plan.items[target_index].sector_count >
+                2048ULL * CLASSICSETUP_SECTORS_PER_MB) {
+            break;
+        }
+    }
+    assert(target_index < partition_plan.item_count);
+    assert(classicsetup_plan_create_windows_layout(
+               &partition_plan,
+               target_index,
+               &efi_index) == 0);
+    assert(classicsetup_build_apply_plan(
+               &disk,
+               &partition_plan,
+               0,
+               &apply_plan) == -1);
+}
+
+static struct classicsetup_apply_safety_inputs safe_inputs(void)
+{
+    struct classicsetup_apply_safety_inputs inputs = {
+        .environment = CLASSICSETUP_ENV_VMWARE,
+        .destructive_unlocked = 1,
+        .disk_identity_valid = 1,
+        .system_disk_status = CLASSICSETUP_SYSTEM_DISK_SAFE,
+        .existing_partition_count = 0,
+        .logical_sector_size_supported = 1,
+        .apply_plan_valid = 1,
+        .tool_available = 1
+    };
+
+    return inputs;
+}
+
+static void test_safety_matrix(void)
+{
+    struct classicsetup_apply_safety_inputs inputs = safe_inputs();
+
+    assert(classicsetup_evaluate_apply_safety(&inputs) ==
+           CLASSICSETUP_APPLY_SAFETY_OK);
+    inputs.environment = CLASSICSETUP_ENV_VIRTUALBOX;
+    assert(classicsetup_evaluate_apply_safety(&inputs) ==
+           CLASSICSETUP_APPLY_SAFETY_OK);
+    inputs.environment = CLASSICSETUP_ENV_WSL;
+    assert(classicsetup_evaluate_apply_safety(&inputs) ==
+           CLASSICSETUP_APPLY_SAFETY_WSL);
+    inputs.environment = CLASSICSETUP_ENV_UNKNOWN;
+    assert(classicsetup_evaluate_apply_safety(&inputs) ==
+           CLASSICSETUP_APPLY_SAFETY_NOT_SUPPORTED_VM);
+
+    inputs = safe_inputs();
+    inputs.destructive_unlocked = 0;
+    assert(classicsetup_evaluate_apply_safety(&inputs) ==
+           CLASSICSETUP_APPLY_SAFETY_LOCKED);
+    inputs = safe_inputs();
+    inputs.disk_identity_valid = 0;
+    assert(classicsetup_evaluate_apply_safety(&inputs) ==
+           CLASSICSETUP_APPLY_SAFETY_DISK_IDENTITY);
+    inputs = safe_inputs();
+    inputs.system_disk_status = CLASSICSETUP_SYSTEM_DISK_TARGET_IN_USE;
+    assert(classicsetup_evaluate_apply_safety(&inputs) ==
+           CLASSICSETUP_APPLY_SAFETY_SYSTEM_DISK);
+    inputs.system_disk_status = CLASSICSETUP_SYSTEM_DISK_UNKNOWN;
+    assert(classicsetup_evaluate_apply_safety(&inputs) ==
+           CLASSICSETUP_APPLY_SAFETY_SYSTEM_DISK_UNKNOWN);
+    inputs = safe_inputs();
+    inputs.existing_partition_count = 1;
+    assert(classicsetup_evaluate_apply_safety(&inputs) ==
+           CLASSICSETUP_APPLY_SAFETY_EXISTING_PARTITIONS);
+    inputs = safe_inputs();
+    inputs.logical_sector_size_supported = 0;
+    assert(classicsetup_evaluate_apply_safety(&inputs) ==
+           CLASSICSETUP_APPLY_SAFETY_UNSUPPORTED_SECTOR_SIZE);
+    inputs = safe_inputs();
+    inputs.apply_plan_valid = 0;
+    assert(classicsetup_evaluate_apply_safety(&inputs) ==
+           CLASSICSETUP_APPLY_SAFETY_INVALID_PLAN);
+    inputs = safe_inputs();
+    inputs.tool_available = 0;
+    assert(classicsetup_evaluate_apply_safety(&inputs) ==
+           CLASSICSETUP_APPLY_SAFETY_TOOL_UNAVAILABLE);
+}
+
+static void write_mountinfo(const char *path, const char *device_id)
+{
+    FILE *file = fopen(path, "w");
+
+    assert(file != NULL);
+    assert(fprintf(
+               file,
+               "24 1 %s / / rw - ext4 /dev/root rw\n",
+               device_id) > 0);
+    assert(fclose(file) == 0);
+}
+
+static void test_system_disk_protection(void)
+{
+    char directory[] = "/tmp/classicsetup-system-XXXXXX";
+    char sys_path[512];
+    char mountinfo_path[512];
+    char link_path[512];
+    char second_link_path[512];
+
+    assert(mkdtemp(directory) != NULL);
+    assert(snprintf(
+               sys_path,
+               sizeof(sys_path),
+               "%s/sys-dev-block",
+               directory) > 0);
+    assert(mkdir(sys_path, 0700) == 0);
+    assert(snprintf(
+               mountinfo_path,
+               sizeof(mountinfo_path),
+               "%s/mountinfo",
+               directory) > 0);
+    assert(snprintf(
+               link_path,
+               sizeof(link_path),
+               "%s/8:1",
+               sys_path) > 0);
+    assert(symlink("../../devices/pci/block/sda/sda1", link_path) == 0);
+    write_mountinfo(mountinfo_path, "8:1");
+
+    assert(classicsetup_check_system_disk_from(
+               "sda",
+               mountinfo_path,
+               sys_path) == CLASSICSETUP_SYSTEM_DISK_TARGET_IN_USE);
+    assert(classicsetup_check_system_disk_from(
+               "sdb",
+               mountinfo_path,
+               sys_path) == CLASSICSETUP_SYSTEM_DISK_SAFE);
+
+    assert(snprintf(
+               second_link_path,
+               sizeof(second_link_path),
+               "%s/8:17",
+               sys_path) > 0);
+    assert(symlink(
+               "../../devices/pci/block/sdb/sdb1",
+               second_link_path) == 0);
+    {
+        FILE *file = fopen(mountinfo_path, "a");
+
+        assert(file != NULL);
+        assert(fputs(
+                   "25 1 8:17 / /mnt/test rw - ext4 /dev/sdb1 rw\n",
+                   file) >= 0);
+        assert(fclose(file) == 0);
+    }
+    assert(classicsetup_check_system_disk_from(
+               "sdb",
+               mountinfo_path,
+               sys_path) == CLASSICSETUP_SYSTEM_DISK_TARGET_IN_USE);
+    assert(unlink(second_link_path) == 0);
+
+    write_mountinfo(mountinfo_path, "0:99");
+    assert(classicsetup_check_system_disk_from(
+               "sdb",
+               mountinfo_path,
+               sys_path) == CLASSICSETUP_SYSTEM_DISK_UNKNOWN);
+
+    assert(unlink(link_path) == 0);
+    assert(symlink("../../devices/virtual/block/dm-0", link_path) == 0);
+    write_mountinfo(mountinfo_path, "8:1");
+    assert(classicsetup_check_system_disk_from(
+               "sdb",
+               mountinfo_path,
+               sys_path) == CLASSICSETUP_SYSTEM_DISK_UNKNOWN);
+
+    assert(unlink(link_path) == 0);
+    assert(unlink(mountinfo_path) == 0);
+    assert(rmdir(sys_path) == 0);
+    assert(rmdir(directory) == 0);
+}
+
+static void test_disk_identity_and_post_apply_verification(void)
+{
+    struct classicsetup_apply_plan apply_plan = make_apply_plan();
+    struct classicsetup_disk_info current = apply_plan.target_disk;
+    struct classicsetup_partition_info partitions[4] = {0};
+    size_t index;
+
+    assert(classicsetup_disk_identity_matches(
+        &apply_plan.target_disk,
+        &current));
+    ++current.size_bytes;
+    assert(!classicsetup_disk_identity_matches(
+        &apply_plan.target_disk,
+        &current));
+
+    for (index = 0; index < 4; ++index) {
+        partitions[index].start_sector =
+            apply_plan.partitions[index].start_sector;
+        partitions[index].sector_count =
+            apply_plan.partitions[index].sector_count;
+    }
+    assert(classicsetup_verify_partition_ranges(
+        &apply_plan,
+        partitions,
+        4));
+    ++partitions[2].sector_count;
+    assert(!classicsetup_verify_partition_ranges(
+        &apply_plan,
+        partitions,
+        4));
+    assert(!classicsetup_verify_partition_ranges(
+        &apply_plan,
+        partitions,
+        3));
+}
+
+static void test_process_exit_status(void)
+{
+    struct classicsetup_process_result result;
+    char *false_arguments[] = {"/bin/false", NULL};
+    char *true_arguments[] = {"/bin/true", NULL};
+
+    assert(classicsetup_run_process_with_input(
+               "/bin/false",
+               false_arguments,
+               "",
+               &result) == 0);
+    assert(result.exited);
+    assert(result.exit_status != 0);
+    assert(classicsetup_run_process_with_input(
+               "/bin/true",
+               true_arguments,
+               "test input",
+               &result) == 0);
+    assert(result.exited);
+    assert(result.exit_status == 0);
+}
+
+static void test_current_wsl_execution_is_blocked(void)
+{
+    enum classicsetup_environment environment;
+
+    if (classicsetup_detect_environment(&environment) == 0 &&
+        environment == CLASSICSETUP_ENV_WSL) {
+        struct classicsetup_apply_plan apply_plan = make_apply_plan();
+        struct classicsetup_apply_result result;
+
+        assert(classicsetup_execute_apply_plan(&apply_plan, &result) == 0);
+        assert(result.code == CLASSICSETUP_APPLY_RESULT_BLOCKED);
+        assert(result.safety_code == CLASSICSETUP_APPLY_SAFETY_WSL);
+        assert(!result.process.exited);
+    }
+}
+
+int main(void)
+{
+    test_environment_detection();
+    test_apply_plan_and_golden_script();
+    test_apply_plan_rejections();
+    test_safety_matrix();
+    test_system_disk_protection();
+    test_disk_identity_and_post_apply_verification();
+    test_process_exit_status();
+    test_current_wsl_execution_is_blocked();
+    return 0;
+}

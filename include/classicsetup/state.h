@@ -1,0 +1,34 @@
+#ifndef CLASSICSETUP_STATE_H
+#define CLASSICSETUP_STATE_H
+
+#include <stdbool.h>
+
+enum classicsetup_state {
+    CLASSICSETUP_STATE_WELCOME,
+    CLASSICSETUP_STATE_KEYBOARD,
+    CLASSICSETUP_STATE_DISK,
+    CLASSICSETUP_STATE_PARTITION,
+    CLASSICSETUP_STATE_FORMAT,
+    CLASSICSETUP_STATE_APPLY_PREVIEW,
+    CLASSICSETUP_STATE_APPLY_CONFIRMATION,
+    CLASSICSETUP_STATE_APPLY_RESULT,
+    CLASSICSETUP_STATE_AFTER_FORMAT,
+    CLASSICSETUP_STATE_EXIT
+};
+
+enum classicsetup_event {
+    CLASSICSETUP_EVENT_CONTINUE,
+    CLASSICSETUP_EVENT_CANCEL,
+    CLASSICSETUP_EVENT_BACK,
+    CLASSICSETUP_EVENT_QUIT_REQUEST
+};
+
+enum classicsetup_state classicsetup_next_state(
+    enum classicsetup_state state,
+    enum classicsetup_event event);
+
+enum classicsetup_state classicsetup_resolve_quit_request(
+    enum classicsetup_state state,
+    bool confirmed);
+
+#endif

@@ -5,7 +5,26 @@ project(classicsetup LANGUAGES C)
 find_package(Curses REQUIRED)
 
 add_executable(classicsetup
+    src/app.c
+    src/config.c
+    src/core/apply.c
+    src/core/disk.c
+    src/core/environment.c
+    src/core/format.c
+    src/core/partition.c
+    src/core/partition_plan.c
+    src/core/process.c
+    src/core/system_disk.c
     src/main.c
+    src/state.c
+    src/tui/after_format.c
+    src/tui/apply.c
+    src/tui/disk_selection.c
+    src/tui/format_selection.c
+    src/tui/keyboard.c
+    src/tui/partition_selection.c
+    src/tui/quit.c
+    src/tui/tui.c
     src/tui/welcome.c
 )
 
@@ -24,4 +43,149 @@ target_link_libraries(classicsetup PRIVATE ${CURSES_LIBRARIES})
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(classicsetup PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+include(CTest)
+
+if(BUILD_TESTING)
+    add_executable(classicsetup_state_test
+        tests/state_test.c
+        src/state.c
+    )
+
+    set_target_properties(classicsetup_state_test PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED YES
+        C_EXTENSIONS NO
+    )
+
+    target_include_directories(classicsetup_state_test PRIVATE include)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(classicsetup_state_test PRIVATE
+            -Wall -Wextra -Wpedantic
+        )
+    endif()
+    add_test(NAME state_transitions COMMAND classicsetup_state_test)
+
+    add_executable(classicsetup_disk_test
+        tests/disk_test.c
+        src/core/disk.c
+    )
+
+    set_target_properties(classicsetup_disk_test PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED YES
+        C_EXTENSIONS NO
+    )
+
+    target_include_directories(classicsetup_disk_test PRIVATE include)
+    target_compile_definitions(classicsetup_disk_test PRIVATE
+        CLASSICSETUP_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
+    )
+
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(classicsetup_disk_test PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    add_test(NAME disk_scan COMMAND classicsetup_disk_test)
+
+    add_executable(classicsetup_partition_test
+        tests/partition_test.c
+        src/core/partition.c
+    )
+
+    set_target_properties(classicsetup_partition_test PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED YES
+        C_EXTENSIONS NO
+    )
+
+    target_include_directories(classicsetup_partition_test PRIVATE include)
+    target_compile_definitions(classicsetup_partition_test PRIVATE
+        CLASSICSETUP_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
+    )
+
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(classicsetup_partition_test PRIVATE
+            -Wall -Wextra -Wpedantic
+        )
+    endif()
+
+    add_test(NAME partition_scan COMMAND classicsetup_partition_test)
+
+    add_executable(classicsetup_partition_plan_test
+        tests/partition_plan_test.c
+        src/config.c
+        src/core/format.c
+        src/core/partition_plan.c
+    )
+
+    set_target_properties(classicsetup_partition_plan_test PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED YES
+        C_EXTENSIONS NO
+    )
+
+    target_include_directories(classicsetup_partition_plan_test PRIVATE include)
+
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(classicsetup_partition_plan_test PRIVATE
+            -Wall -Wextra -Wpedantic
+        )
+    endif()
+
+    add_test(NAME partition_plan COMMAND classicsetup_partition_plan_test)
+
+    add_executable(classicsetup_format_test
+        tests/format_test.c
+        src/config.c
+        src/core/format.c
+        src/core/partition_plan.c
+    )
+
+    set_target_properties(classicsetup_format_test PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED YES
+        C_EXTENSIONS NO
+    )
+
+    target_include_directories(classicsetup_format_test PRIVATE include)
+
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(classicsetup_format_test PRIVATE
+            -Wall -Wextra -Wpedantic
+        )
+    endif()
+
+    add_test(NAME format_plan COMMAND classicsetup_format_test)
+
+    add_executable(classicsetup_apply_test
+        tests/apply_test.c
+        src/core/apply.c
+        src/core/disk.c
+        src/core/environment.c
+        src/core/partition.c
+        src/core/partition_plan.c
+        src/core/process.c
+        src/core/system_disk.c
+    )
+
+    set_target_properties(classicsetup_apply_test PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED YES
+        C_EXTENSIONS NO
+    )
+
+    target_include_directories(classicsetup_apply_test PRIVATE include)
+    target_compile_definitions(classicsetup_apply_test PRIVATE
+        CLASSICSETUP_TEST_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
+    )
+
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(classicsetup_apply_test PRIVATE
+            -Wall -Wextra -Wpedantic
+        )
+    endif()
+
+    add_test(NAME apply_safety_and_render COMMAND classicsetup_apply_test)
 endif()
