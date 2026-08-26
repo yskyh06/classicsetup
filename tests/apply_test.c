@@ -317,15 +317,33 @@ static void test_safety_matrix(void)
            CLASSICSETUP_APPLY_SAFETY_TOOL_UNAVAILABLE);
 }
 
-static void write_mountinfo(const char *path, const char *device_id)
+static void write_mountinfo_entry(
+    FILE *file,
+    unsigned int mount_id,
+    const char *device_id,
+    const char *mount_point,
+    const char *filesystem,
+    const char *source)
 {
-    FILE *file = fopen(path, "w");
-
     assert(file != NULL);
     assert(fprintf(
                file,
-               "24 1 %s / / rw - ext4 /dev/root rw\n",
-               device_id) > 0);
+               "%u 1 %s / %s rw - %s %s rw\n",
+               mount_id,
+               device_id,
+               mount_point,
+               filesystem,
+               source) > 0);
+}
+
+static void write_root_mount(
+    const char *path,
+    const char *device_id,
+    const char *source)
+{
+    FILE *file = fopen(path, "w");
+
+    write_mountinfo_entry(file, 24, device_id, "/", "ext4", source);
     assert(fclose(file) == 0);
 }
 
@@ -334,8 +352,12 @@ static void test_system_disk_protection(void)
     char directory[] = "/tmp/classicsetup-system-XXXXXX";
     char sys_path[512];
     char mountinfo_path[512];
-    char link_path[512];
-    char second_link_path[512];
+    char sda_link[512];
+    char sdb_partition_link[512];
+    char sdb_root_link[512];
+    char sdc_link[512];
+    char loop_link[512];
+    char dm_link[512];
 
     assert(mkdtemp(directory) != NULL);
     assert(snprintf(
@@ -350,60 +372,173 @@ static void test_system_disk_protection(void)
                "%s/mountinfo",
                directory) > 0);
     assert(snprintf(
-               link_path,
-               sizeof(link_path),
-               "%s/8:1",
+               sda_link,
+               sizeof(sda_link),
+               "%s/8:2",
                sys_path) > 0);
-    assert(symlink("../../devices/pci/block/sda/sda1", link_path) == 0);
-    write_mountinfo(mountinfo_path, "8:1");
+    assert(snprintf(
+               sdb_partition_link,
+               sizeof(sdb_partition_link),
+               "%s/8:17",
+               sys_path) > 0);
+    assert(snprintf(
+               sdb_root_link,
+               sizeof(sdb_root_link),
+               "%s/8:18",
+               sys_path) > 0);
+    assert(snprintf(
+               sdc_link,
+               sizeof(sdc_link),
+               "%s/8:33",
+               sys_path) > 0);
+    assert(snprintf(
+               loop_link,
+               sizeof(loop_link),
+               "%s/7:0",
+               sys_path) > 0);
+    assert(snprintf(
+               dm_link,
+               sizeof(dm_link),
+               "%s/253:0",
+               sys_path) > 0);
+    assert(symlink("../../devices/pci/block/sda/sda2", sda_link) == 0);
+    assert(symlink(
+               "../../devices/pci/block/sdb/sdb1",
+               sdb_partition_link) == 0);
+    assert(symlink(
+               "../../devices/pci/block/sdb/sdb2",
+               sdb_root_link) == 0);
+    assert(symlink("../../devices/pci/block/sdc/sdc1", sdc_link) == 0);
+    assert(symlink("../../devices/virtual/block/loop0", loop_link) == 0);
+    assert(symlink("../../devices/virtual/block/dm-0", dm_link) == 0);
 
-    assert(classicsetup_check_system_disk_from(
-               "sda",
-               mountinfo_path,
-               sys_path) == CLASSICSETUP_SYSTEM_DISK_TARGET_IN_USE);
+    write_root_mount(mountinfo_path, "8:2", "/dev/sda2");
+    {
+        FILE *file = fopen(mountinfo_path, "a");
+        unsigned int index;
+
+        assert(file != NULL);
+        for (index = 0; index <= 10; ++index) {
+            char device_id[32];
+            char mount_point[64];
+            char source[32];
+
+            assert(snprintf(
+                       device_id,
+                       sizeof(device_id),
+                       "7:%u",
+                       index) > 0);
+            assert(snprintf(
+                       mount_point,
+                       sizeof(mount_point),
+                       "/snap/test/%u",
+                       index) > 0);
+            assert(snprintf(
+                       source,
+                       sizeof(source),
+                       "/dev/loop%u",
+                       index) > 0);
+            write_mountinfo_entry(
+                file,
+                30 + index,
+                device_id,
+                mount_point,
+                "squashfs",
+                source);
+        }
+        write_mountinfo_entry(
+            file,
+            50,
+            "0:55",
+            "/run/user/1000",
+            "tmpfs",
+            "tmpfs");
+        assert(fclose(file) == 0);
+    }
+
     assert(classicsetup_check_system_disk_from(
                "sdb",
                mountinfo_path,
                sys_path) == CLASSICSETUP_SYSTEM_DISK_SAFE);
 
-    assert(snprintf(
-               second_link_path,
-               sizeof(second_link_path),
-               "%s/8:17",
-               sys_path) > 0);
-    assert(symlink(
-               "../../devices/pci/block/sdb/sdb1",
-               second_link_path) == 0);
+    write_root_mount(mountinfo_path, "8:18", "/dev/sdb2");
+    assert(classicsetup_check_system_disk_from(
+               "sdb",
+               mountinfo_path,
+               sys_path) == CLASSICSETUP_SYSTEM_DISK_TARGET_IN_USE);
+
+    write_root_mount(mountinfo_path, "8:2", "/dev/sda2");
     {
         FILE *file = fopen(mountinfo_path, "a");
 
-        assert(file != NULL);
-        assert(fputs(
-                   "25 1 8:17 / /mnt/test rw - ext4 /dev/sdb1 rw\n",
-                   file) >= 0);
+        write_mountinfo_entry(
+            file,
+            25,
+            "8:17",
+            "/mnt/test",
+            "ext4",
+            "/dev/sdb1");
         assert(fclose(file) == 0);
     }
     assert(classicsetup_check_system_disk_from(
                "sdb",
                mountinfo_path,
                sys_path) == CLASSICSETUP_SYSTEM_DISK_TARGET_IN_USE);
-    assert(unlink(second_link_path) == 0);
 
-    write_mountinfo(mountinfo_path, "0:99");
+    write_root_mount(mountinfo_path, "8:2", "/dev/sda2");
+    {
+        FILE *file = fopen(mountinfo_path, "a");
+
+        write_mountinfo_entry(
+            file,
+            26,
+            "8:33",
+            "/srv/data",
+            "ext4",
+            "/dev/sdc1");
+        assert(fclose(file) == 0);
+    }
+    assert(classicsetup_check_system_disk_from(
+               "sdb",
+               mountinfo_path,
+               sys_path) == CLASSICSETUP_SYSTEM_DISK_SAFE);
+
+    write_root_mount(mountinfo_path, "8:99", "/dev/sda2");
     assert(classicsetup_check_system_disk_from(
                "sdb",
                mountinfo_path,
                sys_path) == CLASSICSETUP_SYSTEM_DISK_UNKNOWN);
 
-    assert(unlink(link_path) == 0);
-    assert(symlink("../../devices/virtual/block/dm-0", link_path) == 0);
-    write_mountinfo(mountinfo_path, "8:1");
+    write_root_mount(mountinfo_path, "253:0", "/dev/mapper/ubuntu-root");
     assert(classicsetup_check_system_disk_from(
                "sdb",
                mountinfo_path,
                sys_path) == CLASSICSETUP_SYSTEM_DISK_UNKNOWN);
 
-    assert(unlink(link_path) == 0);
+    write_root_mount(mountinfo_path, "8:2", "/dev/sda2");
+    {
+        FILE *file = fopen(mountinfo_path, "a");
+
+        write_mountinfo_entry(
+            file,
+            27,
+            "253:0",
+            "/mnt/target-stack",
+            "ext4",
+            "/dev/mapper/sdb-data");
+        assert(fclose(file) == 0);
+    }
+    assert(classicsetup_check_system_disk_from(
+               "sdb",
+               mountinfo_path,
+               sys_path) == CLASSICSETUP_SYSTEM_DISK_UNKNOWN);
+
+    assert(unlink(dm_link) == 0);
+    assert(unlink(loop_link) == 0);
+    assert(unlink(sdc_link) == 0);
+    assert(unlink(sdb_root_link) == 0);
+    assert(unlink(sdb_partition_link) == 0);
+    assert(unlink(sda_link) == 0);
     assert(unlink(mountinfo_path) == 0);
     assert(rmdir(sys_path) == 0);
     assert(rmdir(directory) == 0);
