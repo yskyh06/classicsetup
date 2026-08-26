@@ -2,6 +2,7 @@
 
 #include <ncurses.h>
 
+#include "classicsetup/keymap.h"
 #include "classicsetup/tui.h"
 
 static const char *const keyboard_names[] = {
@@ -52,7 +53,7 @@ static void draw_keyboard_screen(int selected)
     attron(A_BOLD);
     classicsetup_tui_add_centered(
         LINES - 3,
-        "UP/DOWN=Select    ENTER=Continue    B=Back    F3=Quit");
+        "UP/DOWN=Select    ENTER=Continue    B=Back    Q=Quit");
     attroff(A_BOLD);
     refresh();
 }
@@ -81,7 +82,7 @@ enum classicsetup_keyboard_result classicsetup_show_keyboard(
             return CLASSICSETUP_KEYBOARD_CONTINUE;
         } else if (key == 'b' || key == 'B') {
             return CLASSICSETUP_KEYBOARD_BACK;
-        } else if (key == KEY_F(3)) {
+        } else if (classicsetup_key_is_quit(key)) {
             return CLASSICSETUP_KEYBOARD_QUIT;
         }
     }

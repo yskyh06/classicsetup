@@ -2,6 +2,7 @@
 
 #include <ncurses.h>
 
+#include "classicsetup/keymap.h"
 #include "classicsetup/tui.h"
 
 static void draw_option(int row, const char *text, bool selected)
@@ -51,7 +52,7 @@ static void draw_format_screen(enum classicsetup_format_mode selected)
     attron(A_BOLD);
     classicsetup_tui_add_centered(
         LINES - 3,
-        "UP/DOWN=Select    ENTER=Continue    ESC=Cancel    F3=Quit");
+        "UP/DOWN=Select    ENTER=Continue    ESC=Cancel    Q=Quit");
     attroff(A_BOLD);
     refresh();
 }
@@ -82,7 +83,7 @@ enum classicsetup_format_selection_result classicsetup_show_format_selection(
             return CLASSICSETUP_FORMAT_SELECTION_CONTINUE;
         } else if (key == 27) {
             return CLASSICSETUP_FORMAT_SELECTION_CANCEL;
-        } else if (key == KEY_F(3)) {
+        } else if (classicsetup_key_is_quit(key)) {
             return CLASSICSETUP_FORMAT_SELECTION_QUIT;
         }
     }

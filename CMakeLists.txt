@@ -21,6 +21,7 @@ add_executable(classicsetup
     src/tui/apply.c
     src/tui/disk_selection.c
     src/tui/format_selection.c
+    src/tui/keymap.c
     src/tui/keyboard.c
     src/tui/partition_selection.c
     src/tui/quit.c
@@ -188,4 +189,38 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME apply_safety_and_render COMMAND classicsetup_apply_test)
+
+    add_executable(classicsetup_key_mapping_test
+        tests/key_mapping_test.c
+        src/tui/keymap.c
+    )
+
+    set_target_properties(classicsetup_key_mapping_test PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED YES
+        C_EXTENSIONS NO
+    )
+
+    target_include_directories(classicsetup_key_mapping_test PRIVATE
+        include
+        ${CURSES_INCLUDE_DIRS}
+    )
+
+    target_link_libraries(classicsetup_key_mapping_test PRIVATE
+        ${CURSES_LIBRARIES}
+    )
+
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(classicsetup_key_mapping_test PRIVATE
+            -Wall -Wextra -Wpedantic
+        )
+    endif()
+
+    add_test(NAME key_mapping COMMAND classicsetup_key_mapping_test)
+    add_test(
+        NAME tui_no_function_keys
+        COMMAND ${CMAKE_COMMAND}
+            -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_no_function_keys.cmake
+    )
 endif()

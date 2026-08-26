@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "classicsetup/keymap.h"
 #include "classicsetup/tui.h"
 
 enum modal_result {
@@ -174,11 +175,11 @@ static void draw_partition_footer(
                 ? "ENTER=Install  C=Create  D=Delete  U=Undo Layout"
                 : "ENTER=Install  C=Create  D=Delete",
             false);
-        draw_at(layout->footer_bottom, "B=Back  F3=Quit", false);
+        draw_at(layout->footer_bottom, "B=Back  Q=Quit", false);
     } else {
         draw_at(
             layout->footer_top,
-            has_windows_layout ? "ENTER C D U B F3" : "ENTER C D B F3",
+            has_windows_layout ? "ENTER C D U B Q" : "ENTER C D B Q",
             false);
     }
 }
@@ -263,7 +264,7 @@ static void draw_partition_screen(
             &layout,
             classicsetup_plan_has_windows_layout(plan));
     } else {
-        draw_at(layout.footer_top, "B=Back  F3=Quit", false);
+        draw_at(layout.footer_top, "B=Back  Q=Quit", false);
     }
     attroff(A_BOLD);
     refresh();
@@ -306,7 +307,7 @@ static enum modal_result prompt_create_size(
         classicsetup_tui_add_centered(LINES / 2 + 3, message);
         classicsetup_tui_add_centered(
             LINES - 3,
-            "ENTER=Create    BACKSPACE=Edit    ESC=Cancel    F3=Quit");
+            "ENTER=Create    BACKSPACE=Edit    ESC=Cancel    Q=Quit");
         refresh();
 
         key = getch();
@@ -353,7 +354,7 @@ static enum modal_result prompt_create_size(
             }
         } else if (key == 27) {
             return MODAL_CANCEL;
-        } else if (key == KEY_F(3)) {
+        } else if (classicsetup_key_is_quit(key)) {
             return MODAL_QUIT;
         } else if (isprint((unsigned char)key)) {
             snprintf(message, sizeof(message), "Digits only.");
@@ -375,14 +376,14 @@ static enum modal_result show_windows_layout_error(void)
             "The planned layout was not changed.");
         classicsetup_tui_add_centered(
             LINES - 3,
-            "ENTER=Return    ESC=Return    F3=Quit");
+            "ENTER=Return    ESC=Return    Q=Quit");
         refresh();
 
         key = getch();
         if (key == '\n' || key == '\r' || key == KEY_ENTER || key == 27) {
             return MODAL_CANCEL;
         }
-        if (key == KEY_F(3)) {
+        if (classicsetup_key_is_quit(key)) {
             return MODAL_QUIT;
         }
     }
@@ -415,7 +416,7 @@ static enum modal_result confirm_delete(
         attroff(A_BOLD);
         classicsetup_tui_add_centered(
             LINES - 3,
-            "D=Delete    ESC=Cancel    F3=Quit");
+            "D=Delete    ESC=Cancel    Q=Quit");
         refresh();
 
         key = getch();
@@ -425,7 +426,7 @@ static enum modal_result confirm_delete(
         if (key == 27) {
             return MODAL_CANCEL;
         }
-        if (key == KEY_F(3)) {
+        if (classicsetup_key_is_quit(key)) {
             return MODAL_QUIT;
         }
     }
@@ -454,7 +455,7 @@ static enum modal_result confirm_undo_windows_layout(void)
         attroff(A_BOLD);
         classicsetup_tui_add_centered(
             LINES - 3,
-            "U=Confirm    ESC=Cancel    F3=Quit");
+            "U=Confirm    ESC=Cancel    Q=Quit");
         refresh();
 
         key = getch();
@@ -464,7 +465,7 @@ static enum modal_result confirm_undo_windows_layout(void)
         if (key == 27) {
             return MODAL_CANCEL;
         }
-        if (key == KEY_F(3)) {
+        if (classicsetup_key_is_quit(key)) {
             return MODAL_QUIT;
         }
     }
@@ -592,7 +593,7 @@ classicsetup_show_partition_selection(
             }
         } else if (key == 'b' || key == 'B') {
             return CLASSICSETUP_PARTITION_SELECTION_BACK;
-        } else if (key == KEY_F(3)) {
+        } else if (classicsetup_key_is_quit(key)) {
             return CLASSICSETUP_PARTITION_SELECTION_QUIT;
         }
     }

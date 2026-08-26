@@ -1,0 +1,10 @@
+file(GLOB TUI_SOURCES "${SOURCE_DIR}/src/tui/*.c")
+
+foreach(SOURCE_FILE IN LISTS TUI_SOURCES)
+    file(READ "${SOURCE_FILE}" SOURCE_TEXT)
+    string(REGEX MATCH "KEY_F\\(" FUNCTION_KEY_HANDLER "${SOURCE_TEXT}")
+    string(REGEX MATCH "F([1-9]|1[0-2])" FUNCTION_KEY_TEXT "${SOURCE_TEXT}")
+    if(FUNCTION_KEY_HANDLER OR FUNCTION_KEY_TEXT)
+        message(FATAL_ERROR "Function key dependency remains in ${SOURCE_FILE}")
+    endif()
+endforeach()

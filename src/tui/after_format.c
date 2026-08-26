@@ -2,6 +2,7 @@
 
 #include <ncurses.h>
 
+#include "classicsetup/keymap.h"
 #include "classicsetup/tui.h"
 
 enum classicsetup_after_format_result classicsetup_show_after_format(
@@ -22,7 +23,7 @@ enum classicsetup_after_format_result classicsetup_show_after_format(
     attron(A_BOLD);
     classicsetup_tui_add_centered(
         LINES - 3,
-        "ENTER=Finish    B=Back    F3=Quit");
+        "ENTER=Finish    B=Back    Q=Quit");
     attroff(A_BOLD);
     refresh();
 
@@ -35,7 +36,7 @@ enum classicsetup_after_format_result classicsetup_show_after_format(
         if (key == 'b' || key == 'B') {
             return CLASSICSETUP_AFTER_FORMAT_BACK;
         }
-        if (key == KEY_F(3)) {
+        if (classicsetup_key_is_quit(key)) {
             return CLASSICSETUP_AFTER_FORMAT_QUIT;
         }
     }

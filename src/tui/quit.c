@@ -2,6 +2,7 @@
 
 #include <ncurses.h>
 
+#include "classicsetup/keymap.h"
 #include "classicsetup/tui.h"
 
 enum classicsetup_quit_confirmation_result classicsetup_confirm_quit(void)
@@ -16,14 +17,14 @@ enum classicsetup_quit_confirmation_result classicsetup_confirm_quit(void)
     attron(A_BOLD);
     classicsetup_tui_add_centered(
         LINES - 3,
-        "F3=Quit Setup    ESC=Continue Setup");
+        "Q=Quit Setup    ESC=Continue Setup");
     attroff(A_BOLD);
     refresh();
 
     for (;;) {
         int key = getch();
 
-        if (key == KEY_F(3)) {
+        if (classicsetup_key_is_quit(key)) {
             return CLASSICSETUP_QUIT_CONFIRM;
         }
         if (key == 27) {

@@ -3,6 +3,7 @@
 #include <ncurses.h>
 #include <stdio.h>
 
+#include "classicsetup/keymap.h"
 #include "classicsetup/tui.h"
 
 static void format_size(
@@ -101,8 +102,8 @@ static void draw_disk_screen(
     classicsetup_tui_add_centered(
         LINES - 3,
         disk_count > 0
-            ? "UP/DOWN=Select    ENTER=Continue    B=Back    F3=Quit"
-            : "B=Back    F3=Quit");
+            ? "UP/DOWN=Select    ENTER=Continue    B=Back    Q=Quit"
+            : "B=Back    Q=Quit");
     attroff(A_BOLD);
     refresh();
 }
@@ -135,7 +136,7 @@ enum classicsetup_disk_selection_result classicsetup_show_disk_selection(
             return CLASSICSETUP_DISK_SELECTION_CONTINUE;
         } else if (key == 'b' || key == 'B') {
             return CLASSICSETUP_DISK_SELECTION_BACK;
-        } else if (key == KEY_F(3)) {
+        } else if (classicsetup_key_is_quit(key)) {
             return CLASSICSETUP_DISK_SELECTION_QUIT;
         }
     }

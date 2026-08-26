@@ -3,6 +3,7 @@
 #include <ncurses.h>
 #include <stdio.h>
 
+#include "classicsetup/keymap.h"
 #include "classicsetup/tui.h"
 
 static void format_binary_size(
@@ -63,7 +64,7 @@ enum classicsetup_apply_preview_result classicsetup_show_apply_preview(
                 "This layout is not eligible for the restricted M7 apply path.");
             classicsetup_tui_add_centered(
                 LINES - 3,
-                "B=Back    F3=Quit");
+                "B=Back    Q=Quit");
         } else {
             char line[384];
             char disk_size[32];
@@ -107,7 +108,7 @@ enum classicsetup_apply_preview_result classicsetup_show_apply_preview(
             attron(A_BOLD);
             classicsetup_tui_add_centered(
                 LINES - 3,
-                "ENTER=Continue    B=Back    F3=Quit");
+                "ENTER=Continue    B=Back    Q=Quit");
             attroff(A_BOLD);
         }
         refresh();
@@ -122,7 +123,7 @@ enum classicsetup_apply_preview_result classicsetup_show_apply_preview(
             if (key == 'b' || key == 'B') {
                 return CLASSICSETUP_APPLY_PREVIEW_BACK;
             }
-            if (key == KEY_F(3)) {
+            if (classicsetup_key_is_quit(key)) {
                 return CLASSICSETUP_APPLY_PREVIEW_QUIT;
             }
         }
@@ -161,22 +162,22 @@ classicsetup_show_apply_confirmation(
         classicsetup_tui_add_centered(LINES / 2, disk_size);
         classicsetup_tui_add_centered(
             LINES / 2 + 2,
-            "Press F10 to apply the GPT partition changes.");
+            "Press A to apply the GPT partition changes.");
         attron(A_BOLD);
         classicsetup_tui_add_centered(
             LINES - 3,
-            "F10=Apply    B=Back    F3=Quit");
+            "A=Apply    B=Back    Q=Quit");
         attroff(A_BOLD);
         refresh();
 
         key = getch();
-        if (key == KEY_F(10)) {
+        if (classicsetup_key_is_apply(key)) {
             return CLASSICSETUP_APPLY_CONFIRMATION_APPLY;
         }
         if (key == 'b' || key == 'B') {
             return CLASSICSETUP_APPLY_CONFIRMATION_BACK;
         }
-        if (key == KEY_F(3)) {
+        if (classicsetup_key_is_quit(key)) {
             return CLASSICSETUP_APPLY_CONFIRMATION_QUIT;
         }
     }
@@ -215,8 +216,8 @@ enum classicsetup_apply_result_screen_result classicsetup_show_apply_result(
         attron(A_BOLD);
         classicsetup_tui_add_centered(
             LINES - 3,
-            success ? "ENTER=Continue    B=Back    F3=Quit"
-                    : "B=Back    F3=Quit");
+            success ? "ENTER=Continue    B=Back    Q=Quit"
+                    : "B=Back    Q=Quit");
         attroff(A_BOLD);
         refresh();
 
@@ -228,7 +229,7 @@ enum classicsetup_apply_result_screen_result classicsetup_show_apply_result(
         if (key == 'b' || key == 'B') {
             return CLASSICSETUP_APPLY_RESULT_SCREEN_BACK;
         }
-        if (key == KEY_F(3)) {
+        if (classicsetup_key_is_quit(key)) {
             return CLASSICSETUP_APPLY_RESULT_SCREEN_QUIT;
         }
     }
