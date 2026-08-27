@@ -53,16 +53,15 @@ enum classicsetup_apply_preview_result classicsetup_show_apply_preview(
         size_t index;
 
         classicsetup_tui_begin_screen("ClassicSetup - Disk Changes");
-        attron(A_BOLD);
-        classicsetup_tui_add_centered(
+        classicsetup_tui_draw_warning(
             3,
             "WARNING: The planned partition layout will erase partition information");
-        classicsetup_tui_add_centered(4, "on the selected test disk.");
-        attroff(A_BOLD);
+        classicsetup_tui_add_text(4, 4, "on the selected test disk.");
 
         if (!valid || apply_plan == NULL) {
-            classicsetup_tui_add_centered(
-                LINES / 2,
+            classicsetup_tui_add_text(
+                7,
+                4,
                 "This layout is not eligible for the restricted M7 apply path.");
             classicsetup_tui_draw_footer("B=Back    Q=Quit");
         } else {
@@ -80,7 +79,7 @@ enum classicsetup_apply_preview_result classicsetup_show_apply_preview(
                 apply_plan->target_disk.device_path,
                 disk_size,
                 apply_plan->target_disk.model);
-            classicsetup_tui_add_centered(6, line);
+            classicsetup_tui_add_text(6, 4, line);
             snprintf(
                 line,
                 sizeof(line),
@@ -91,11 +90,11 @@ enum classicsetup_apply_preview_result classicsetup_show_apply_preview(
                 apply_plan->table_type == CLASSICSETUP_PARTITION_TABLE_MBR
                     ? "Legacy BIOS"
                     : "UEFI");
-            classicsetup_tui_add_centered(7, line);
-            classicsetup_tui_add_centered(9, "Planned partition layout:");
+            classicsetup_tui_add_text(7, 4, line);
+            classicsetup_tui_add_text(9, 4, "Planned partition layout:");
             for (index = 0;
                  index < apply_plan->partition_count &&
-                 11 + (int)index < LINES - 5;
+                 10 + (int)index < classicsetup_tui_canvas_height() - 3;
                  ++index) {
                 char size[32];
 
@@ -111,11 +110,9 @@ enum classicsetup_apply_preview_result classicsetup_show_apply_preview(
                     index + 1,
                     preview_role_name(apply_plan->partitions[index].role),
                     size);
-                classicsetup_tui_add_centered(11 + (int)index, line);
+                classicsetup_tui_add_text(10 + (int)index, 6, line);
             }
-            classicsetup_tui_add_centered(
-                LINES - 5,
-                "No changes have been written yet.");
+            classicsetup_tui_add_text(16, 4, "No changes have been written yet.");
             classicsetup_tui_draw_footer(
                 "ENTER=Continue    B=Back    Q=Quit");
         }
@@ -154,22 +151,22 @@ classicsetup_show_apply_confirmation(
         int key;
 
         classicsetup_tui_begin_screen("ClassicSetup - Confirm Disk Changes");
-        attron(A_BOLD);
-        classicsetup_tui_add_centered(LINES / 2 - 5, "WARNING");
-        classicsetup_tui_add_centered(
-            LINES / 2 - 3,
+        classicsetup_tui_draw_warning(3, "WARNING");
+        classicsetup_tui_add_text(
+            5,
+            4,
             "ALL EXISTING PARTITION DATA ON THIS TEST DISK WILL BE LOST:");
-        attroff(A_BOLD);
         snprintf(
             line,
             sizeof(line),
             "%s  %s",
             apply_plan->target_disk.device_path,
             apply_plan->target_disk.model);
-        classicsetup_tui_add_centered(LINES / 2 - 1, line);
-        classicsetup_tui_add_centered(LINES / 2, disk_size);
-        classicsetup_tui_add_centered(
-            LINES / 2 + 2,
+        classicsetup_tui_add_text(7, 4, line);
+        classicsetup_tui_add_text(8, 4, disk_size);
+        classicsetup_tui_add_text(
+            10,
+            4,
             "Press A to apply the partition table changes.");
         classicsetup_tui_draw_footer("A=Apply    B=Back    Q=Quit");
         refresh();
@@ -207,14 +204,16 @@ enum classicsetup_apply_result_screen_result classicsetup_show_apply_result(
         int key;
 
         classicsetup_tui_begin_screen("ClassicSetup - Partition Apply Result");
-        classicsetup_tui_add_centered(LINES / 2 - 2, message);
+        classicsetup_tui_add_text(4, 4, message);
         if (!success) {
-            classicsetup_tui_add_centered(
-                LINES / 2,
+            classicsetup_tui_add_text(
+                6,
+                4,
                 "Review the safety checks before trying again.");
         } else {
-            classicsetup_tui_add_centered(
-                LINES / 2,
+            classicsetup_tui_add_text(
+                6,
+                4,
                 "Filesystem creation is the next confirmed step.");
         }
         classicsetup_tui_draw_footer(

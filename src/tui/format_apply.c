@@ -53,12 +53,11 @@ classicsetup_show_format_apply_preview(
         size_t index;
 
         classicsetup_tui_begin_screen("ClassicSetup - Format Partitions");
-        classicsetup_tui_add_centered(
-            3,
-            "The following filesystems will be created:");
+        classicsetup_tui_add_text(3, 3, "The following filesystems will be created:");
         if (!valid || plan == NULL) {
-            classicsetup_tui_add_centered(
-                LINES / 2,
+            classicsetup_tui_add_text(
+                6,
+                4,
                 "The filesystem apply plan could not be built safely.");
             classicsetup_tui_draw_footer("B=Back    Q=Quit");
         } else {
@@ -73,10 +72,11 @@ classicsetup_show_format_apply_preview(
                         CLASSICSETUP_PARTITION_TABLE_MBR
                     ? "MBR"
                     : "GPT");
-            classicsetup_tui_add_centered(5, line);
+            classicsetup_tui_add_text(5, 4, line);
             for (index = 0;
                  index < plan->partition_count &&
-                 7 + (int)(index * 2) < LINES - 7;
+                 7 + (int)(index * 2) <
+                     classicsetup_tui_canvas_height() - 5;
                  ++index) {
                 const struct classicsetup_format_partition *partition =
                     &plan->partitions[index];
@@ -87,8 +87,9 @@ classicsetup_show_format_apply_preview(
                     "%s  %s",
                     role_name(partition->role),
                     partition->device_path);
-                classicsetup_tui_add_centered(
+                classicsetup_tui_add_text(
                     7 + (int)(index * 2),
+                    5,
                     line);
                 snprintf(
                     line,
@@ -96,18 +97,21 @@ classicsetup_show_format_apply_preview(
                     "%s %s",
                     filesystem_name(partition->filesystem),
                     mode_name(partition->mode));
-                classicsetup_tui_add_centered(
+                classicsetup_tui_add_text(
                     8 + (int)(index * 2),
+                    7,
                     line);
             }
             if (plan->partition_apply_plan.table_type ==
                 CLASSICSETUP_PARTITION_TABLE_GPT) {
-                classicsetup_tui_add_centered(
-                    LINES - 6,
+                classicsetup_tui_add_text(
+                    16,
+                    4,
                     "Microsoft Reserved will not be formatted.");
             }
-            classicsetup_tui_add_centered(
-                LINES - 5,
+            classicsetup_tui_add_text(
+                17,
+                4,
                 previous_result != NULL &&
                         previous_result->code !=
                             CLASSICSETUP_FORMAT_RESULT_NOT_RUN &&
@@ -145,19 +149,20 @@ classicsetup_show_format_apply_confirmation(
         int key;
 
         classicsetup_tui_begin_screen("ClassicSetup - Confirm Format");
-        attron(A_BOLD);
-        classicsetup_tui_add_centered(LINES / 2 - 5, "WARNING");
-        classicsetup_tui_add_centered(
-            LINES / 2 - 3,
+        classicsetup_tui_draw_warning(3, "WARNING");
+        classicsetup_tui_add_text(
+            5,
+            4,
             "Existing data on the listed partitions will be destroyed.");
-        attroff(A_BOLD);
         if (plan != NULL) {
-            classicsetup_tui_add_centered(
-                LINES / 2 - 1,
+            classicsetup_tui_add_text(
+                7,
+                4,
                 plan->partition_apply_plan.target_disk.device_path);
         }
-        classicsetup_tui_add_centered(
-            LINES / 2 + 2,
+        classicsetup_tui_add_text(
+            10,
+            4,
             "Press A to create the planned filesystems.");
         classicsetup_tui_draw_footer("A=Apply    B=Back    Q=Quit");
         refresh();
@@ -194,7 +199,7 @@ classicsetup_show_format_apply_result(
 
             for (index = 0;
                  index < plan->partition_count &&
-                 LINES / 2 - 4 + (int)index < LINES - 5;
+                 4 + (int)index < classicsetup_tui_canvas_height() - 4;
                  ++index) {
                 char line[256];
 
@@ -204,19 +209,22 @@ classicsetup_show_format_apply_result(
                     "%s %s: verified",
                     role_name(plan->partitions[index].role),
                     filesystem_name(plan->partitions[index].filesystem));
-                classicsetup_tui_add_centered(
-                    LINES / 2 - 4 + (int)index,
+                classicsetup_tui_add_text(
+                    4 + (int)index,
+                    4,
                     line);
             }
-            classicsetup_tui_add_centered(
-                LINES / 2 + 1,
+            classicsetup_tui_add_text(
+                10,
+                4,
                 "The filesystems were created and verified successfully.");
         } else if (result != NULL) {
             char line[256];
 
             if (result->code == CLASSICSETUP_FORMAT_RESULT_BLOCKED) {
-                classicsetup_tui_add_centered(
-                    LINES / 2 - 2,
+                classicsetup_tui_add_text(
+                    4,
+                    4,
                     classicsetup_format_safety_message(result->safety_code));
             } else if (result->code ==
                        CLASSICSETUP_FORMAT_RESULT_PROCESS_FAILED) {
@@ -225,23 +233,24 @@ classicsetup_show_format_apply_result(
                     sizeof(line),
                     "The formatter failed for %s.",
                     role_name(result->failed_role));
-                classicsetup_tui_add_centered(LINES / 2 - 2, line);
+                classicsetup_tui_add_text(4, 4, line);
             } else {
                 snprintf(
                     line,
                     sizeof(line),
                     "Filesystem verification failed for %s.",
                     role_name(result->failed_role));
-                classicsetup_tui_add_centered(LINES / 2 - 2, line);
+                classicsetup_tui_add_text(4, 4, line);
             }
             snprintf(
                 line,
                 sizeof(line),
                 "%zu partition(s) were completed before the failure.",
                 result->completed_count);
-            classicsetup_tui_add_centered(LINES / 2, line);
-            classicsetup_tui_add_centered(
-                LINES / 2 + 1,
+            classicsetup_tui_add_text(6, 4, line);
+            classicsetup_tui_add_text(
+                7,
+                4,
                 "The disk may now be partially formatted; no rollback was attempted.");
         }
         classicsetup_tui_draw_footer(

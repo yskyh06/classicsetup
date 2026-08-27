@@ -14,21 +14,23 @@ static const char *const keyboard_names[] = {
 
 static void draw_option(int row, const char *name, bool selected)
 {
-    int column = (COLS - 44) / 2;
+    int width = classicsetup_tui_canvas_width();
+    int column = (width - 54) / 2;
 
     if (column < 2) {
         column = 2;
     }
-    if (row < 0 || row >= LINES || column >= COLS) {
+    if (row < 0 || row >= classicsetup_tui_canvas_height() ||
+        column >= width) {
         return;
     }
 
-    classicsetup_tui_draw_list_row(row, column, 44, name, selected);
+    classicsetup_tui_draw_list_row(row, column, 54, name, selected);
 }
 
 static void draw_keyboard_screen(int selected)
 {
-    int first_row = LINES / 2 - 3;
+    int first_row = 6;
     int index;
 
     if (first_row < 4) {
@@ -44,7 +46,7 @@ static void draw_keyboard_screen(int selected)
         first_row - 1,
         3,
         first_row + CLASSICSETUP_KEYBOARD_TYPE_COUNT + 1,
-        COLS - 4);
+        classicsetup_tui_canvas_width() - 4);
 
     for (index = 0; index < CLASSICSETUP_KEYBOARD_TYPE_COUNT; ++index) {
         draw_option(first_row + index, keyboard_names[index], index == selected);

@@ -23,25 +23,29 @@ classicsetup_show_setup_mode_selection(
             5,
             4,
             "Use the UP and DOWN ARROW keys to select an option.");
-        classicsetup_tui_draw_frame(7, 3, 15, COLS - 4);
+        classicsetup_tui_draw_frame(
+            6,
+            3,
+            13,
+            classicsetup_tui_canvas_width() - 4);
         classicsetup_tui_draw_list_row(
-            9,
+            7,
             5,
-            COLS - 10,
+            classicsetup_tui_canvas_width() - 10,
             "Recommended installation",
             selected == CLASSICSETUP_SETUP_RECOMMENDED);
         classicsetup_tui_add_text(
-            10,
+            8,
             8,
             "Automatic settings and a simplified installation experience.");
         classicsetup_tui_draw_list_row(
-            12,
+            10,
             5,
-            COLS - 10,
+            classicsetup_tui_canvas_width() - 10,
             "Advanced installation",
             selected == CLASSICSETUP_SETUP_ADVANCED);
         classicsetup_tui_add_text(
-            13,
+            11,
             8,
             "Manually configure firmware, disks, partitions, and formatting.");
         classicsetup_tui_draw_footer(

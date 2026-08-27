@@ -26,11 +26,13 @@ static void format_size(
 
 static void draw_at(int row, const char *text, bool selected)
 {
-    if (row < 0 || row >= LINES || COLS <= 2) {
+    int width = classicsetup_tui_canvas_width();
+
+    if (row < 0 || row >= classicsetup_tui_canvas_height() || width <= 2) {
         return;
     }
 
-    classicsetup_tui_draw_list_row(row, 3, COLS - 6, text, selected);
+    classicsetup_tui_draw_list_row(row, 4, width - 8, text, selected);
 }
 
 static void draw_disk_screen(
@@ -39,32 +41,37 @@ static void draw_disk_screen(
     bool scan_failed,
     size_t selected)
 {
-    enum { LIST_TOP = 5 };
+    enum { LIST_TOP = 6, MAX_VISIBLE_ROWS = 7 };
     char line[384];
     char size_text[32];
-    int detail_row = LINES - 7;
-    int visible_rows;
+    int detail_row;
+    int visible_rows = classicsetup_tui_compact_list_height(
+        (int)disk_count,
+        MAX_VISIBLE_ROWS);
+    int frame_bottom = LIST_TOP + visible_rows;
     size_t first = 0;
     size_t index;
 
     classicsetup_tui_begin_screen("ClassicSetup - Disk Selection");
-    classicsetup_tui_add_text(4, 4, "The following list shows the available disks.");
-    classicsetup_tui_draw_frame(6, 2, detail_row - 1, COLS - 3);
+    classicsetup_tui_add_text(3, 3, "The following list shows the available disks.");
+    classicsetup_tui_add_text(
+        4,
+        3,
+        "Use the UP and DOWN ARROW keys to select a disk.");
+    classicsetup_tui_draw_frame(
+        LIST_TOP - 1,
+        2,
+        frame_bottom,
+        classicsetup_tui_canvas_width() - 3);
+    detail_row = frame_bottom + 2;
 
     if (disk_count == 0) {
-        classicsetup_tui_add_centered(
-            LINES / 2,
+        classicsetup_tui_add_text(
+            8,
+            4,
             scan_failed ? "Disk information could not be read."
                         : "No installable disks were found.");
     } else {
-        if (detail_row < LIST_TOP + 2) {
-            detail_row = LIST_TOP + 2;
-        }
-        visible_rows = detail_row - LIST_TOP - 1;
-        if (visible_rows < 1) {
-            visible_rows = 1;
-        }
-
         if (selected >= (size_t)visible_rows) {
             first = selected - (size_t)visible_rows + 1;
         }
@@ -76,8 +83,7 @@ static void draw_disk_screen(
             snprintf(
                 line,
                 sizeof(line),
-                "%c Disk %zu  %s  %s",
-                index == selected ? '>' : ' ',
+                "Disk %zu   %-18s %12s",
                 index,
                 disks[index].device_path,
                 size_text);
@@ -85,12 +91,18 @@ static void draw_disk_screen(
         }
 
         format_size(disks[selected].size_bytes, size_text, sizeof(size_text));
-        snprintf(line, sizeof(line), "Model: %s", disks[selected].model);
-        draw_at(detail_row, line, false);
-        snprintf(line, sizeof(line), "Device: %s", disks[selected].device_path);
-        draw_at(detail_row + 1, line, false);
-        snprintf(line, sizeof(line), "Capacity: %s", size_text);
-        draw_at(detail_row + 2, line, false);
+        classicsetup_tui_draw_metadata(
+            detail_row,
+            "Model:",
+            disks[selected].model);
+        classicsetup_tui_draw_metadata(
+            detail_row + 1,
+            "Device:",
+            disks[selected].device_path);
+        classicsetup_tui_draw_metadata(
+            detail_row + 2,
+            "Capacity:",
+            size_text);
     }
 
     classicsetup_tui_draw_footer(

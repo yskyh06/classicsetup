@@ -258,6 +258,32 @@ if(BUILD_TESTING)
 
     add_test(NAME recommended_policy COMMAND classicsetup_recommended_test)
 
+    add_executable(classicsetup_tui_layout_test
+        tests/tui_layout_test.c
+        src/tui/tui.c
+    )
+
+    set_target_properties(classicsetup_tui_layout_test PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED YES
+        C_EXTENSIONS NO
+    )
+
+    target_include_directories(classicsetup_tui_layout_test PRIVATE
+        include
+        ${CURSES_INCLUDE_DIRS}
+    )
+    target_link_libraries(classicsetup_tui_layout_test PRIVATE
+        ${CURSES_LIBRARIES}
+    )
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(classicsetup_tui_layout_test PRIVATE
+            -Wall -Wextra -Wpedantic
+        )
+    endif()
+
+    add_test(NAME tui_compact_layout COMMAND classicsetup_tui_layout_test)
+
     add_executable(classicsetup_key_mapping_test
         tests/key_mapping_test.c
         src/tui/keymap.c

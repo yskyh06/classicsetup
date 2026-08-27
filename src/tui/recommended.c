@@ -37,31 +37,46 @@ classicsetup_show_recommended_disk_selection(
 
     for (;;) {
         size_t index;
+        size_t first = 0;
+        const int visible_items = classicsetup_tui_compact_list_height(
+            (int)assessment_count,
+            4);
+        const int list_top = 6;
+        const int frame_bottom = list_top + visible_items * 3;
         int key;
+
+        if (selected >= (size_t)visible_items) {
+            first = selected - (size_t)visible_items + 1;
+        }
 
         classicsetup_tui_begin_screen("ClassicSetup - Choose a Disk");
         classicsetup_tui_add_text(
-            4,
-            4,
+            3,
+            3,
             "The following list shows the disks available for Windows installation.");
         classicsetup_tui_add_text(
-            5,
             4,
+            3,
             "Use the UP and DOWN ARROW keys to select a disk.");
         if (scan_failed || assessment_count == 0) {
-            classicsetup_tui_add_centered(
-                LINES / 2,
+            classicsetup_tui_add_text(
+                8,
+                4,
                 scan_failed ? "Disk information could not be read safely."
                             : "No disks were found.");
         } else {
-            int frame_bottom = LINES - 7;
-            int frame_right = COLS - 3;
+            int frame_right = classicsetup_tui_canvas_width() - 3;
 
-            if (frame_bottom > 9 && frame_right > 20) {
-                classicsetup_tui_draw_frame(7, 2, frame_bottom, frame_right);
+            if (frame_bottom > list_top && frame_right > 20) {
+                classicsetup_tui_draw_frame(
+                    list_top - 1,
+                    2,
+                    frame_bottom,
+                    frame_right);
             }
-            for (index = 0;
-                 index < assessment_count && 8 + (int)(index * 3) < LINES - 8;
+            for (index = first;
+                 index < assessment_count &&
+                 index < first + (size_t)visible_items;
                  ++index) {
                 char line[256];
                 char size[32];
@@ -77,13 +92,13 @@ classicsetup_show_recommended_disk_selection(
                     assessments[index].disk.model,
                     size);
                 classicsetup_tui_draw_list_row(
-                    8 + (int)(index * 3),
+                    list_top + (int)((index - first) * 3),
                     4,
-                    COLS - 8,
+                    classicsetup_tui_canvas_width() - 8,
                     line,
                     index == selected);
                 classicsetup_tui_add_text(
-                    9 + (int)(index * 3),
+                    list_top + 1 + (int)((index - first) * 3),
                     6,
                     assessments[index].presentation);
                 snprintf(
@@ -91,14 +106,19 @@ classicsetup_show_recommended_disk_selection(
                     sizeof(line),
                     "Device: %s",
                     assessments[index].disk.device_path);
-                classicsetup_tui_add_text(10 + (int)(index * 3), 6, line);
+                classicsetup_tui_add_text(
+                    list_top + 2 + (int)((index - first) * 3),
+                    6,
+                    line);
             }
         }
         if (assessment_count > 0 &&
             (!assessments[selected].selectable ||
              firmware != CLASSICSETUP_FIRMWARE_UEFI)) {
             classicsetup_tui_draw_warning(
-                LINES - 5,
+                frame_bottom + 1 < classicsetup_tui_canvas_height() - 1
+                    ? frame_bottom + 1
+                    : classicsetup_tui_canvas_height() - 2,
                 classicsetup_recommended_policy_reason(
                     assessments[selected].disk_class,
                     firmware));
@@ -139,9 +159,10 @@ static enum classicsetup_simple_screen_result show_placeholder(
         int key;
 
         classicsetup_tui_begin_screen(title);
-        classicsetup_tui_add_text(5, 4, line_one);
-        classicsetup_tui_add_text(7, 4, line_two);
-        classicsetup_tui_draw_frame(9, 3, LINES - 4, COLS - 4);
+        classicsetup_tui_add_text(3, 3, line_one);
+        classicsetup_tui_add_text(5, 3, line_two);
+        classicsetup_tui_draw_bullet(8, "Press ENTER to continue.");
+        classicsetup_tui_draw_bullet(10, "Press B to return to the previous step.");
         classicsetup_tui_draw_footer("ENTER=Continue    B=Back    Q=Quit");
         refresh();
         key = getch();
@@ -272,20 +293,24 @@ enum classicsetup_simple_screen_result classicsetup_show_recommended_result(
             success ? "ClassicSetup - Storage Preparation Complete"
                     : "ClassicSetup - Installation Result");
         if (success) {
-            classicsetup_tui_add_centered(
-                LINES / 2 - 1,
+            classicsetup_tui_add_text(
+                5,
+                4,
                 "The GPT layout and filesystems were applied and verified.");
-            classicsetup_tui_add_centered(
-                LINES / 2 + 1,
+            classicsetup_tui_add_text(
+                7,
+                4,
                 "Windows image application is not implemented yet.");
         } else if (result_code == CLASSICSETUP_RECOMMENDED_BLOCKED) {
-            classicsetup_tui_add_centered(
-                LINES / 2,
+            classicsetup_tui_add_text(
+                6,
+                4,
                 "Recommended installation was blocked by a safety check.");
         } else if (result_code ==
                    CLASSICSETUP_RECOMMENDED_PARTITION_FAILED) {
-            classicsetup_tui_add_centered(
-                LINES / 2,
+            classicsetup_tui_add_text(
+                6,
+                4,
                 partition_result == NULL ||
                         partition_result->code !=
                             CLASSICSETUP_APPLY_RESULT_BLOCKED
@@ -293,8 +318,9 @@ enum classicsetup_simple_screen_result classicsetup_show_recommended_result(
                     : classicsetup_apply_safety_message(
                           partition_result->safety_code));
         } else if (result_code == CLASSICSETUP_RECOMMENDED_FORMAT_FAILED) {
-            classicsetup_tui_add_centered(
-                LINES / 2,
+            classicsetup_tui_add_text(
+                6,
+                4,
                 format_result == NULL ||
                         format_result->code !=
                             CLASSICSETUP_FORMAT_RESULT_BLOCKED
@@ -302,8 +328,9 @@ enum classicsetup_simple_screen_result classicsetup_show_recommended_result(
                     : classicsetup_format_safety_message(
                           format_result->safety_code));
         } else {
-            classicsetup_tui_add_centered(
-                LINES / 2,
+            classicsetup_tui_add_text(
+                6,
+                4,
                 "The filesystem apply plan could not be built safely.");
         }
         classicsetup_tui_draw_footer(
@@ -330,11 +357,13 @@ classicsetup_show_next_stage_placeholder(void)
         int key;
 
         classicsetup_tui_begin_screen("ClassicSetup - Next Stage");
-        classicsetup_tui_add_centered(
-            LINES / 2 - 1,
+        classicsetup_tui_add_text(
+            4,
+            4,
             "The TUI-to-GUI transition boundary is ready.");
-        classicsetup_tui_add_centered(
-            LINES / 2 + 1,
+        classicsetup_tui_add_text(
+            6,
+            4,
             "GTK and Windows image application are not implemented yet.");
         classicsetup_tui_draw_footer("ENTER=Finish    B=Back    Q=Quit");
         refresh();

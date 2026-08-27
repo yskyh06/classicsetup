@@ -36,11 +36,13 @@ static void format_size(
 
 static void draw_at(int row, const char *text, bool selected)
 {
-    if (row < 0 || row >= LINES || COLS <= 4) {
+    int width = classicsetup_tui_canvas_width();
+
+    if (row < 0 || row >= classicsetup_tui_canvas_height() || width <= 4) {
         return;
     }
 
-    classicsetup_tui_draw_list_row(row, 3, COLS - 6, text, selected);
+    classicsetup_tui_draw_list_row(row, 4, width - 8, text, selected);
 }
 
 static const char *state_tag(enum classicsetup_plan_item_state state)
@@ -119,43 +121,32 @@ struct partition_screen_layout {
     int list_top;
     int list_end;
     int detail_row;
-    int footer_top;
-    int footer_bottom;
 };
 
-static struct partition_screen_layout calculate_screen_layout(int rows)
+static struct partition_screen_layout calculate_screen_layout(
+    int rows,
+    size_t item_count)
 {
+    int visible_rows = classicsetup_tui_compact_list_height(
+        (int)item_count,
+        8);
     struct partition_screen_layout layout = {
-        .instruction_row = -1,
-        .disk_row = -1,
-        .list_top = 2,
-        .list_end = 2,
-        .detail_row = -1,
-        .footer_top = -1,
-        .footer_bottom = -1
+        .instruction_row = 3,
+        .disk_row = 6,
+        .list_top = 8,
+        .list_end = 8 + visible_rows,
+        .detail_row = 10 + visible_rows
     };
 
-    if (rows >= 18) {
-        layout.instruction_row = 3;
-        layout.disk_row = 6;
-        layout.list_top = 8;
-        layout.detail_row = rows - 5;
-        layout.list_end = layout.detail_row - 1;
-        layout.footer_top = rows - 3;
-        layout.footer_bottom = rows - 2;
-    } else if (rows >= 8) {
+    if (rows < 18) {
+        layout.instruction_row = -1;
         layout.disk_row = 3;
         layout.list_top = 5;
-        layout.footer_top = rows - 2;
-        layout.footer_bottom = rows - 1;
-        layout.list_end = layout.footer_top;
-    } else if (rows > 2) {
-        layout.footer_top = rows - 1;
-        layout.list_end = layout.footer_top;
-    }
-
-    if (layout.list_end < layout.list_top) {
-        layout.list_end = layout.list_top;
+        visible_rows = classicsetup_tui_compact_list_height(
+            (int)item_count,
+            rows - 8);
+        layout.list_end = layout.list_top + visible_rows;
+        layout.detail_row = -1;
     }
     return layout;
 }
@@ -178,7 +169,9 @@ static void draw_partition_screen(
     bool scan_failed,
     size_t selected)
 {
-    struct partition_screen_layout layout = calculate_screen_layout(LINES);
+    struct partition_screen_layout layout = calculate_screen_layout(
+        classicsetup_tui_canvas_height(),
+        plan->item_count);
     char line[320];
     char size_text[32];
     int visible_rows = layout.list_end - layout.list_top;
@@ -208,18 +201,20 @@ static void draw_partition_screen(
             ? "Legacy BIOS/MBR"
             : "UEFI/GPT");
     draw_at(layout.disk_row, line, false);
-    if (layout.list_end > layout.list_top && COLS > 12) {
+    if (layout.list_end > layout.list_top &&
+        classicsetup_tui_canvas_width() > 12) {
         classicsetup_tui_draw_frame(
             layout.list_top - 1,
             2,
             layout.list_end,
-            COLS - 3);
+            classicsetup_tui_canvas_width() - 3);
     }
 
     if (plan->item_count == 0) {
-        if (LINES >= 6) {
-            classicsetup_tui_add_centered(
-                LINES / 2,
+        if (classicsetup_tui_canvas_height() >= 6) {
+            classicsetup_tui_add_text(
+                9,
+                4,
                 scan_failed ? "Partition information could not be read."
                             : "No selectable partition space was found.");
         }
@@ -291,8 +286,9 @@ static enum modal_result prompt_create_size(
         int key;
 
         classicsetup_tui_begin_screen("ClassicSetup - Create Partition");
-        classicsetup_tui_add_centered(
-            LINES / 2 - 3,
+        classicsetup_tui_add_text(
+            4,
+            4,
             "Create a planned partition in the selected free space.");
         snprintf(
             line,
@@ -300,11 +296,11 @@ static enum modal_result prompt_create_size(
             "Maximum size: %llu MB (%s available)",
             maximum_mb,
             available);
-        classicsetup_tui_add_centered(LINES / 2 - 1, line);
-        classicsetup_tui_add_centered(LINES / 2, "Partition size in MB:");
+        classicsetup_tui_add_text(6, 4, line);
+        classicsetup_tui_add_text(8, 4, "Partition size in MB:");
         snprintf(line, sizeof(line), "[ %s ]", input);
-        classicsetup_tui_add_centered(LINES / 2 + 1, line);
-        classicsetup_tui_add_centered(LINES / 2 + 3, message);
+        classicsetup_tui_add_text(9, 6, line);
+        classicsetup_tui_draw_warning(11, message);
         classicsetup_tui_draw_footer(
             "ENTER=Create    BACKSPACE=Edit    ESC=Cancel    Q=Quit");
         refresh();
@@ -367,11 +363,13 @@ static enum modal_result show_windows_layout_error(void)
         int key;
 
         classicsetup_tui_begin_screen("ClassicSetup - Windows Layout");
-        classicsetup_tui_add_centered(
-            LINES / 2 - 1,
+        classicsetup_tui_add_text(
+            4,
+            4,
             "The selected space is too small or invalid for the current policy.");
-        classicsetup_tui_add_centered(
-            LINES / 2 + 1,
+        classicsetup_tui_add_text(
+            6,
+            4,
             "The planned layout was not changed.");
         classicsetup_tui_draw_footer(
             "ENTER=Return    ESC=Return    Q=Quit");
@@ -397,20 +395,21 @@ static enum modal_result confirm_delete(
         int key;
 
         classicsetup_tui_begin_screen("ClassicSetup - Delete Partition");
-        classicsetup_tui_add_centered(
-            LINES / 2 - 3,
+        classicsetup_tui_add_text(
+            4,
+            4,
             item->state == CLASSICSETUP_PLAN_NEW
                 ? "Remove this new partition from the plan?"
                 : "Mark this existing partition for deletion?");
         if (item->state == CLASSICSETUP_PLAN_EXISTING) {
             snprintf(line, sizeof(line), "Device: %s", item->device_path);
-            classicsetup_tui_add_centered(LINES / 2 - 1, line);
+            classicsetup_tui_add_text(6, 4, line);
         }
         format_size(item->size_bytes, size_text, sizeof(size_text));
         snprintf(line, sizeof(line), "Size: %s", size_text);
-        classicsetup_tui_add_centered(LINES / 2, line);
+        classicsetup_tui_add_text(7, 4, line);
         attron(A_BOLD);
-        classicsetup_tui_add_centered(LINES / 2 + 2, "Press D again to confirm.");
+        classicsetup_tui_add_text(9, 4, "Press D again to confirm.");
         attroff(A_BOLD);
         classicsetup_tui_draw_footer(
             "D=Delete    ESC=Cancel    Q=Quit");
@@ -436,18 +435,22 @@ static enum modal_result confirm_undo_windows_layout(void)
 
         classicsetup_tui_begin_screen(
             "ClassicSetup - Undo Windows Layout");
-        classicsetup_tui_add_centered(
-            LINES / 2 - 3,
+        classicsetup_tui_add_text(
+            4,
+            4,
             "The automatically created Windows partitions will be removed");
-        classicsetup_tui_add_centered(
-            LINES / 2 - 2,
+        classicsetup_tui_add_text(
+            5,
+            4,
             "from the planned layout.");
-        classicsetup_tui_add_centered(
-            LINES / 2,
+        classicsetup_tui_add_text(
+            7,
+            4,
             "No changes have been written to disk.");
         attron(A_BOLD);
-        classicsetup_tui_add_centered(
-            LINES / 2 + 2,
+        classicsetup_tui_add_text(
+            9,
+            4,
             "Press U again to confirm.");
         attroff(A_BOLD);
         classicsetup_tui_draw_footer(

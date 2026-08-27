@@ -7,45 +7,51 @@
 
 static void draw_option(int row, const char *text, bool selected)
 {
-    int column = (COLS - 48) / 2;
+    int width = classicsetup_tui_canvas_width();
+    int column = (width - 58) / 2;
 
     if (column < 2) {
         column = 2;
     }
-    if (row < 0 || row >= LINES || column >= COLS) {
+    if (row < 0 || row >= classicsetup_tui_canvas_height() ||
+        column >= width) {
         return;
     }
-    classicsetup_tui_draw_list_row(row, column, 48, text, selected);
+    classicsetup_tui_draw_list_row(row, column, 58, text, selected);
 }
 
 static void draw_format_screen(enum classicsetup_format_mode selected)
 {
     classicsetup_tui_begin_screen("ClassicSetup - Format Partition");
-    classicsetup_tui_add_centered(
-        LINES / 2 - 6,
+    classicsetup_tui_add_text(
+        3,
+        3,
         "The selected Windows partition needs a format plan.");
-    classicsetup_tui_add_centered(
-        LINES / 2 - 4,
+    classicsetup_tui_add_text(
+        5,
+        3,
         "Use the UP and DOWN ARROW keys to select a method,");
-    classicsetup_tui_add_centered(
-        LINES / 2 - 3,
+    classicsetup_tui_add_text(
+        6,
+        3,
         "and then press ENTER to continue.");
-    classicsetup_tui_add_centered(
-        LINES / 2 - 1,
+    classicsetup_tui_add_text(
+        8,
+        3,
         "Press ESC to select a different partition.");
 
     classicsetup_tui_draw_frame(
-        LINES / 2 + 1,
+        10,
         3,
-        LINES / 2 + 5,
-        COLS - 4);
+        13,
+        classicsetup_tui_canvas_width() - 4);
 
     draw_option(
-        LINES / 2 + 2,
+        11,
         "Format the partition using NTFS (Quick)",
         selected == CLASSICSETUP_FORMAT_QUICK);
     draw_option(
-        LINES / 2 + 3,
+        12,
         "Format the partition using NTFS",
         selected == CLASSICSETUP_FORMAT_FULL);
 

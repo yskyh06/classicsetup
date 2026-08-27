@@ -12,20 +12,22 @@ static const char *const mode_names[] = {
 
 static void draw_option(int row, const char *text, int selected)
 {
-    int column = (COLS - 30) / 2;
+    int width = classicsetup_tui_canvas_width();
+    int column = (width - 46) / 2;
 
     if (column < 2) {
         column = 2;
     }
-    if (row < 0 || row >= LINES || column >= COLS) {
+    if (row < 0 || row >= classicsetup_tui_canvas_height() ||
+        column >= width) {
         return;
     }
-    classicsetup_tui_draw_list_row(row, column, 30, text, selected != 0);
+    classicsetup_tui_draw_list_row(row, column, 46, text, selected != 0);
 }
 
 static void draw_screen(enum classicsetup_install_mode selected)
 {
-    int first_row = LINES / 2 - 1;
+    int first_row = 6;
     int index;
 
     if (first_row < 5) {
@@ -36,7 +38,11 @@ static void draw_screen(enum classicsetup_install_mode selected)
         first_row - 3,
         4,
         "Select the firmware and partitioning mode.");
-    classicsetup_tui_draw_frame(first_row - 1, 3, first_row + 3, COLS - 4);
+    classicsetup_tui_draw_frame(
+        first_row - 1,
+        3,
+        first_row + 3,
+        classicsetup_tui_canvas_width() - 4);
     for (index = 0; index < CLASSICSETUP_INSTALL_MODE_COUNT; ++index) {
         draw_option(
             first_row + index,
