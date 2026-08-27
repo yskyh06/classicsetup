@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 #include "classicsetup/disk.h"
+#include "classicsetup/install_mode.h"
 #include "classicsetup/partition.h"
 
 enum {
@@ -12,8 +13,11 @@ enum {
     CLASSICSETUP_DEFAULT_EFI_MB = 260,
     CLASSICSETUP_DEFAULT_MSR_MB = 16,
     CLASSICSETUP_DEFAULT_RECOVERY_MB = 1024,
+    CLASSICSETUP_DEFAULT_SYSTEM_RESERVED_MB = 550,
     CLASSICSETUP_MIN_WINDOWS_MB = 64
 };
+
+#define CLASSICSETUP_MBR_MAX_SECTORS 4294967296ULL
 
 enum classicsetup_plan_item_state {
     CLASSICSETUP_PLAN_EXISTING,
@@ -29,6 +33,7 @@ enum classicsetup_partition_role {
     CLASSICSETUP_PARTITION_ROLE_MSR,
     CLASSICSETUP_PARTITION_ROLE_WINDOWS,
     CLASSICSETUP_PARTITION_ROLE_RECOVERY,
+    CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED,
     CLASSICSETUP_PARTITION_ROLE_COUNT
 };
 
@@ -79,11 +84,30 @@ int classicsetup_plan_create_windows_layout(
     size_t unallocated_index,
     size_t *windows_index);
 
+int classicsetup_plan_create_uefi_windows_layout(
+    struct classicsetup_partition_plan *plan,
+    size_t unallocated_index,
+    size_t *windows_index);
+
+int classicsetup_plan_create_bios_windows_layout(
+    struct classicsetup_partition_plan *plan,
+    size_t unallocated_index,
+    size_t *windows_index);
+
 int classicsetup_plan_has_windows_layout(
     const struct classicsetup_partition_plan *plan);
 
+int classicsetup_plan_has_windows_layout_for_mode(
+    const struct classicsetup_partition_plan *plan,
+    enum classicsetup_install_mode install_mode);
+
 int classicsetup_plan_undo_windows_layout(
     struct classicsetup_partition_plan *plan,
+    size_t *restored_unallocated_index);
+
+int classicsetup_plan_undo_windows_layout_for_mode(
+    struct classicsetup_partition_plan *plan,
+    enum classicsetup_install_mode install_mode,
     size_t *restored_unallocated_index);
 
 int classicsetup_plan_delete_partition(
@@ -116,6 +140,12 @@ int classicsetup_plan_find_matching_item(
 
 int classicsetup_plan_prepare_install_target(
     struct classicsetup_partition_plan *plan,
+    size_t selected_index,
+    size_t *target_index);
+
+int classicsetup_plan_prepare_install_target_for_mode(
+    struct classicsetup_partition_plan *plan,
+    enum classicsetup_install_mode install_mode,
     size_t selected_index,
     size_t *target_index);
 

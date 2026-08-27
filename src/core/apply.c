@@ -27,6 +27,7 @@ static const char *guid_for_role(enum classicsetup_partition_role role)
         return CLASSICSETUP_GPT_TYPE_BASIC_DATA;
     case CLASSICSETUP_PARTITION_ROLE_RECOVERY:
         return CLASSICSETUP_GPT_TYPE_RECOVERY;
+    case CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED:
     case CLASSICSETUP_PARTITION_ROLE_NONE:
     case CLASSICSETUP_PARTITION_ROLE_GENERIC:
     case CLASSICSETUP_PARTITION_ROLE_COUNT:
@@ -46,12 +47,44 @@ static const char *name_for_role(enum classicsetup_partition_role role)
         return "Windows Partition";
     case CLASSICSETUP_PARTITION_ROLE_RECOVERY:
         return "Windows Recovery Partition";
+    case CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED:
+        return "System Reserved Partition";
     case CLASSICSETUP_PARTITION_ROLE_NONE:
     case CLASSICSETUP_PARTITION_ROLE_GENERIC:
     case CLASSICSETUP_PARTITION_ROLE_COUNT:
         return NULL;
     }
     return NULL;
+}
+
+static int mbr_metadata_for_role(
+    enum classicsetup_partition_role role,
+    unsigned int *type,
+    int *bootable)
+{
+    if (type == NULL || bootable == NULL) {
+        return -1;
+    }
+    *bootable = 0;
+    switch (role) {
+    case CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED:
+        *type = CLASSICSETUP_MBR_TYPE_NTFS;
+        *bootable = 1;
+        return 0;
+    case CLASSICSETUP_PARTITION_ROLE_WINDOWS:
+        *type = CLASSICSETUP_MBR_TYPE_NTFS;
+        return 0;
+    case CLASSICSETUP_PARTITION_ROLE_RECOVERY:
+        *type = CLASSICSETUP_MBR_TYPE_RECOVERY;
+        return 0;
+    case CLASSICSETUP_PARTITION_ROLE_NONE:
+    case CLASSICSETUP_PARTITION_ROLE_GENERIC:
+    case CLASSICSETUP_PARTITION_ROLE_EFI:
+    case CLASSICSETUP_PARTITION_ROLE_MSR:
+    case CLASSICSETUP_PARTITION_ROLE_COUNT:
+        return -1;
+    }
+    return -1;
 }
 
 static int safe_device_identity(const struct classicsetup_disk_info *disk)
@@ -78,7 +111,8 @@ static int safe_device_identity(const struct classicsetup_disk_info *disk)
            strcmp(expected, disk->device_path) == 0;
 }
 
-int classicsetup_build_apply_plan(
+int classicsetup_build_apply_plan_for_mode(
+    enum classicsetup_install_mode install_mode,
     const struct classicsetup_disk_info *disk,
     const struct classicsetup_partition_plan *partition_plan,
     size_t original_partition_count,
@@ -89,14 +123,22 @@ int classicsetup_build_apply_plan(
     size_t index;
 
     if (disk == NULL || partition_plan == NULL || apply_plan == NULL ||
+        (install_mode != CLASSICSETUP_INSTALL_UEFI_GPT &&
+         install_mode != CLASSICSETUP_INSTALL_BIOS_MBR) ||
         original_partition_count != 0 || !safe_device_identity(disk) ||
         !classicsetup_plan_validate(partition_plan) ||
-        !classicsetup_plan_has_windows_layout(partition_plan) ||
+        !classicsetup_plan_has_windows_layout_for_mode(
+            partition_plan,
+            install_mode) ||
         partition_plan->disk_sector_count !=
             disk->size_bytes / CLASSICSETUP_SECTOR_SIZE_BYTES) {
         return -1;
     }
 
+    temporary.table_type =
+        install_mode == CLASSICSETUP_INSTALL_BIOS_MBR
+            ? CLASSICSETUP_PARTITION_TABLE_MBR
+            : CLASSICSETUP_PARTITION_TABLE_GPT;
     temporary.target_disk = *disk;
     temporary.disk_sector_count = partition_plan->disk_sector_count;
 
@@ -104,7 +146,7 @@ int classicsetup_build_apply_plan(
         const struct classicsetup_plan_item *source =
             &partition_plan->items[index];
         struct classicsetup_apply_partition *destination;
-        const char *guid;
+        const char *guid = NULL;
         const char *name;
 
         if (source->state == CLASSICSETUP_PLAN_UNALLOCATED) {
@@ -114,9 +156,8 @@ int classicsetup_build_apply_plan(
             output_index >= CLASSICSETUP_APPLY_MAX_PARTITIONS) {
             return -1;
         }
-        guid = guid_for_role(source->role);
         name = name_for_role(source->role);
-        if (guid == NULL || name == NULL) {
+        if (name == NULL) {
             return -1;
         }
 
@@ -124,8 +165,23 @@ int classicsetup_build_apply_plan(
         destination->role = source->role;
         destination->start_sector = source->start_sector;
         destination->sector_count = source->sector_count;
-        snprintf(destination->type_guid, sizeof(destination->type_guid), "%s", guid);
         snprintf(destination->name, sizeof(destination->name), "%s", name);
+        if (temporary.table_type == CLASSICSETUP_PARTITION_TABLE_GPT) {
+            guid = guid_for_role(source->role);
+            if (guid == NULL) {
+                return -1;
+            }
+            snprintf(
+                destination->type_guid,
+                sizeof(destination->type_guid),
+                "%s",
+                guid);
+        } else if (mbr_metadata_for_role(
+                       source->role,
+                       &destination->mbr_type,
+                       &destination->bootable) != 0) {
+            return -1;
+        }
     }
     temporary.partition_count = output_index;
 
@@ -136,7 +192,21 @@ int classicsetup_build_apply_plan(
     return 0;
 }
 
-int classicsetup_validate_apply_plan(
+int classicsetup_build_apply_plan(
+    const struct classicsetup_disk_info *disk,
+    const struct classicsetup_partition_plan *partition_plan,
+    size_t original_partition_count,
+    struct classicsetup_apply_plan *apply_plan)
+{
+    return classicsetup_build_apply_plan_for_mode(
+        CLASSICSETUP_INSTALL_UEFI_GPT,
+        disk,
+        partition_plan,
+        original_partition_count,
+        apply_plan);
+}
+
+static int validate_gpt_apply_plan(
     const struct classicsetup_apply_plan *apply_plan)
 {
     const enum classicsetup_partition_role expected_roles[] = {
@@ -148,11 +218,7 @@ int classicsetup_validate_apply_plan(
     unsigned long long previous_end = 0;
     size_t index;
 
-    if (apply_plan == NULL || !safe_device_identity(&apply_plan->target_disk) ||
-        apply_plan->disk_sector_count !=
-            apply_plan->target_disk.size_bytes /
-                CLASSICSETUP_SECTOR_SIZE_BYTES ||
-        apply_plan->partition_count !=
+    if (apply_plan->partition_count !=
             sizeof(expected_roles) / sizeof(expected_roles[0]) ||
         apply_plan->disk_sector_count <
             2ULL * CLASSICSETUP_SECTORS_PER_MB) {
@@ -171,6 +237,7 @@ int classicsetup_validate_apply_plan(
             expected_name == NULL ||
             strcmp(partition->type_guid, expected_guid) != 0 ||
             strcmp(partition->name, expected_name) != 0 ||
+            partition->mbr_type != 0 || partition->bootable ||
             partition->start_sector < CLASSICSETUP_SECTORS_PER_MB ||
             partition->start_sector % CLASSICSETUP_SECTORS_PER_MB != 0 ||
             partition->start_sector < previous_end ||
@@ -188,6 +255,89 @@ int classicsetup_validate_apply_plan(
         previous_end = end;
     }
     return 1;
+}
+
+static int validate_mbr_apply_plan(
+    const struct classicsetup_apply_plan *apply_plan)
+{
+    const enum classicsetup_partition_role expected_roles[] = {
+        CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED,
+        CLASSICSETUP_PARTITION_ROLE_WINDOWS,
+        CLASSICSETUP_PARTITION_ROLE_RECOVERY
+    };
+    unsigned long long previous_end = 0;
+    size_t index;
+
+    if (apply_plan->disk_sector_count > CLASSICSETUP_MBR_MAX_SECTORS ||
+        apply_plan->partition_count !=
+            sizeof(expected_roles) / sizeof(expected_roles[0]) ||
+        apply_plan->partition_count > 4) {
+        return 0;
+    }
+
+    for (index = 0; index < apply_plan->partition_count; ++index) {
+        const struct classicsetup_apply_partition *partition =
+            &apply_plan->partitions[index];
+        const char *expected_name = name_for_role(expected_roles[index]);
+        unsigned int expected_type;
+        int expected_bootable;
+        unsigned long long end;
+
+        if (mbr_metadata_for_role(
+                expected_roles[index],
+                &expected_type,
+                &expected_bootable) != 0 ||
+            partition->role != expected_roles[index] ||
+            partition->sector_count == 0 || expected_name == NULL ||
+            strcmp(partition->name, expected_name) != 0 ||
+            partition->type_guid[0] != '\0' ||
+            partition->mbr_type != expected_type ||
+            partition->bootable != expected_bootable ||
+            partition->start_sector < CLASSICSETUP_SECTORS_PER_MB ||
+            partition->start_sector % CLASSICSETUP_SECTORS_PER_MB != 0 ||
+            (index == 0 &&
+             partition->start_sector != CLASSICSETUP_SECTORS_PER_MB) ||
+            partition->start_sector < previous_end ||
+            (index > 0 && partition->start_sector != previous_end) ||
+            partition->start_sector > apply_plan->disk_sector_count ||
+            partition->sector_count >
+                apply_plan->disk_sector_count - partition->start_sector) {
+            return 0;
+        }
+        end = partition->start_sector + partition->sector_count;
+        if (end > apply_plan->disk_sector_count) {
+            return 0;
+        }
+        previous_end = end;
+    }
+
+    return apply_plan->partitions[0].sector_count ==
+               CLASSICSETUP_DEFAULT_SYSTEM_RESERVED_MB *
+                   CLASSICSETUP_SECTORS_PER_MB &&
+           apply_plan->partitions[1].sector_count >=
+               CLASSICSETUP_MIN_WINDOWS_MB *
+                   CLASSICSETUP_SECTORS_PER_MB &&
+           apply_plan->partitions[2].sector_count ==
+               CLASSICSETUP_DEFAULT_RECOVERY_MB *
+                   CLASSICSETUP_SECTORS_PER_MB;
+}
+
+int classicsetup_validate_apply_plan(
+    const struct classicsetup_apply_plan *apply_plan)
+{
+    if (apply_plan == NULL || !safe_device_identity(&apply_plan->target_disk) ||
+        apply_plan->disk_sector_count !=
+            apply_plan->target_disk.size_bytes /
+                CLASSICSETUP_SECTOR_SIZE_BYTES) {
+        return 0;
+    }
+    if (apply_plan->table_type == CLASSICSETUP_PARTITION_TABLE_GPT) {
+        return validate_gpt_apply_plan(apply_plan);
+    }
+    if (apply_plan->table_type == CLASSICSETUP_PARTITION_TABLE_MBR) {
+        return validate_mbr_apply_plan(apply_plan);
+    }
+    return 0;
 }
 
 static int append_script(
@@ -234,7 +384,9 @@ int classicsetup_render_sfdisk_script(
             script,
             script_size,
             &used,
-            "label: gpt\nunit: sectors\n\n") != 0) {
+            apply_plan->table_type == CLASSICSETUP_PARTITION_TABLE_GPT
+                ? "label: gpt\nunit: sectors\n\n"
+                : "label: dos\nunit: sectors\n\n") != 0) {
         return -1;
     }
 
@@ -242,15 +394,27 @@ int classicsetup_render_sfdisk_script(
         const struct classicsetup_apply_partition *partition =
             &apply_plan->partitions[index];
 
-        if (append_script(
-                script,
-                script_size,
-                &used,
-                "start=%llu, size=%llu, type=%s, name=\"%s\"\n",
-                partition->start_sector,
-                partition->sector_count,
-                partition->type_guid,
-                partition->name) != 0) {
+        if (apply_plan->table_type == CLASSICSETUP_PARTITION_TABLE_GPT) {
+            if (append_script(
+                    script,
+                    script_size,
+                    &used,
+                    "start=%llu, size=%llu, type=%s, name=\"%s\"\n",
+                    partition->start_sector,
+                    partition->sector_count,
+                    partition->type_guid,
+                    partition->name) != 0) {
+                return -1;
+            }
+        } else if (append_script(
+                       script,
+                       script_size,
+                       &used,
+                       "start=%llu, size=%llu, type=%02x%s\n",
+                       partition->start_sector,
+                       partition->sector_count,
+                       partition->mbr_type,
+                       partition->bootable ? ", bootable" : "") != 0) {
             return -1;
         }
     }
@@ -308,6 +472,9 @@ enum classicsetup_apply_safety_code classicsetup_evaluate_apply_safety(
     }
     if (inputs->environment == CLASSICSETUP_ENV_WSL) {
         return CLASSICSETUP_APPLY_SAFETY_WSL;
+    }
+    if (inputs->table_type == CLASSICSETUP_PARTITION_TABLE_MBR) {
+        return CLASSICSETUP_APPLY_SAFETY_MBR_NOT_ENABLED;
     }
     if (!classicsetup_environment_allows_apply(inputs->environment)) {
         return CLASSICSETUP_APPLY_SAFETY_NOT_SUPPORTED_VM;
@@ -418,6 +585,9 @@ static void collect_apply_safety(
 
     memset(safety, 0, sizeof(*safety));
     safety->system_disk_status = CLASSICSETUP_SYSTEM_DISK_UNKNOWN;
+    if (apply_plan != NULL) {
+        safety->table_type = apply_plan->table_type;
+    }
     if (classicsetup_detect_environment(&safety->environment) != 0) {
         safety->environment = CLASSICSETUP_ENV_UNKNOWN;
     }
@@ -496,6 +666,13 @@ int classicsetup_execute_apply_plan(
     result->code = CLASSICSETUP_APPLY_RESULT_NOT_RUN;
     result->safety_code = CLASSICSETUP_APPLY_SAFETY_INVALID_PLAN;
 
+    if (apply_plan != NULL &&
+        apply_plan->table_type == CLASSICSETUP_PARTITION_TABLE_MBR) {
+        result->code = CLASSICSETUP_APPLY_RESULT_BLOCKED;
+        result->safety_code = CLASSICSETUP_APPLY_SAFETY_MBR_NOT_ENABLED;
+        return 0;
+    }
+
     sfdisk_path = find_sfdisk();
     collect_apply_safety(apply_plan, sfdisk_path, &safety);
     result->environment = safety.environment;
@@ -568,8 +745,10 @@ const char *classicsetup_apply_safety_message(
         return "M7 apply requires a test disk with no existing partitions.";
     case CLASSICSETUP_APPLY_SAFETY_UNSUPPORTED_SECTOR_SIZE:
         return "M7 apply supports only 512-byte logical sectors.";
+    case CLASSICSETUP_APPLY_SAFETY_MBR_NOT_ENABLED:
+        return "Legacy BIOS/MBR apply is not enabled for destructive testing yet.";
     case CLASSICSETUP_APPLY_SAFETY_INVALID_PLAN:
-        return "The GPT apply plan is incomplete or invalid.";
+        return "The partition apply plan is incomplete or invalid.";
     case CLASSICSETUP_APPLY_SAFETY_TOOL_UNAVAILABLE:
         return "The sfdisk executable is unavailable.";
     }

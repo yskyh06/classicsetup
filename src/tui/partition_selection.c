@@ -79,6 +79,8 @@ static const char *item_display_name(
         return "Windows Partition";
     case CLASSICSETUP_PARTITION_ROLE_RECOVERY:
         return "Recovery Partition";
+    case CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED:
+        return "System Reserved Partition";
     case CLASSICSETUP_PARTITION_ROLE_NONE:
         return "Unallocated Space";
     case CLASSICSETUP_PARTITION_ROLE_GENERIC:
@@ -187,6 +189,7 @@ static void draw_partition_footer(
 static void draw_partition_screen(
     const struct classicsetup_disk_info *disk,
     const struct classicsetup_partition_plan *plan,
+    enum classicsetup_install_mode install_mode,
     bool scan_failed,
     size_t selected)
 {
@@ -212,10 +215,13 @@ static void draw_partition_screen(
     snprintf(
         line,
         sizeof(line),
-        "Disk 0  %s  %s  %s",
+        "Disk 0  %s  %s  %s  [%s]",
         disk->device_path,
         size_text,
-        disk->model[0] != '\0' ? disk->model : "Unknown model");
+        disk->model[0] != '\0' ? disk->model : "Unknown model",
+        install_mode == CLASSICSETUP_INSTALL_BIOS_MBR
+            ? "Legacy BIOS/MBR"
+            : "UEFI/GPT");
     draw_at(layout.disk_row, line, false);
 
     if (plan->item_count == 0) {
@@ -262,7 +268,9 @@ static void draw_partition_screen(
     if (plan->item_count > 0) {
         draw_partition_footer(
             &layout,
-            classicsetup_plan_has_windows_layout(plan));
+            classicsetup_plan_has_windows_layout_for_mode(
+                plan,
+                install_mode));
     } else {
         draw_at(layout.footer_top, "B=Back  Q=Quit", false);
     }
@@ -493,6 +501,7 @@ enum classicsetup_partition_selection_result
 classicsetup_show_partition_selection(
     const struct classicsetup_disk_info *disk,
     struct classicsetup_partition_plan *plan,
+    enum classicsetup_install_mode install_mode,
     bool scan_failed,
     size_t *selected_item)
 {
@@ -507,7 +516,12 @@ classicsetup_show_partition_selection(
         int key;
 
         selected = classicsetup_plan_normalize_index(plan, selected);
-        draw_partition_screen(disk, plan, scan_failed, selected);
+        draw_partition_screen(
+            disk,
+            plan,
+            install_mode,
+            scan_failed,
+            selected);
         key = getch();
 
         if (key == KEY_UP && selected > 0) {
@@ -520,8 +534,9 @@ classicsetup_show_partition_selection(
                                    CLASSICSETUP_PLAN_UNALLOCATED;
             size_t target_index;
 
-            if (classicsetup_plan_prepare_install_target(
+            if (classicsetup_plan_prepare_install_target_for_mode(
                     plan,
+                    install_mode,
                     selected,
                     &target_index) == 0) {
                 selected = classicsetup_plan_normalize_index(
@@ -578,7 +593,9 @@ classicsetup_show_partition_selection(
                 }
             }
         } else if (key == 'u' || key == 'U') {
-            if (classicsetup_plan_has_windows_layout(plan)) {
+            if (classicsetup_plan_has_windows_layout_for_mode(
+                    plan,
+                    install_mode)) {
                 enum modal_result modal = confirm_undo_windows_layout();
 
                 if (modal == MODAL_QUIT) {

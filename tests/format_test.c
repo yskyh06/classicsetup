@@ -76,6 +76,11 @@ static void test_role_policies(void)
         CLASSICSETUP_FS_NTFS,
         CLASSICSETUP_FORMAT_QUICK);
     assert_policy(
+        CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED,
+        CLASSICSETUP_FORMAT_FULL,
+        CLASSICSETUP_FS_NTFS,
+        CLASSICSETUP_FORMAT_QUICK);
+    assert_policy(
         CLASSICSETUP_PARTITION_ROLE_GENERIC,
         CLASSICSETUP_FORMAT_QUICK,
         CLASSICSETUP_FS_NTFS,
@@ -109,6 +114,8 @@ static void test_install_target_policy(void)
     item.role = CLASSICSETUP_PARTITION_ROLE_MSR;
     assert(!classicsetup_plan_item_is_install_target(&item));
     item.role = CLASSICSETUP_PARTITION_ROLE_RECOVERY;
+    assert(!classicsetup_plan_item_is_install_target(&item));
+    item.role = CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED;
     assert(!classicsetup_plan_item_is_install_target(&item));
     item.state = CLASSICSETUP_PLAN_DELETED;
     item.role = CLASSICSETUP_PARTITION_ROLE_GENERIC;
@@ -185,6 +192,7 @@ static void test_config_rejects_non_install_targets(void)
         CLASSICSETUP_PARTITION_ROLE_EFI,
         CLASSICSETUP_PARTITION_ROLE_MSR,
         CLASSICSETUP_PARTITION_ROLE_RECOVERY,
+        CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED,
         CLASSICSETUP_PARTITION_ROLE_NONE
     };
     struct classicsetup_config config = {0};

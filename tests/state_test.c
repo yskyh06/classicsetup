@@ -10,6 +10,10 @@ static void test_continue_flow(void)
                CLASSICSETUP_EVENT_CONTINUE) == CLASSICSETUP_STATE_KEYBOARD);
     assert(classicsetup_next_state(
                CLASSICSETUP_STATE_KEYBOARD,
+               CLASSICSETUP_EVENT_CONTINUE) ==
+           CLASSICSETUP_STATE_INSTALL_MODE);
+    assert(classicsetup_next_state(
+               CLASSICSETUP_STATE_INSTALL_MODE,
                CLASSICSETUP_EVENT_CONTINUE) == CLASSICSETUP_STATE_DISK);
     assert(classicsetup_next_state(
                CLASSICSETUP_STATE_DISK,
@@ -47,6 +51,10 @@ static void test_cancel_policy(void)
                CLASSICSETUP_STATE_KEYBOARD,
                CLASSICSETUP_EVENT_CANCEL) == CLASSICSETUP_STATE_KEYBOARD);
     assert(classicsetup_next_state(
+               CLASSICSETUP_STATE_INSTALL_MODE,
+               CLASSICSETUP_EVENT_CANCEL) ==
+           CLASSICSETUP_STATE_INSTALL_MODE);
+    assert(classicsetup_next_state(
                CLASSICSETUP_STATE_DISK,
                CLASSICSETUP_EVENT_CANCEL) == CLASSICSETUP_STATE_DISK);
     assert(classicsetup_next_state(
@@ -82,8 +90,12 @@ static void test_back_policy(void)
                CLASSICSETUP_STATE_KEYBOARD,
                CLASSICSETUP_EVENT_BACK) == CLASSICSETUP_STATE_WELCOME);
     assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_DISK,
+               CLASSICSETUP_STATE_INSTALL_MODE,
                CLASSICSETUP_EVENT_BACK) == CLASSICSETUP_STATE_KEYBOARD);
+    assert(classicsetup_next_state(
+               CLASSICSETUP_STATE_DISK,
+               CLASSICSETUP_EVENT_BACK) ==
+           CLASSICSETUP_STATE_INSTALL_MODE);
     assert(classicsetup_next_state(
                CLASSICSETUP_STATE_PARTITION,
                CLASSICSETUP_EVENT_BACK) == CLASSICSETUP_STATE_DISK);
@@ -112,6 +124,7 @@ static void test_quit_request_policy(void)
     enum classicsetup_state states[] = {
         CLASSICSETUP_STATE_WELCOME,
         CLASSICSETUP_STATE_KEYBOARD,
+        CLASSICSETUP_STATE_INSTALL_MODE,
         CLASSICSETUP_STATE_DISK,
         CLASSICSETUP_STATE_PARTITION,
         CLASSICSETUP_STATE_FORMAT,

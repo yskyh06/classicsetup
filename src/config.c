@@ -9,6 +9,19 @@ static void clear_format_plans(struct classicsetup_config *config)
     memset(config->role_format_plans, 0, sizeof(config->role_format_plans));
 }
 
+void classicsetup_config_set_install_mode(
+    struct classicsetup_config *config,
+    enum classicsetup_install_mode install_mode)
+{
+    if (config == NULL || install_mode < CLASSICSETUP_INSTALL_UEFI_GPT ||
+        install_mode >= CLASSICSETUP_INSTALL_MODE_COUNT ||
+        config->install_mode == install_mode) {
+        return;
+    }
+    config->install_mode = install_mode;
+    classicsetup_config_reset_partition_plan(config);
+}
+
 void classicsetup_config_clear_apply_state(struct classicsetup_config *config)
 {
     memset(&config->apply_plan, 0, sizeof(config->apply_plan));
@@ -23,6 +36,8 @@ void classicsetup_config_reset_partition_plan(
     memset(&config->partition_plan, 0, sizeof(config->partition_plan));
     config->has_partition_plan = false;
     config->partition_target_type = CLASSICSETUP_PARTITION_TARGET_NONE;
+    memset(&config->selected_partition, 0, sizeof(config->selected_partition));
+    memset(&config->selected_unallocated, 0, sizeof(config->selected_unallocated));
     memset(&config->selected_plan_target, 0, sizeof(config->selected_plan_target));
     config->has_selected_plan_target = false;
     clear_format_plans(config);
@@ -109,8 +124,9 @@ int classicsetup_config_undo_windows_layout(
 {
     if (config == NULL || restored_unallocated_index == NULL ||
         !config->has_partition_plan ||
-        classicsetup_plan_undo_windows_layout(
+        classicsetup_plan_undo_windows_layout_for_mode(
             &config->partition_plan,
+            config->install_mode,
             restored_unallocated_index) != 0) {
         return -1;
     }

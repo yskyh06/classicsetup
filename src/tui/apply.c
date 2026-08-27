@@ -35,6 +35,8 @@ static const char *preview_role_name(enum classicsetup_partition_role role)
         return "Windows";
     case CLASSICSETUP_PARTITION_ROLE_RECOVERY:
         return "Recovery";
+    case CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED:
+        return "System Reserved";
     case CLASSICSETUP_PARTITION_ROLE_NONE:
     case CLASSICSETUP_PARTITION_ROLE_GENERIC:
     case CLASSICSETUP_PARTITION_ROLE_COUNT:
@@ -54,7 +56,7 @@ enum classicsetup_apply_preview_result classicsetup_show_apply_preview(
         attron(A_BOLD);
         classicsetup_tui_add_centered(
             3,
-            "WARNING: The planned GPT layout will erase partition information");
+            "WARNING: The planned partition layout will erase partition information");
         classicsetup_tui_add_centered(4, "on the selected test disk.");
         attroff(A_BOLD);
 
@@ -81,10 +83,21 @@ enum classicsetup_apply_preview_result classicsetup_show_apply_preview(
                 disk_size,
                 apply_plan->target_disk.model);
             classicsetup_tui_add_centered(6, line);
-            classicsetup_tui_add_centered(8, "Planned GPT layout:");
+            snprintf(
+                line,
+                sizeof(line),
+                "Partition table: %s    Firmware mode: %s",
+                apply_plan->table_type == CLASSICSETUP_PARTITION_TABLE_MBR
+                    ? "MBR"
+                    : "GPT",
+                apply_plan->table_type == CLASSICSETUP_PARTITION_TABLE_MBR
+                    ? "Legacy BIOS"
+                    : "UEFI");
+            classicsetup_tui_add_centered(7, line);
+            classicsetup_tui_add_centered(9, "Planned partition layout:");
             for (index = 0;
                  index < apply_plan->partition_count &&
-                 10 + (int)index < LINES - 5;
+                 11 + (int)index < LINES - 5;
                  ++index) {
                 char size[32];
 
@@ -100,7 +113,7 @@ enum classicsetup_apply_preview_result classicsetup_show_apply_preview(
                     index + 1,
                     preview_role_name(apply_plan->partitions[index].role),
                     size);
-                classicsetup_tui_add_centered(10 + (int)index, line);
+                classicsetup_tui_add_centered(11 + (int)index, line);
             }
             classicsetup_tui_add_centered(
                 LINES - 5,
@@ -162,7 +175,7 @@ classicsetup_show_apply_confirmation(
         classicsetup_tui_add_centered(LINES / 2, disk_size);
         classicsetup_tui_add_centered(
             LINES / 2 + 2,
-            "Press A to apply the GPT partition changes.");
+            "Press A to apply the partition table changes.");
         attron(A_BOLD);
         classicsetup_tui_add_centered(
             LINES - 3,
@@ -190,7 +203,7 @@ enum classicsetup_apply_result_screen_result classicsetup_show_apply_result(
     const char *message;
 
     if (success) {
-        message = "The GPT partition layout was applied and verified.";
+        message = "The partition layout was applied and verified.";
     } else if (result->code == CLASSICSETUP_APPLY_RESULT_BLOCKED) {
         message = classicsetup_apply_safety_message(result->safety_code);
     } else if (result->code == CLASSICSETUP_APPLY_RESULT_PROCESS_FAILED) {

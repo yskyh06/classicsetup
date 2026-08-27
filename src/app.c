@@ -10,6 +10,7 @@
 #include "classicsetup/disk.h"
 #include "classicsetup/disk_selection.h"
 #include "classicsetup/format_selection.h"
+#include "classicsetup/install_mode_selection.h"
 #include "classicsetup/keyboard.h"
 #include "classicsetup/partition.h"
 #include "classicsetup/partition_selection.h"
@@ -43,6 +44,25 @@ static enum classicsetup_event show_keyboard(struct classicsetup_config *config)
         return CLASSICSETUP_EVENT_QUIT_REQUEST;
     }
 
+    return CLASSICSETUP_EVENT_QUIT_REQUEST;
+}
+
+static enum classicsetup_event show_install_mode(
+    struct classicsetup_config *config)
+{
+    enum classicsetup_install_mode selected = config->install_mode;
+    enum classicsetup_install_mode_selection_result result =
+        classicsetup_show_install_mode_selection(&selected);
+
+    switch (result) {
+    case CLASSICSETUP_INSTALL_MODE_SELECTION_CONTINUE:
+        classicsetup_config_set_install_mode(config, selected);
+        return CLASSICSETUP_EVENT_CONTINUE;
+    case CLASSICSETUP_INSTALL_MODE_SELECTION_BACK:
+        return CLASSICSETUP_EVENT_BACK;
+    case CLASSICSETUP_INSTALL_MODE_SELECTION_QUIT:
+        return CLASSICSETUP_EVENT_QUIT_REQUEST;
+    }
     return CLASSICSETUP_EVENT_QUIT_REQUEST;
 }
 
@@ -144,6 +164,7 @@ static enum classicsetup_event show_partition(struct classicsetup_config *config
         result = classicsetup_show_partition_selection(
             &config->selected_disk,
             &config->partition_plan,
+            config->install_mode,
             scan_failed,
             &selected_item);
         if (result !=
@@ -216,7 +237,8 @@ static enum classicsetup_event show_apply_preview(
 {
     enum classicsetup_apply_preview_result result;
 
-    config->has_apply_plan = classicsetup_build_apply_plan(
+    config->has_apply_plan = classicsetup_build_apply_plan_for_mode(
+        config->install_mode,
         &config->selected_disk,
         &config->partition_plan,
         config->original_partition_count,
@@ -295,6 +317,7 @@ int classicsetup_run(void)
 {
     struct classicsetup_config config = {
         .keyboard_type = CLASSICSETUP_KEYBOARD_KOREAN_103_106,
+        .install_mode = CLASSICSETUP_INSTALL_UEFI_GPT,
         .has_selected_disk = false,
         .partition_target_type = CLASSICSETUP_PARTITION_TARGET_NONE
     };
@@ -311,6 +334,8 @@ int classicsetup_run(void)
             event = show_welcome();
         } else if (state == CLASSICSETUP_STATE_KEYBOARD) {
             event = show_keyboard(&config);
+        } else if (state == CLASSICSETUP_STATE_INSTALL_MODE) {
+            event = show_install_mode(&config);
         } else if (state == CLASSICSETUP_STATE_DISK) {
             event = show_disk(&config);
         } else if (state == CLASSICSETUP_STATE_PARTITION) {

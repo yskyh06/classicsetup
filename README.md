@@ -2,8 +2,8 @@
 
 Linux 기반 Windows 설치 프로그램을 개발하기 위한 C 프로젝트입니다.
 
-현재 M7 단계로, 메모리 파티션 계획을 제한된 테스트 VM의 GPT 적용
-단계까지 전달하는 ncurses 설치 흐름을 제공합니다.
+현재 M7.5 단계로, UEFI/GPT와 Legacy BIOS/MBR 설치 계획을 구분합니다.
+실제 destructive apply는 제한된 테스트 VM의 UEFI/GPT 경로만 지원합니다.
 
 ## Build
 
@@ -22,7 +22,7 @@ ctest --test-dir build --output-on-failure
 주요 화면 흐름은 다음과 같습니다.
 
 ```text
-Welcome -> Keyboard -> Disk -> Partition -> Format
+Welcome -> Keyboard -> Installation Mode -> Disk -> Partition -> Format
         -> Apply Preview -> Apply Confirmation -> Apply Result
 ```
 

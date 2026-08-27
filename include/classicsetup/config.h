@@ -6,6 +6,7 @@
 #include "classicsetup/apply.h"
 #include "classicsetup/disk.h"
 #include "classicsetup/format.h"
+#include "classicsetup/install_mode.h"
 #include "classicsetup/partition.h"
 #include "classicsetup/partition_plan.h"
 
@@ -23,6 +24,7 @@ enum classicsetup_keyboard_type {
 
 struct classicsetup_config {
     enum classicsetup_keyboard_type keyboard_type;
+    enum classicsetup_install_mode install_mode;
     struct classicsetup_disk_info selected_disk;
     bool has_selected_disk;
     enum classicsetup_partition_target_type partition_target_type;
@@ -42,6 +44,10 @@ struct classicsetup_config {
     bool has_apply_plan;
     struct classicsetup_apply_result apply_result;
 };
+
+void classicsetup_config_set_install_mode(
+    struct classicsetup_config *config,
+    enum classicsetup_install_mode install_mode);
 
 void classicsetup_config_reset_partition_plan(
     struct classicsetup_config *config);

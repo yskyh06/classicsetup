@@ -12,18 +12,26 @@ enum classicsetup_state classicsetup_next_state(
         return CLASSICSETUP_STATE_WELCOME;
     case CLASSICSETUP_STATE_KEYBOARD:
         if (event == CLASSICSETUP_EVENT_CONTINUE) {
-            return CLASSICSETUP_STATE_DISK;
+            return CLASSICSETUP_STATE_INSTALL_MODE;
         }
         if (event == CLASSICSETUP_EVENT_BACK) {
             return CLASSICSETUP_STATE_WELCOME;
         }
         return CLASSICSETUP_STATE_KEYBOARD;
+    case CLASSICSETUP_STATE_INSTALL_MODE:
+        if (event == CLASSICSETUP_EVENT_CONTINUE) {
+            return CLASSICSETUP_STATE_DISK;
+        }
+        if (event == CLASSICSETUP_EVENT_BACK) {
+            return CLASSICSETUP_STATE_KEYBOARD;
+        }
+        return CLASSICSETUP_STATE_INSTALL_MODE;
     case CLASSICSETUP_STATE_DISK:
         if (event == CLASSICSETUP_EVENT_CONTINUE) {
             return CLASSICSETUP_STATE_PARTITION;
         }
         if (event == CLASSICSETUP_EVENT_BACK) {
-            return CLASSICSETUP_STATE_KEYBOARD;
+            return CLASSICSETUP_STATE_INSTALL_MODE;
         }
         return CLASSICSETUP_STATE_DISK;
     case CLASSICSETUP_STATE_PARTITION:
@@ -88,6 +96,7 @@ enum classicsetup_state classicsetup_resolve_quit_request(
     switch (state) {
     case CLASSICSETUP_STATE_WELCOME:
     case CLASSICSETUP_STATE_KEYBOARD:
+    case CLASSICSETUP_STATE_INSTALL_MODE:
     case CLASSICSETUP_STATE_DISK:
     case CLASSICSETUP_STATE_PARTITION:
     case CLASSICSETUP_STATE_FORMAT:

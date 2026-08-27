@@ -11,6 +11,7 @@ add_executable(classicsetup
     src/core/disk.c
     src/core/environment.c
     src/core/format.c
+    src/core/install_mode.c
     src/core/partition.c
     src/core/partition_plan.c
     src/core/process.c
@@ -21,6 +22,7 @@ add_executable(classicsetup
     src/tui/apply.c
     src/tui/disk_selection.c
     src/tui/format_selection.c
+    src/tui/install_mode_selection.c
     src/tui/keymap.c
     src/tui/keyboard.c
     src/tui/partition_selection.c
@@ -118,6 +120,7 @@ if(BUILD_TESTING)
         tests/partition_plan_test.c
         src/config.c
         src/core/format.c
+        src/core/install_mode.c
         src/core/partition_plan.c
     )
 

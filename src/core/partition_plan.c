@@ -403,7 +403,7 @@ static int append_new_partition(
     return 0;
 }
 
-static int windows_layout_sizes(
+static int uefi_windows_layout_sizes(
     unsigned long long available_sectors,
     unsigned long long *efi_sectors,
     unsigned long long *msr_sectors,
@@ -443,7 +443,7 @@ static int windows_layout_sizes(
     return 0;
 }
 
-int classicsetup_plan_create_windows_layout(
+int classicsetup_plan_create_uefi_windows_layout(
     struct classicsetup_partition_plan *plan,
     size_t unallocated_index,
     size_t *windows_index)
@@ -490,7 +490,7 @@ int classicsetup_plan_create_windows_layout(
         return -1;
     }
     available_sectors = available_end - aligned_start;
-    if (windows_layout_sizes(
+    if (uefi_windows_layout_sizes(
             available_sectors,
             &efi_sectors,
             &msr_sectors,
@@ -553,7 +553,149 @@ int classicsetup_plan_create_windows_layout(
     return -1;
 }
 
-static int is_windows_layout_role(enum classicsetup_partition_role role)
+int classicsetup_plan_create_windows_layout(
+    struct classicsetup_partition_plan *plan,
+    size_t unallocated_index,
+    size_t *windows_index)
+{
+    return classicsetup_plan_create_uefi_windows_layout(
+        plan,
+        unallocated_index,
+        windows_index);
+}
+
+static int bios_windows_layout_sizes(
+    unsigned long long available_sectors,
+    unsigned long long *system_reserved_sectors,
+    unsigned long long *windows_sectors,
+    unsigned long long *recovery_sectors)
+{
+    unsigned long long fixed_sectors;
+    unsigned long long minimum_windows_sectors =
+        CLASSICSETUP_MIN_WINDOWS_MB * CLASSICSETUP_SECTORS_PER_MB;
+
+    *system_reserved_sectors =
+        CLASSICSETUP_DEFAULT_SYSTEM_RESERVED_MB *
+        CLASSICSETUP_SECTORS_PER_MB;
+    *recovery_sectors =
+        CLASSICSETUP_DEFAULT_RECOVERY_MB * CLASSICSETUP_SECTORS_PER_MB;
+    if (*system_reserved_sectors > ULLONG_MAX - *recovery_sectors) {
+        return -1;
+    }
+    fixed_sectors = *system_reserved_sectors + *recovery_sectors;
+    if (fixed_sectors > available_sectors ||
+        minimum_windows_sectors > available_sectors - fixed_sectors) {
+        return -1;
+    }
+    *windows_sectors =
+        ((available_sectors - fixed_sectors) /
+         CLASSICSETUP_SECTORS_PER_MB) *
+        CLASSICSETUP_SECTORS_PER_MB;
+    return *windows_sectors >= minimum_windows_sectors ? 0 : -1;
+}
+
+int classicsetup_plan_create_bios_windows_layout(
+    struct classicsetup_partition_plan *plan,
+    size_t unallocated_index,
+    size_t *windows_index)
+{
+    struct classicsetup_partition_plan temporary;
+    unsigned long long aligned_start;
+    unsigned long long available_end;
+    unsigned long long system_reserved_sectors;
+    unsigned long long windows_sectors;
+    unsigned long long recovery_sectors;
+    unsigned long long start;
+    size_t primary_count = 0;
+    size_t index;
+
+    if (plan != NULL && plan->item_count <= CLASSICSETUP_PLAN_MAX_ITEMS) {
+        for (index = 0; index < plan->item_count; ++index) {
+            if (plan->items[index].state == CLASSICSETUP_PLAN_EXISTING ||
+                plan->items[index].state == CLASSICSETUP_PLAN_NEW) {
+                ++primary_count;
+            }
+        }
+    }
+    if (plan == NULL || windows_index == NULL ||
+        !classicsetup_plan_validate(plan) ||
+        plan->disk_sector_count > CLASSICSETUP_MBR_MAX_SECTORS ||
+        primary_count > 1 ||
+        unallocated_index >= plan->item_count ||
+        plan->items[unallocated_index].state !=
+            CLASSICSETUP_PLAN_UNALLOCATED ||
+        plan->item_count > CLASSICSETUP_PLAN_MAX_ITEMS - 3 ||
+        plan->items[unallocated_index].sector_count >
+            ULLONG_MAX - plan->items[unallocated_index].start_sector) {
+        return -1;
+    }
+
+    available_end = plan->items[unallocated_index].start_sector +
+                    plan->items[unallocated_index].sector_count;
+    aligned_start = plan->items[unallocated_index].start_sector;
+    if (aligned_start < CLASSICSETUP_SECTORS_PER_MB) {
+        aligned_start = CLASSICSETUP_SECTORS_PER_MB;
+    }
+    if (classicsetup_plan_align_sector(
+            aligned_start,
+            CLASSICSETUP_SECTORS_PER_MB,
+            &aligned_start) != 0 ||
+        aligned_start > available_end ||
+        bios_windows_layout_sizes(
+            available_end - aligned_start,
+            &system_reserved_sectors,
+            &windows_sectors,
+            &recovery_sectors) != 0) {
+        return -1;
+    }
+
+    temporary = *plan;
+    start = aligned_start;
+    if (append_new_partition(
+            &temporary,
+            CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED,
+            "System Reserved Partition",
+            start,
+            system_reserved_sectors) != 0) {
+        return -1;
+    }
+    start += system_reserved_sectors;
+    if (append_new_partition(
+            &temporary,
+            CLASSICSETUP_PARTITION_ROLE_WINDOWS,
+            "Windows Partition",
+            start,
+            windows_sectors) != 0) {
+        return -1;
+    }
+    start += windows_sectors;
+    if (append_new_partition(
+            &temporary,
+            CLASSICSETUP_PARTITION_ROLE_RECOVERY,
+            "Recovery Partition",
+            start,
+            recovery_sectors) != 0 ||
+        classicsetup_plan_rebuild_unallocated(&temporary) != 0 ||
+        !classicsetup_plan_validate(&temporary)) {
+        return -1;
+    }
+
+    for (index = 0; index < temporary.item_count; ++index) {
+        if (temporary.items[index].state == CLASSICSETUP_PLAN_NEW &&
+            temporary.items[index].role ==
+                CLASSICSETUP_PARTITION_ROLE_WINDOWS &&
+            temporary.items[index].start_sector ==
+                aligned_start + system_reserved_sectors) {
+            *plan = temporary;
+            *windows_index = index;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+static int is_uefi_windows_layout_role(
+    enum classicsetup_partition_role role)
 {
     return role == CLASSICSETUP_PARTITION_ROLE_EFI ||
            role == CLASSICSETUP_PARTITION_ROLE_MSR ||
@@ -561,7 +703,15 @@ static int is_windows_layout_role(enum classicsetup_partition_role role)
            role == CLASSICSETUP_PARTITION_ROLE_RECOVERY;
 }
 
-int classicsetup_plan_has_windows_layout(
+static int is_bios_windows_layout_role(
+    enum classicsetup_partition_role role)
+{
+    return role == CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED ||
+           role == CLASSICSETUP_PARTITION_ROLE_WINDOWS ||
+           role == CLASSICSETUP_PARTITION_ROLE_RECOVERY;
+}
+
+static int has_uefi_windows_layout(
     const struct classicsetup_partition_plan *plan)
 {
     size_t role_counts[CLASSICSETUP_PARTITION_ROLE_COUNT] = {0};
@@ -581,7 +731,11 @@ int classicsetup_plan_has_windows_layout(
         const struct classicsetup_plan_item *item = &plan->items[index];
 
         if (item->state == CLASSICSETUP_PLAN_NEW &&
-            is_windows_layout_role(item->role)) {
+            item->role == CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED) {
+            return 0;
+        }
+        if (item->state == CLASSICSETUP_PLAN_NEW &&
+            is_uefi_windows_layout_role(item->role)) {
             ++role_counts[item->role];
             role_items[item->role] = item;
         }
@@ -604,8 +758,73 @@ int classicsetup_plan_has_windows_layout(
                recovery->start_sector;
 }
 
-int classicsetup_plan_undo_windows_layout(
+static int has_bios_windows_layout(
+    const struct classicsetup_partition_plan *plan)
+{
+    size_t role_counts[CLASSICSETUP_PARTITION_ROLE_COUNT] = {0};
+    const struct classicsetup_plan_item
+        *role_items[CLASSICSETUP_PARTITION_ROLE_COUNT] = {0};
+    const struct classicsetup_plan_item *system_reserved;
+    const struct classicsetup_plan_item *windows;
+    const struct classicsetup_plan_item *recovery;
+    size_t index;
+
+    if (!classicsetup_plan_validate(plan) ||
+        plan->disk_sector_count > CLASSICSETUP_MBR_MAX_SECTORS) {
+        return 0;
+    }
+    for (index = 0; index < plan->item_count; ++index) {
+        const struct classicsetup_plan_item *item = &plan->items[index];
+
+        if (item->state == CLASSICSETUP_PLAN_NEW &&
+            (item->role == CLASSICSETUP_PARTITION_ROLE_EFI ||
+             item->role == CLASSICSETUP_PARTITION_ROLE_MSR)) {
+            return 0;
+        }
+        if (item->state == CLASSICSETUP_PLAN_NEW &&
+            is_bios_windows_layout_role(item->role)) {
+            ++role_counts[item->role];
+            role_items[item->role] = item;
+        }
+    }
+    if (role_counts[CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED] != 1 ||
+        role_counts[CLASSICSETUP_PARTITION_ROLE_WINDOWS] != 1 ||
+        role_counts[CLASSICSETUP_PARTITION_ROLE_RECOVERY] != 1) {
+        return 0;
+    }
+
+    system_reserved =
+        role_items[CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED];
+    windows = role_items[CLASSICSETUP_PARTITION_ROLE_WINDOWS];
+    recovery = role_items[CLASSICSETUP_PARTITION_ROLE_RECOVERY];
+    return system_reserved->start_sector + system_reserved->sector_count ==
+               windows->start_sector &&
+           windows->start_sector + windows->sector_count ==
+               recovery->start_sector;
+}
+
+int classicsetup_plan_has_windows_layout(
+    const struct classicsetup_partition_plan *plan)
+{
+    return has_uefi_windows_layout(plan);
+}
+
+int classicsetup_plan_has_windows_layout_for_mode(
+    const struct classicsetup_partition_plan *plan,
+    enum classicsetup_install_mode install_mode)
+{
+    if (install_mode == CLASSICSETUP_INSTALL_UEFI_GPT) {
+        return has_uefi_windows_layout(plan);
+    }
+    if (install_mode == CLASSICSETUP_INSTALL_BIOS_MBR) {
+        return has_bios_windows_layout(plan);
+    }
+    return 0;
+}
+
+int classicsetup_plan_undo_windows_layout_for_mode(
     struct classicsetup_partition_plan *plan,
+    enum classicsetup_install_mode install_mode,
     size_t *restored_unallocated_index)
 {
     struct classicsetup_partition_plan temporary;
@@ -614,16 +833,20 @@ int classicsetup_plan_undo_windows_layout(
     size_t index;
 
     if (plan == NULL || restored_unallocated_index == NULL ||
-        !classicsetup_plan_has_windows_layout(plan)) {
+        !classicsetup_plan_has_windows_layout_for_mode(plan, install_mode)) {
         return -1;
     }
 
     temporary = *plan;
     for (index = 0; index < temporary.item_count; ++index) {
         const struct classicsetup_plan_item *item = &temporary.items[index];
+        int is_layout_role =
+            install_mode == CLASSICSETUP_INSTALL_UEFI_GPT
+                ? is_uefi_windows_layout_role(item->role)
+                : is_bios_windows_layout_role(item->role);
 
         if (item->state == CLASSICSETUP_PLAN_NEW &&
-            is_windows_layout_role(item->role)) {
+            is_layout_role) {
             if (item->start_sector < layout_start) {
                 layout_start = item->start_sector;
             }
@@ -651,6 +874,16 @@ int classicsetup_plan_undo_windows_layout(
         }
     }
     return -1;
+}
+
+int classicsetup_plan_undo_windows_layout(
+    struct classicsetup_partition_plan *plan,
+    size_t *restored_unallocated_index)
+{
+    return classicsetup_plan_undo_windows_layout_for_mode(
+        plan,
+        CLASSICSETUP_INSTALL_UEFI_GPT,
+        restored_unallocated_index);
 }
 
 int classicsetup_plan_delete_partition(
@@ -823,8 +1056,9 @@ int classicsetup_plan_find_matching_item(
     return -1;
 }
 
-int classicsetup_plan_prepare_install_target(
+int classicsetup_plan_prepare_install_target_for_mode(
     struct classicsetup_partition_plan *plan,
+    enum classicsetup_install_mode install_mode,
     size_t selected_index,
     size_t *target_index)
 {
@@ -841,10 +1075,30 @@ int classicsetup_plan_prepare_install_target(
     }
     if (plan->items[selected_index].state ==
         CLASSICSETUP_PLAN_UNALLOCATED) {
-        return classicsetup_plan_create_windows_layout(
-            plan,
-            selected_index,
-            target_index);
+        if (install_mode == CLASSICSETUP_INSTALL_UEFI_GPT) {
+            return classicsetup_plan_create_uefi_windows_layout(
+                plan,
+                selected_index,
+                target_index);
+        }
+        if (install_mode == CLASSICSETUP_INSTALL_BIOS_MBR) {
+            return classicsetup_plan_create_bios_windows_layout(
+                plan,
+                selected_index,
+                target_index);
+        }
     }
     return -1;
+}
+
+int classicsetup_plan_prepare_install_target(
+    struct classicsetup_partition_plan *plan,
+    size_t selected_index,
+    size_t *target_index)
+{
+    return classicsetup_plan_prepare_install_target_for_mode(
+        plan,
+        CLASSICSETUP_INSTALL_UEFI_GPT,
+        selected_index,
+        target_index);
 }

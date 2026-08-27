@@ -819,6 +819,225 @@ static void test_config_selection_persists(void)
                &config.partition_plan.disk_sector_count) == -1);
 }
 
+static void test_bios_windows_layout_and_undo(void)
+{
+    struct classicsetup_disk_info disk = {0};
+    struct classicsetup_config config = {0};
+    enum classicsetup_partition_role expected_roles[] = {
+        CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED,
+        CLASSICSETUP_PARTITION_ROLE_WINDOWS,
+        CLASSICSETUP_PARTITION_ROLE_RECOVERY
+    };
+    size_t windows_index;
+    size_t restored_index;
+    size_t role_index = 0;
+    size_t index;
+
+    disk.size_bytes = 4096ULL * CLASSICSETUP_SECTORS_PER_MB *
+                      CLASSICSETUP_SECTOR_SIZE_BYTES;
+    config.install_mode = CLASSICSETUP_INSTALL_BIOS_MBR;
+    assert(classicsetup_plan_init(
+               &disk,
+               NULL,
+               0,
+               &config.partition_plan) == 0);
+    config.has_partition_plan = true;
+    assert(classicsetup_plan_prepare_install_target_for_mode(
+               &config.partition_plan,
+               config.install_mode,
+               0,
+               &windows_index) == 0);
+    assert(config.partition_plan.items[windows_index].role ==
+           CLASSICSETUP_PARTITION_ROLE_WINDOWS);
+    assert(classicsetup_plan_has_windows_layout_for_mode(
+        &config.partition_plan,
+        CLASSICSETUP_INSTALL_BIOS_MBR));
+    assert(!classicsetup_plan_has_windows_layout(&config.partition_plan));
+    assert(find_role(
+               &config.partition_plan,
+               CLASSICSETUP_PARTITION_ROLE_EFI) ==
+           config.partition_plan.item_count);
+    assert(find_role(
+               &config.partition_plan,
+               CLASSICSETUP_PARTITION_ROLE_MSR) ==
+           config.partition_plan.item_count);
+
+    for (index = 0; index < config.partition_plan.item_count; ++index) {
+        const struct classicsetup_plan_item *item =
+            &config.partition_plan.items[index];
+
+        if (item->state != CLASSICSETUP_PLAN_NEW) {
+            continue;
+        }
+        assert(role_index <
+               sizeof(expected_roles) / sizeof(expected_roles[0]));
+        assert(item->role == expected_roles[role_index++]);
+        assert(item->start_sector % CLASSICSETUP_SECTORS_PER_MB == 0);
+    }
+    assert(role_index == sizeof(expected_roles) / sizeof(expected_roles[0]));
+    index = find_role(
+        &config.partition_plan,
+        CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED);
+    assert(index < config.partition_plan.item_count);
+    assert(config.partition_plan.items[index].sector_count ==
+           CLASSICSETUP_DEFAULT_SYSTEM_RESERVED_MB *
+               CLASSICSETUP_SECTORS_PER_MB);
+    index = find_role(
+        &config.partition_plan,
+        CLASSICSETUP_PARTITION_ROLE_RECOVERY);
+    assert(index < config.partition_plan.item_count);
+    assert(config.partition_plan.items[index].sector_count ==
+           CLASSICSETUP_DEFAULT_RECOVERY_MB *
+               CLASSICSETUP_SECTORS_PER_MB);
+    assert(classicsetup_plan_validate(&config.partition_plan));
+    assert(classicsetup_plan_has_no_overlap(&config.partition_plan));
+
+    assert(classicsetup_config_select_plan_item(
+               &config,
+               windows_index) == 0);
+    assert(classicsetup_config_set_format_plan(
+               &config,
+               CLASSICSETUP_FORMAT_FULL) == 0);
+    assert(config.role_format_plans[
+               CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED].valid);
+    assert(config.role_format_plans[
+               CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED].filesystem ==
+           CLASSICSETUP_FS_NTFS);
+    assert(config.role_format_plans[
+               CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED].mode ==
+           CLASSICSETUP_FORMAT_QUICK);
+
+    assert(classicsetup_config_undo_windows_layout(
+               &config,
+               &restored_index) == 0);
+    assert(restored_index < config.partition_plan.item_count);
+    assert(config.partition_plan.items[restored_index].state ==
+           CLASSICSETUP_PLAN_UNALLOCATED);
+    assert(config.partition_plan.item_count == 1);
+    assert(!config.has_selected_plan_target);
+    assert(!config.selected_format_plan.valid);
+    assert(classicsetup_plan_validate(&config.partition_plan));
+}
+
+static void test_bios_mbr_size_limit(void)
+{
+    struct classicsetup_disk_info disk = {0};
+    struct classicsetup_partition_info existing[2] = {0};
+    struct classicsetup_partition_plan plan;
+    struct classicsetup_partition_plan before;
+    size_t free_index;
+    size_t windows_index = 99;
+
+    disk.size_bytes = CLASSICSETUP_MBR_MAX_SECTORS *
+                      CLASSICSETUP_SECTOR_SIZE_BYTES;
+    assert(classicsetup_plan_init(&disk, NULL, 0, &plan) == 0);
+    assert(classicsetup_plan_create_bios_windows_layout(
+               &plan,
+               0,
+               &windows_index) == 0);
+    assert(classicsetup_plan_has_windows_layout_for_mode(
+        &plan,
+        CLASSICSETUP_INSTALL_BIOS_MBR));
+
+    disk.size_bytes = (CLASSICSETUP_MBR_MAX_SECTORS + 1ULL) *
+                      CLASSICSETUP_SECTOR_SIZE_BYTES;
+    assert(classicsetup_plan_init(&disk, NULL, 0, &plan) == 0);
+    before = plan;
+    windows_index = 99;
+    assert(classicsetup_plan_create_bios_windows_layout(
+               &plan,
+               0,
+               &windows_index) == -1);
+    assert(memcmp(&plan, &before, sizeof(plan)) == 0);
+    assert(windows_index == 99);
+
+    disk.size_bytes = 4096ULL * CLASSICSETUP_SECTORS_PER_MB *
+                      CLASSICSETUP_SECTOR_SIZE_BYTES;
+    existing[0].start_sector = CLASSICSETUP_SECTORS_PER_MB;
+    existing[0].sector_count = CLASSICSETUP_SECTORS_PER_MB;
+    existing[0].size_bytes = existing[0].sector_count *
+                             CLASSICSETUP_SECTOR_SIZE_BYTES;
+    existing[1].start_sector = 2ULL * CLASSICSETUP_SECTORS_PER_MB;
+    existing[1].sector_count = CLASSICSETUP_SECTORS_PER_MB;
+    existing[1].size_bytes = existing[1].sector_count *
+                             CLASSICSETUP_SECTOR_SIZE_BYTES;
+    assert(classicsetup_plan_init(&disk, existing, 2, &plan) == 0);
+    free_index = find_item(
+        &plan,
+        CLASSICSETUP_PLAN_UNALLOCATED,
+        3ULL * CLASSICSETUP_SECTORS_PER_MB);
+    assert(free_index < plan.item_count);
+    before = plan;
+    assert(classicsetup_plan_create_bios_windows_layout(
+               &plan,
+               free_index,
+               &windows_index) == -1);
+    assert(memcmp(&plan, &before, sizeof(plan)) == 0);
+}
+
+static void populate_stale_config(struct classicsetup_config *config)
+{
+    config->original_partition_count = 1;
+    config->has_partition_plan = true;
+    config->partition_plan.disk_sector_count = 1000;
+    config->partition_plan.item_count = 1;
+    config->partition_plan.items[0].state = CLASSICSETUP_PLAN_NEW;
+    config->partition_plan.items[0].role =
+        CLASSICSETUP_PARTITION_ROLE_WINDOWS;
+    config->partition_plan.items[0].sector_count = 1000;
+    config->partition_plan.items[0].size_bytes =
+        1000ULL * CLASSICSETUP_SECTOR_SIZE_BYTES;
+    config->selected_plan_target = config->partition_plan.items[0];
+    config->has_selected_plan_target = true;
+    config->selected_partition.sector_count = 1000;
+    config->selected_unallocated.sector_count = 1000;
+    config->selected_format_plan.valid = true;
+    config->role_format_plans[
+        CLASSICSETUP_PARTITION_ROLE_WINDOWS].valid = true;
+    config->has_apply_plan = true;
+    config->apply_result.code = CLASSICSETUP_APPLY_RESULT_SUCCESS;
+}
+
+static void assert_mode_change_cleared(
+    const struct classicsetup_config *config)
+{
+    assert(!config->has_partition_plan);
+    assert(config->original_partition_count == 0);
+    assert(config->partition_plan.item_count == 0);
+    assert(!config->has_selected_plan_target);
+    assert(config->selected_partition.sector_count == 0);
+    assert(config->selected_unallocated.sector_count == 0);
+    assert(!config->selected_format_plan.valid);
+    assert(!config->role_format_plans[
+               CLASSICSETUP_PARTITION_ROLE_WINDOWS].valid);
+    assert(!config->has_apply_plan);
+    assert(config->apply_plan.partition_count == 0);
+    assert(config->apply_result.code == CLASSICSETUP_APPLY_RESULT_NOT_RUN);
+}
+
+static void test_install_mode_default_and_reset(void)
+{
+    struct classicsetup_config config = {0};
+
+    assert(classicsetup_default_install_mode() ==
+           CLASSICSETUP_INSTALL_UEFI_GPT);
+    assert(config.install_mode == CLASSICSETUP_INSTALL_UEFI_GPT);
+
+    populate_stale_config(&config);
+    classicsetup_config_set_install_mode(
+        &config,
+        CLASSICSETUP_INSTALL_BIOS_MBR);
+    assert(config.install_mode == CLASSICSETUP_INSTALL_BIOS_MBR);
+    assert_mode_change_cleared(&config);
+
+    populate_stale_config(&config);
+    classicsetup_config_set_install_mode(
+        &config,
+        CLASSICSETUP_INSTALL_UEFI_GPT);
+    assert(config.install_mode == CLASSICSETUP_INSTALL_UEFI_GPT);
+    assert_mode_change_cleared(&config);
+}
+
 int main(void)
 {
     test_create_delete_and_merge();
@@ -834,5 +1053,8 @@ int main(void)
     test_incomplete_windows_layout_is_not_undoable();
     test_plan_validator_rejects_inconsistent_ranges();
     test_selection_index_helpers();
+    test_bios_windows_layout_and_undo();
+    test_bios_mbr_size_limit();
+    test_install_mode_default_and_reset();
     return 0;
 }

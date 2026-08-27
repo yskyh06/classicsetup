@@ -5,6 +5,7 @@
 
 #include "classicsetup/disk.h"
 #include "classicsetup/environment.h"
+#include "classicsetup/install_mode.h"
 #include "classicsetup/partition.h"
 #include "classicsetup/partition_plan.h"
 #include "classicsetup/process.h"
@@ -26,15 +27,26 @@ enum {
 #define CLASSICSETUP_GPT_TYPE_RECOVERY \
     "de94bba4-06d1-4d40-a16a-bfd50179d6ac"
 
+#define CLASSICSETUP_MBR_TYPE_NTFS 0x07U
+#define CLASSICSETUP_MBR_TYPE_RECOVERY 0x27U
+
+enum classicsetup_partition_table_type {
+    CLASSICSETUP_PARTITION_TABLE_GPT,
+    CLASSICSETUP_PARTITION_TABLE_MBR
+};
+
 struct classicsetup_apply_partition {
     enum classicsetup_partition_role role;
     unsigned long long start_sector;
     unsigned long long sector_count;
     char type_guid[CLASSICSETUP_GPT_GUID_SIZE];
     char name[CLASSICSETUP_APPLY_NAME_SIZE];
+    unsigned int mbr_type;
+    int bootable;
 };
 
 struct classicsetup_apply_plan {
+    enum classicsetup_partition_table_type table_type;
     struct classicsetup_disk_info target_disk;
     struct classicsetup_apply_partition
         partitions[CLASSICSETUP_APPLY_MAX_PARTITIONS];
@@ -52,12 +64,14 @@ enum classicsetup_apply_safety_code {
     CLASSICSETUP_APPLY_SAFETY_SYSTEM_DISK_UNKNOWN,
     CLASSICSETUP_APPLY_SAFETY_EXISTING_PARTITIONS,
     CLASSICSETUP_APPLY_SAFETY_UNSUPPORTED_SECTOR_SIZE,
+    CLASSICSETUP_APPLY_SAFETY_MBR_NOT_ENABLED,
     CLASSICSETUP_APPLY_SAFETY_INVALID_PLAN,
     CLASSICSETUP_APPLY_SAFETY_TOOL_UNAVAILABLE
 };
 
 struct classicsetup_apply_safety_inputs {
     enum classicsetup_environment environment;
+    enum classicsetup_partition_table_type table_type;
     int destructive_unlocked;
     int disk_identity_valid;
     enum classicsetup_system_disk_status system_disk_status;
@@ -83,6 +97,13 @@ struct classicsetup_apply_result {
 };
 
 int classicsetup_build_apply_plan(
+    const struct classicsetup_disk_info *disk,
+    const struct classicsetup_partition_plan *partition_plan,
+    size_t original_partition_count,
+    struct classicsetup_apply_plan *apply_plan);
+
+int classicsetup_build_apply_plan_for_mode(
+    enum classicsetup_install_mode install_mode,
     const struct classicsetup_disk_info *disk,
     const struct classicsetup_partition_plan *partition_plan,
     size_t original_partition_count,

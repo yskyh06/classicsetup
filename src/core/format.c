@@ -54,6 +54,7 @@ int classicsetup_format_policy_for_role(
         format_plan->mode = CLASSICSETUP_FORMAT_NONE;
         return 0;
     case CLASSICSETUP_PARTITION_ROLE_RECOVERY:
+    case CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED:
         format_plan->filesystem = CLASSICSETUP_FS_NTFS;
         format_plan->mode = CLASSICSETUP_FORMAT_QUICK;
         return 0;

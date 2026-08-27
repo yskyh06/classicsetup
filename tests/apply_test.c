@@ -76,6 +76,36 @@ static struct classicsetup_apply_plan make_apply_plan(void)
     return apply_plan;
 }
 
+static struct classicsetup_apply_plan make_mbr_apply_plan(void)
+{
+    struct classicsetup_disk_info disk = {0};
+    struct classicsetup_partition_plan partition_plan;
+    struct classicsetup_apply_plan apply_plan;
+    size_t target_index;
+
+    strcpy(disk.name, "sdz");
+    strcpy(disk.device_path, "/dev/sdz");
+    strcpy(disk.model, "ClassicSetup Test Disk");
+    disk.size_bytes = 8192ULL * CLASSICSETUP_SECTORS_PER_MB *
+                      CLASSICSETUP_SECTOR_SIZE_BYTES;
+
+    assert(classicsetup_plan_init(&disk, NULL, 0, &partition_plan) == 0);
+    assert(classicsetup_plan_prepare_install_target_for_mode(
+               &partition_plan,
+               CLASSICSETUP_INSTALL_BIOS_MBR,
+               0,
+               &target_index) == 0);
+    assert(partition_plan.items[target_index].role ==
+           CLASSICSETUP_PARTITION_ROLE_WINDOWS);
+    assert(classicsetup_build_apply_plan_for_mode(
+               CLASSICSETUP_INSTALL_BIOS_MBR,
+               &disk,
+               &partition_plan,
+               0,
+               &apply_plan) == 0);
+    return apply_plan;
+}
+
 static void test_environment_detection(void)
 {
     char virtualbox_dmi[512];
@@ -143,6 +173,7 @@ static void test_apply_plan_and_golden_script(void)
     size_t index;
 
     assert(classicsetup_validate_apply_plan(&apply_plan));
+    assert(apply_plan.table_type == CLASSICSETUP_PARTITION_TABLE_GPT);
     assert(apply_plan.partition_count == 4);
     for (index = 0; index < apply_plan.partition_count; ++index) {
         assert(apply_plan.partitions[index].role == roles[index]);
@@ -157,6 +188,62 @@ static void test_apply_plan_and_golden_script(void)
                &apply_plan,
                script,
                16) == -1);
+}
+
+static void test_mbr_apply_plan_render_and_gate(void)
+{
+    struct classicsetup_apply_plan apply_plan = make_mbr_apply_plan();
+    struct classicsetup_apply_plan invalid;
+    struct classicsetup_apply_result result;
+    char script[CLASSICSETUP_SFDISK_SCRIPT_SIZE];
+    const char *expected =
+        "label: dos\n"
+        "unit: sectors\n"
+        "\n"
+        "start=2048, size=1126400, type=07, bootable\n"
+        "start=1128448, size=13551616, type=07\n"
+        "start=14680064, size=2097152, type=27\n";
+
+    assert(apply_plan.table_type == CLASSICSETUP_PARTITION_TABLE_MBR);
+    assert(apply_plan.partition_count == 3);
+    assert(apply_plan.partitions[0].role ==
+           CLASSICSETUP_PARTITION_ROLE_SYSTEM_RESERVED);
+    assert(apply_plan.partitions[0].mbr_type == CLASSICSETUP_MBR_TYPE_NTFS);
+    assert(apply_plan.partitions[0].bootable);
+    assert(apply_plan.partitions[1].role ==
+           CLASSICSETUP_PARTITION_ROLE_WINDOWS);
+    assert(apply_plan.partitions[1].mbr_type == CLASSICSETUP_MBR_TYPE_NTFS);
+    assert(!apply_plan.partitions[1].bootable);
+    assert(apply_plan.partitions[2].role ==
+           CLASSICSETUP_PARTITION_ROLE_RECOVERY);
+    assert(apply_plan.partitions[2].mbr_type ==
+           CLASSICSETUP_MBR_TYPE_RECOVERY);
+    assert(!apply_plan.partitions[2].bootable);
+    assert(classicsetup_validate_apply_plan(&apply_plan));
+    assert(classicsetup_render_sfdisk_script(
+               &apply_plan,
+               script,
+               sizeof(script)) == 0);
+    assert(strcmp(script, expected) == 0);
+
+    invalid = apply_plan;
+    invalid.partitions[0].bootable = 0;
+    assert(!classicsetup_validate_apply_plan(&invalid));
+    invalid = apply_plan;
+    invalid.partitions[0].role = CLASSICSETUP_PARTITION_ROLE_EFI;
+    assert(!classicsetup_validate_apply_plan(&invalid));
+    invalid = apply_plan;
+    invalid.disk_sector_count = CLASSICSETUP_MBR_MAX_SECTORS + 1ULL;
+    invalid.target_disk.size_bytes = invalid.disk_sector_count *
+                                     CLASSICSETUP_SECTOR_SIZE_BYTES;
+    assert(!classicsetup_validate_apply_plan(&invalid));
+
+    memset(&result, 0x5a, sizeof(result));
+    assert(classicsetup_execute_apply_plan(&apply_plan, &result) == 0);
+    assert(result.code == CLASSICSETUP_APPLY_RESULT_BLOCKED);
+    assert(result.safety_code ==
+           CLASSICSETUP_APPLY_SAFETY_MBR_NOT_ENABLED);
+    assert(!result.process.exited);
 }
 
 static void test_apply_plan_rejections(void)
@@ -274,6 +361,10 @@ static void test_safety_matrix(void)
 
     assert(classicsetup_evaluate_apply_safety(&inputs) ==
            CLASSICSETUP_APPLY_SAFETY_OK);
+    inputs.table_type = CLASSICSETUP_PARTITION_TABLE_MBR;
+    assert(classicsetup_evaluate_apply_safety(&inputs) ==
+           CLASSICSETUP_APPLY_SAFETY_MBR_NOT_ENABLED);
+    inputs.table_type = CLASSICSETUP_PARTITION_TABLE_GPT;
     inputs.environment = CLASSICSETUP_ENV_VIRTUALBOX;
     assert(classicsetup_evaluate_apply_safety(&inputs) ==
            CLASSICSETUP_APPLY_SAFETY_OK);
@@ -622,6 +713,7 @@ int main(void)
 {
     test_environment_detection();
     test_apply_plan_and_golden_script();
+    test_mbr_apply_plan_render_and_gate();
     test_apply_plan_rejections();
     test_safety_matrix();
     test_system_disk_protection();
