@@ -428,10 +428,36 @@ int classicsetup_disk_identity_matches(
     if (selected == NULL || current == NULL) {
         return 0;
     }
-    return strcmp(selected->name, current->name) == 0 &&
-           strcmp(selected->device_path, current->device_path) == 0 &&
-           selected->size_bytes == current->size_bytes &&
-           strcmp(selected->model, current->model) == 0;
+    if (strcmp(selected->name, current->name) != 0 ||
+        strcmp(selected->device_path, current->device_path) != 0 ||
+        selected->size_bytes != current->size_bytes ||
+        strcmp(selected->model, current->model) != 0) {
+        return 0;
+    }
+    if (selected->has_serial &&
+        (!current->has_serial ||
+         strcmp(selected->serial, current->serial) != 0)) {
+        return 0;
+    }
+    if (selected->has_wwn &&
+        (!current->has_wwn || strcmp(selected->wwn, current->wwn) != 0)) {
+        return 0;
+    }
+    if (selected->has_logical_sector_size &&
+        (!current->has_logical_sector_size ||
+         selected->logical_sector_size != current->logical_sector_size)) {
+        return 0;
+    }
+    if (selected->has_removable &&
+        (!current->has_removable ||
+         selected->removable != current->removable)) {
+        return 0;
+    }
+    if (selected->transport[0] != '\0' &&
+        strcmp(selected->transport, current->transport) != 0) {
+        return 0;
+    }
+    return 1;
 }
 
 int classicsetup_revalidate_target_disk(

@@ -650,6 +650,15 @@ static void test_disk_identity_and_post_apply_verification(void)
         &apply_plan.target_disk,
         &current));
 
+    current = apply_plan.target_disk;
+    strcpy(apply_plan.target_disk.serial, "SERIAL-A");
+    apply_plan.target_disk.has_serial = true;
+    current = apply_plan.target_disk;
+    strcpy(current.serial, "SERIAL-B");
+    assert(!classicsetup_disk_identity_matches(
+        &apply_plan.target_disk,
+        &current));
+
     for (index = 0; index < 4; ++index) {
         partitions[index].start_sector =
             apply_plan.partitions[index].start_sector;

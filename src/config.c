@@ -9,6 +9,22 @@ static void clear_format_plans(struct classicsetup_config *config)
     memset(config->role_format_plans, 0, sizeof(config->role_format_plans));
 }
 
+void classicsetup_config_set_setup_mode(
+    struct classicsetup_config *config,
+    enum classicsetup_setup_mode setup_mode)
+{
+    if (config == NULL || setup_mode < CLASSICSETUP_SETUP_RECOMMENDED ||
+        setup_mode >= CLASSICSETUP_SETUP_MODE_COUNT ||
+        config->setup_mode == setup_mode) {
+        return;
+    }
+    config->setup_mode = setup_mode;
+    config->install_mode = CLASSICSETUP_INSTALL_UEFI_GPT;
+    memset(&config->selected_disk, 0, sizeof(config->selected_disk));
+    config->has_selected_disk = false;
+    classicsetup_config_reset_partition_plan(config);
+}
+
 void classicsetup_config_set_install_mode(
     struct classicsetup_config *config,
     enum classicsetup_install_mode install_mode)
@@ -27,6 +43,7 @@ void classicsetup_config_clear_apply_state(struct classicsetup_config *config)
     memset(&config->apply_plan, 0, sizeof(config->apply_plan));
     config->has_apply_plan = false;
     memset(&config->apply_result, 0, sizeof(config->apply_result));
+    config->recommended_result = CLASSICSETUP_RECOMMENDED_NOT_RUN;
     classicsetup_config_clear_format_apply_state(config);
 }
 
@@ -49,6 +66,8 @@ void classicsetup_config_reset_partition_plan(
     memset(&config->selected_unallocated, 0, sizeof(config->selected_unallocated));
     memset(&config->selected_plan_target, 0, sizeof(config->selected_plan_target));
     config->has_selected_plan_target = false;
+    memset(&config->recommended_plan, 0, sizeof(config->recommended_plan));
+    config->has_recommended_plan = false;
     clear_format_plans(config);
     classicsetup_config_clear_apply_state(config);
 }
@@ -193,5 +212,39 @@ int classicsetup_config_set_format_plan(
         role_plans,
         sizeof(config->role_format_plans));
     classicsetup_config_clear_apply_state(config);
+    return 0;
+}
+
+int classicsetup_config_set_recommended_plan(
+    struct classicsetup_config *config,
+    const struct classicsetup_recommended_plan *plan)
+{
+    if (config == NULL || plan == NULL ||
+        config->setup_mode != CLASSICSETUP_SETUP_RECOMMENDED ||
+        plan->install_mode != CLASSICSETUP_INSTALL_UEFI_GPT ||
+        !classicsetup_plan_validate(&plan->partition_plan) ||
+        !classicsetup_plan_item_is_install_target(&plan->selected_target) ||
+        !plan->selected_format_plan.valid ||
+        plan->apply_plan.partition_count == 0) {
+        return -1;
+    }
+    classicsetup_config_reset_partition_plan(config);
+    config->install_mode = plan->install_mode;
+    config->selected_disk = plan->apply_plan.target_disk;
+    config->has_selected_disk = true;
+    config->partition_plan = plan->partition_plan;
+    config->has_partition_plan = true;
+    config->selected_plan_target = plan->selected_target;
+    config->has_selected_plan_target = true;
+    config->partition_target_type = CLASSICSETUP_PARTITION_TARGET_NEW;
+    config->selected_format_plan = plan->selected_format_plan;
+    memcpy(
+        config->role_format_plans,
+        plan->role_format_plans,
+        sizeof(config->role_format_plans));
+    config->apply_plan = plan->apply_plan;
+    config->has_apply_plan = true;
+    config->recommended_plan = *plan;
+    config->has_recommended_plan = true;
     return 0;
 }

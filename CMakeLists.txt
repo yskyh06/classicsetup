@@ -16,6 +16,8 @@ add_executable(classicsetup
     src/core/partition.c
     src/core/partition_plan.c
     src/core/process.c
+    src/core/recommended.c
+    src/core/setup_mode.c
     src/core/system_disk.c
     src/main.c
     src/state.c
@@ -29,6 +31,8 @@ add_executable(classicsetup
     src/tui/keyboard.c
     src/tui/partition_selection.c
     src/tui/quit.c
+    src/tui/recommended.c
+    src/tui/setup_mode_selection.c
     src/tui/tui.c
     src/tui/welcome.c
 )
@@ -222,6 +226,37 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME format_apply COMMAND classicsetup_format_apply_test)
+
+    add_executable(classicsetup_recommended_test
+        tests/recommended_test.c
+        src/config.c
+        src/core/apply.c
+        src/core/disk.c
+        src/core/environment.c
+        src/core/format.c
+        src/core/format_apply.c
+        src/core/partition.c
+        src/core/partition_plan.c
+        src/core/process.c
+        src/core/recommended.c
+        src/core/setup_mode.c
+        src/core/system_disk.c
+    )
+
+    set_target_properties(classicsetup_recommended_test PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED YES
+        C_EXTENSIONS NO
+    )
+
+    target_include_directories(classicsetup_recommended_test PRIVATE include)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(classicsetup_recommended_test PRIVATE
+            -Wall -Wextra -Wpedantic
+        )
+    endif()
+
+    add_test(NAME recommended_policy COMMAND classicsetup_recommended_test)
 
     add_executable(classicsetup_key_mapping_test
         tests/key_mapping_test.c

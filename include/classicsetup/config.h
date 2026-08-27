@@ -10,6 +10,8 @@
 #include "classicsetup/install_mode.h"
 #include "classicsetup/partition.h"
 #include "classicsetup/partition_plan.h"
+#include "classicsetup/recommended.h"
+#include "classicsetup/setup_mode.h"
 
 enum {
     CLASSICSETUP_CONFIG_MAX_ORIGINAL_PARTITIONS = 64
@@ -25,6 +27,7 @@ enum classicsetup_keyboard_type {
 
 struct classicsetup_config {
     enum classicsetup_keyboard_type keyboard_type;
+    enum classicsetup_setup_mode setup_mode;
     enum classicsetup_install_mode install_mode;
     struct classicsetup_disk_info selected_disk;
     bool has_selected_disk;
@@ -47,7 +50,14 @@ struct classicsetup_config {
     struct classicsetup_format_apply_plan format_apply_plan;
     bool has_format_apply_plan;
     struct classicsetup_format_result format_result;
+    struct classicsetup_recommended_plan recommended_plan;
+    bool has_recommended_plan;
+    enum classicsetup_recommended_result_code recommended_result;
 };
+
+void classicsetup_config_set_setup_mode(
+    struct classicsetup_config *config,
+    enum classicsetup_setup_mode setup_mode);
 
 void classicsetup_config_set_install_mode(
     struct classicsetup_config *config,
@@ -76,5 +86,9 @@ int classicsetup_config_undo_windows_layout(
 int classicsetup_config_set_format_plan(
     struct classicsetup_config *config,
     enum classicsetup_format_mode windows_mode);
+
+int classicsetup_config_set_recommended_plan(
+    struct classicsetup_config *config,
+    const struct classicsetup_recommended_plan *plan);
 
 #endif

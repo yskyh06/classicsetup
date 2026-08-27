@@ -17,6 +17,10 @@
 #include "classicsetup/partition.h"
 #include "classicsetup/partition_selection.h"
 #include "classicsetup/quit.h"
+#include "classicsetup/recommended.h"
+#include "classicsetup/recommended_tui.h"
+#include "classicsetup/setup_mode.h"
+#include "classicsetup/setup_mode_selection.h"
 #include "classicsetup/state.h"
 #include "classicsetup/tui.h"
 #include "classicsetup/welcome.h"
@@ -46,6 +50,146 @@ static enum classicsetup_event show_keyboard(struct classicsetup_config *config)
         return CLASSICSETUP_EVENT_QUIT_REQUEST;
     }
 
+    return CLASSICSETUP_EVENT_QUIT_REQUEST;
+}
+
+static enum classicsetup_event show_setup_mode(
+    struct classicsetup_config *config)
+{
+    enum classicsetup_setup_mode selected = config->setup_mode;
+
+    if (classicsetup_show_setup_mode_selection(&selected) ==
+        CLASSICSETUP_SETUP_MODE_SELECTION_CONTINUE) {
+        classicsetup_config_set_setup_mode(config, selected);
+        return CLASSICSETUP_EVENT_CONTINUE;
+    }
+    return CLASSICSETUP_EVENT_QUIT_REQUEST;
+}
+
+static enum classicsetup_event show_recommended_disk(
+    struct classicsetup_config *config)
+{
+    enum { MAX_DISKS = 32 };
+    struct classicsetup_disk_info disks[MAX_DISKS];
+    struct classicsetup_disk_assessment assessments[MAX_DISKS];
+    struct classicsetup_recommended_plan plan;
+    enum classicsetup_recommended_disk_result result;
+    enum classicsetup_firmware_mode firmware =
+        classicsetup_detect_firmware();
+    size_t disk_count = 0;
+    size_t selected = 0;
+    size_t index;
+    int scan_failed = classicsetup_scan_disks(
+                          disks,
+                          MAX_DISKS,
+                          &disk_count) != 0;
+
+    memset(assessments, 0, sizeof(assessments));
+    for (index = 0; index < disk_count; ++index) {
+        if (classicsetup_assess_disk(&disks[index], &assessments[index]) != 0) {
+            assessments[index].disk = disks[index];
+            assessments[index].disk_class = CLASSICSETUP_DISK_UNKNOWN;
+        }
+        if (config->has_selected_disk &&
+            strcmp(
+                config->selected_disk.device_path,
+                disks[index].device_path) == 0) {
+            selected = index;
+        }
+    }
+    result = classicsetup_show_recommended_disk_selection(
+        assessments,
+        disk_count,
+        firmware,
+        scan_failed,
+        &selected);
+    if (result == CLASSICSETUP_RECOMMENDED_DISK_BACK) {
+        return CLASSICSETUP_EVENT_BACK;
+    }
+    if (result == CLASSICSETUP_RECOMMENDED_DISK_QUIT) {
+        return CLASSICSETUP_EVENT_QUIT_REQUEST;
+    }
+    if (selected >= disk_count ||
+        classicsetup_build_recommended_plan(
+            firmware,
+            &assessments[selected].disk,
+            assessments[selected].disk_class,
+            &plan) != 0 ||
+        classicsetup_config_set_recommended_plan(config, &plan) != 0) {
+        return CLASSICSETUP_EVENT_CANCEL;
+    }
+    return CLASSICSETUP_EVENT_CONTINUE;
+}
+
+static enum classicsetup_event show_windows_source(void)
+{
+    enum classicsetup_simple_screen_result result =
+        classicsetup_show_windows_source_placeholder();
+
+    if (result == CLASSICSETUP_SIMPLE_CONTINUE) {
+        return CLASSICSETUP_EVENT_CONTINUE;
+    }
+    if (result == CLASSICSETUP_SIMPLE_BACK) {
+        return CLASSICSETUP_EVENT_BACK;
+    }
+    return CLASSICSETUP_EVENT_QUIT_REQUEST;
+}
+
+static enum classicsetup_event show_install_summary(
+    struct classicsetup_config *config)
+{
+    enum classicsetup_install_summary_result result;
+
+    if (!config->has_recommended_plan) {
+        return CLASSICSETUP_EVENT_BACK;
+    }
+    result = classicsetup_show_install_summary(&config->recommended_plan);
+    if (result == CLASSICSETUP_INSTALL_SUMMARY_BACK) {
+        return CLASSICSETUP_EVENT_BACK;
+    }
+    if (result == CLASSICSETUP_INSTALL_SUMMARY_QUIT) {
+        return CLASSICSETUP_EVENT_QUIT_REQUEST;
+    }
+    config->recommended_result = classicsetup_execute_recommended_plan(
+        &config->recommended_plan,
+        &config->apply_result,
+        &config->format_apply_plan,
+        &config->format_result);
+    config->has_format_apply_plan =
+        classicsetup_validate_format_apply_plan(
+            &config->format_apply_plan);
+    return CLASSICSETUP_EVENT_CONTINUE;
+}
+
+static enum classicsetup_event show_recommended_result(
+    const struct classicsetup_config *config)
+{
+    enum classicsetup_simple_screen_result result =
+        classicsetup_show_recommended_result(
+            config->recommended_result,
+            &config->apply_result,
+            &config->format_result);
+
+    if (result == CLASSICSETUP_SIMPLE_CONTINUE) {
+        return CLASSICSETUP_EVENT_CONTINUE;
+    }
+    if (result == CLASSICSETUP_SIMPLE_BACK) {
+        return CLASSICSETUP_EVENT_BACK;
+    }
+    return CLASSICSETUP_EVENT_QUIT_REQUEST;
+}
+
+static enum classicsetup_event show_gui_transition(void)
+{
+    enum classicsetup_simple_screen_result result =
+        classicsetup_show_gui_transition_placeholder();
+
+    if (result == CLASSICSETUP_SIMPLE_CONTINUE) {
+        return CLASSICSETUP_EVENT_CONTINUE;
+    }
+    if (result == CLASSICSETUP_SIMPLE_BACK) {
+        return CLASSICSETUP_EVENT_BACK;
+    }
     return CLASSICSETUP_EVENT_QUIT_REQUEST;
 }
 
@@ -403,6 +547,7 @@ int classicsetup_run(void)
 {
     struct classicsetup_config config = {
         .keyboard_type = CLASSICSETUP_KEYBOARD_KOREAN_103_106,
+        .setup_mode = classicsetup_default_setup_mode(),
         .install_mode = CLASSICSETUP_INSTALL_UEFI_GPT,
         .has_selected_disk = false,
         .partition_target_type = CLASSICSETUP_PARTITION_TARGET_NONE
@@ -418,8 +563,18 @@ int classicsetup_run(void)
 
         if (state == CLASSICSETUP_STATE_WELCOME) {
             event = show_welcome();
+        } else if (state == CLASSICSETUP_STATE_SETUP_MODE) {
+            event = show_setup_mode(&config);
         } else if (state == CLASSICSETUP_STATE_KEYBOARD) {
             event = show_keyboard(&config);
+        } else if (state == CLASSICSETUP_STATE_RECOMMENDED_DISK) {
+            event = show_recommended_disk(&config);
+        } else if (state == CLASSICSETUP_STATE_WINDOWS_SOURCE) {
+            event = show_windows_source();
+        } else if (state == CLASSICSETUP_STATE_INSTALL_SUMMARY) {
+            event = show_install_summary(&config);
+        } else if (state == CLASSICSETUP_STATE_RECOMMENDED_RESULT) {
+            event = show_recommended_result(&config);
         } else if (state == CLASSICSETUP_STATE_INSTALL_MODE) {
             event = show_install_mode(&config);
         } else if (state == CLASSICSETUP_STATE_DISK) {
@@ -442,6 +597,8 @@ int classicsetup_run(void)
             event = show_format_apply_result(&config);
         } else if (state == CLASSICSETUP_STATE_AFTER_FORMAT) {
             event = show_after_format(&config);
+        } else if (state == CLASSICSETUP_STATE_GUI_TRANSITION) {
+            event = show_gui_transition();
         }
 
         if (event == CLASSICSETUP_EVENT_QUIT_REQUEST) {
@@ -451,7 +608,10 @@ int classicsetup_run(void)
             state = classicsetup_resolve_quit_request(state, confirmed);
             continue;
         }
-        state = classicsetup_next_state(state, event);
+        state = classicsetup_next_state_for_setup_mode(
+            state,
+            event,
+            config.setup_mode);
     }
 
     classicsetup_tui_shutdown();

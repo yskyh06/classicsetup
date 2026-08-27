@@ -999,6 +999,8 @@ static void populate_stale_config(struct classicsetup_config *config)
     config->has_format_apply_plan = true;
     config->format_apply_plan.partition_count = 1;
     config->format_result.code = CLASSICSETUP_FORMAT_RESULT_SUCCESS;
+    config->has_recommended_plan = true;
+    config->recommended_plan.apply_plan.partition_count = 1;
 }
 
 static void assert_mode_change_cleared(
@@ -1019,6 +1021,8 @@ static void assert_mode_change_cleared(
     assert(!config->has_format_apply_plan);
     assert(config->format_apply_plan.partition_count == 0);
     assert(config->format_result.code == CLASSICSETUP_FORMAT_RESULT_NOT_RUN);
+    assert(!config->has_recommended_plan);
+    assert(config->recommended_plan.apply_plan.partition_count == 0);
 }
 
 static void test_install_mode_default_and_reset(void)

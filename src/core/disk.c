@@ -69,6 +69,44 @@ static int parse_size_bytes(const char *text, unsigned long long *size_bytes)
     return 0;
 }
 
+static int parse_unsigned(const char *text, unsigned int *value)
+{
+    char *end;
+    unsigned long parsed;
+
+    errno = 0;
+    parsed = strtoul(text, &end, 10);
+    while (isspace((unsigned char)*end)) {
+        ++end;
+    }
+    if (errno != 0 || end == text || *end != '\0' || parsed > UINT_MAX) {
+        return -1;
+    }
+    *value = (unsigned int)parsed;
+    return 0;
+}
+
+static int read_disk_value(
+    const char *sys_block_path,
+    const char *name,
+    const char *relative_path,
+    char *value,
+    size_t value_size)
+{
+    char path[SYSFS_PATH_SIZE];
+    int written = snprintf(
+        path,
+        sizeof(path),
+        "%s/%s/%s",
+        sys_block_path,
+        name,
+        relative_path);
+
+    return written < 0 || (size_t)written >= sizeof(path)
+               ? -1
+               : read_text_file(path, value, value_size);
+}
+
 static int read_disk(
     const char *sys_block_path,
     const char *name,
@@ -76,6 +114,8 @@ static int read_disk(
 {
     char path[SYSFS_PATH_SIZE];
     char size_text[64];
+    char value[CLASSICSETUP_DISK_ID_SIZE];
+    unsigned int parsed;
     int written;
 
     written = snprintf(path, sizeof(path), "%s/%s/size", sys_block_path, name);
@@ -100,7 +140,70 @@ static int read_disk(
         snprintf(disk->model, sizeof(disk->model), "Unknown model");
     }
 
+    if (read_disk_value(
+            sys_block_path,
+            name,
+            "device/serial",
+            disk->serial,
+            sizeof(disk->serial)) == 0 &&
+        disk->serial[0] != '\0') {
+        disk->has_serial = true;
+    }
+    if (read_disk_value(
+            sys_block_path,
+            name,
+            "device/wwid",
+            disk->wwn,
+            sizeof(disk->wwn)) != 0) {
+        read_disk_value(
+            sys_block_path,
+            name,
+            "wwid",
+            disk->wwn,
+            sizeof(disk->wwn));
+    }
+    disk->has_wwn = disk->wwn[0] != '\0';
+    if (read_disk_value(
+            sys_block_path,
+            name,
+            "queue/logical_block_size",
+            value,
+            sizeof(value)) == 0 &&
+        parse_unsigned(value, &parsed) == 0 && parsed > 0) {
+        disk->logical_sector_size = parsed;
+        disk->has_logical_sector_size = true;
+    }
+    if (read_disk_value(
+            sys_block_path,
+            name,
+            "removable",
+            value,
+            sizeof(value)) == 0 &&
+        parse_unsigned(value, &parsed) == 0 && parsed <= 1U) {
+        disk->removable = parsed == 1U;
+        disk->has_removable = true;
+    }
+    read_disk_value(
+        sys_block_path,
+        name,
+        "device/transport",
+        disk->transport,
+        sizeof(disk->transport));
+
     return 0;
+}
+
+int classicsetup_disk_has_recommended_identity(
+    const struct classicsetup_disk_info *disk)
+{
+    return disk != NULL && disk->name[0] != '\0' &&
+           disk->device_path[0] != '\0' && disk->size_bytes > 0 &&
+           disk->model[0] != '\0' &&
+           strcmp(disk->model, "Unknown model") != 0 &&
+           (disk->has_serial || disk->has_wwn) &&
+           disk->has_logical_sector_size &&
+           disk->logical_sector_size == CLASSICSETUP_SECTOR_SIZE_BYTES &&
+           disk->has_removable;
 }
 
 static int compare_disks(const void *left, const void *right)

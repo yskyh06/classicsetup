@@ -3,9 +3,16 @@
 
 #include <stdbool.h>
 
+#include "classicsetup/setup_mode.h"
+
 enum classicsetup_state {
     CLASSICSETUP_STATE_WELCOME,
+    CLASSICSETUP_STATE_SETUP_MODE,
     CLASSICSETUP_STATE_KEYBOARD,
+    CLASSICSETUP_STATE_RECOMMENDED_DISK,
+    CLASSICSETUP_STATE_WINDOWS_SOURCE,
+    CLASSICSETUP_STATE_INSTALL_SUMMARY,
+    CLASSICSETUP_STATE_RECOMMENDED_RESULT,
     CLASSICSETUP_STATE_INSTALL_MODE,
     CLASSICSETUP_STATE_DISK,
     CLASSICSETUP_STATE_PARTITION,
@@ -17,6 +24,7 @@ enum classicsetup_state {
     CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION,
     CLASSICSETUP_STATE_FORMAT_APPLY_RESULT,
     CLASSICSETUP_STATE_AFTER_FORMAT,
+    CLASSICSETUP_STATE_GUI_TRANSITION,
     CLASSICSETUP_STATE_EXIT
 };
 
@@ -30,6 +38,11 @@ enum classicsetup_event {
 enum classicsetup_state classicsetup_next_state(
     enum classicsetup_state state,
     enum classicsetup_event event);
+
+enum classicsetup_state classicsetup_next_state_for_setup_mode(
+    enum classicsetup_state state,
+    enum classicsetup_event event,
+    enum classicsetup_setup_mode setup_mode);
 
 enum classicsetup_state classicsetup_resolve_quit_request(
     enum classicsetup_state state,

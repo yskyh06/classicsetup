@@ -3,162 +3,52 @@
 
 #include "classicsetup/state.h"
 
-static void test_continue_flow(void)
+static enum classicsetup_state next(
+    enum classicsetup_state state,
+    enum classicsetup_event event,
+    enum classicsetup_setup_mode mode)
 {
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_WELCOME,
-               CLASSICSETUP_EVENT_CONTINUE) == CLASSICSETUP_STATE_KEYBOARD);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_KEYBOARD,
-               CLASSICSETUP_EVENT_CONTINUE) ==
-           CLASSICSETUP_STATE_INSTALL_MODE);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_INSTALL_MODE,
-               CLASSICSETUP_EVENT_CONTINUE) == CLASSICSETUP_STATE_DISK);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_DISK,
-               CLASSICSETUP_EVENT_CONTINUE) == CLASSICSETUP_STATE_PARTITION);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_PARTITION,
-               CLASSICSETUP_EVENT_CONTINUE) == CLASSICSETUP_STATE_FORMAT);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_FORMAT,
-               CLASSICSETUP_EVENT_CONTINUE) ==
-           CLASSICSETUP_STATE_APPLY_PREVIEW);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_APPLY_PREVIEW,
-               CLASSICSETUP_EVENT_CONTINUE) ==
-           CLASSICSETUP_STATE_APPLY_CONFIRMATION);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_APPLY_CONFIRMATION,
-               CLASSICSETUP_EVENT_CONTINUE) ==
-           CLASSICSETUP_STATE_APPLY_RESULT);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_APPLY_RESULT,
-               CLASSICSETUP_EVENT_CONTINUE) ==
-           CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW,
-               CLASSICSETUP_EVENT_CONTINUE) ==
-           CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION,
-               CLASSICSETUP_EVENT_CONTINUE) ==
-           CLASSICSETUP_STATE_FORMAT_APPLY_RESULT);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_FORMAT_APPLY_RESULT,
-               CLASSICSETUP_EVENT_CONTINUE) ==
-           CLASSICSETUP_STATE_AFTER_FORMAT);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_AFTER_FORMAT,
-               CLASSICSETUP_EVENT_CONTINUE) == CLASSICSETUP_STATE_EXIT);
+    return classicsetup_next_state_for_setup_mode(state, event, mode);
 }
 
-static void test_cancel_policy(void)
+static void test_recommended_flow_skips_advanced_screens(void)
 {
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_WELCOME,
-               CLASSICSETUP_EVENT_CANCEL) == CLASSICSETUP_STATE_WELCOME);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_KEYBOARD,
-               CLASSICSETUP_EVENT_CANCEL) == CLASSICSETUP_STATE_KEYBOARD);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_INSTALL_MODE,
-               CLASSICSETUP_EVENT_CANCEL) ==
-           CLASSICSETUP_STATE_INSTALL_MODE);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_DISK,
-               CLASSICSETUP_EVENT_CANCEL) == CLASSICSETUP_STATE_DISK);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_PARTITION,
-               CLASSICSETUP_EVENT_CANCEL) == CLASSICSETUP_STATE_PARTITION);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_FORMAT,
-               CLASSICSETUP_EVENT_CANCEL) == CLASSICSETUP_STATE_PARTITION);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_AFTER_FORMAT,
-               CLASSICSETUP_EVENT_CANCEL) ==
-           CLASSICSETUP_STATE_AFTER_FORMAT);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_APPLY_PREVIEW,
-               CLASSICSETUP_EVENT_CANCEL) ==
-           CLASSICSETUP_STATE_APPLY_PREVIEW);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_APPLY_CONFIRMATION,
-               CLASSICSETUP_EVENT_CANCEL) ==
-           CLASSICSETUP_STATE_APPLY_CONFIRMATION);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_APPLY_RESULT,
-               CLASSICSETUP_EVENT_CANCEL) ==
-           CLASSICSETUP_STATE_APPLY_RESULT);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW,
-               CLASSICSETUP_EVENT_CANCEL) ==
-           CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION,
-               CLASSICSETUP_EVENT_CANCEL) ==
-           CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_FORMAT_APPLY_RESULT,
-               CLASSICSETUP_EVENT_CANCEL) ==
-           CLASSICSETUP_STATE_FORMAT_APPLY_RESULT);
+    assert(next(CLASSICSETUP_STATE_WELCOME, CLASSICSETUP_EVENT_CONTINUE,
+                CLASSICSETUP_SETUP_RECOMMENDED) ==
+           CLASSICSETUP_STATE_SETUP_MODE);
+    assert(next(CLASSICSETUP_STATE_SETUP_MODE, CLASSICSETUP_EVENT_CONTINUE,
+                CLASSICSETUP_SETUP_RECOMMENDED) ==
+           CLASSICSETUP_STATE_KEYBOARD);
+    assert(next(CLASSICSETUP_STATE_KEYBOARD, CLASSICSETUP_EVENT_CONTINUE,
+                CLASSICSETUP_SETUP_RECOMMENDED) ==
+           CLASSICSETUP_STATE_RECOMMENDED_DISK);
+    assert(next(CLASSICSETUP_STATE_RECOMMENDED_DISK,
+                CLASSICSETUP_EVENT_CONTINUE,
+                CLASSICSETUP_SETUP_RECOMMENDED) ==
+           CLASSICSETUP_STATE_WINDOWS_SOURCE);
+    assert(next(CLASSICSETUP_STATE_WINDOWS_SOURCE,
+                CLASSICSETUP_EVENT_CONTINUE,
+                CLASSICSETUP_SETUP_RECOMMENDED) ==
+           CLASSICSETUP_STATE_INSTALL_SUMMARY);
+    assert(next(CLASSICSETUP_STATE_INSTALL_SUMMARY,
+                CLASSICSETUP_EVENT_CONTINUE,
+                CLASSICSETUP_SETUP_RECOMMENDED) ==
+           CLASSICSETUP_STATE_RECOMMENDED_RESULT);
+    assert(next(CLASSICSETUP_STATE_RECOMMENDED_RESULT,
+                CLASSICSETUP_EVENT_CONTINUE,
+                CLASSICSETUP_SETUP_RECOMMENDED) ==
+           CLASSICSETUP_STATE_GUI_TRANSITION);
+    assert(next(CLASSICSETUP_STATE_GUI_TRANSITION,
+                CLASSICSETUP_EVENT_CONTINUE,
+                CLASSICSETUP_SETUP_RECOMMENDED) ==
+           CLASSICSETUP_STATE_EXIT);
 }
 
-static void test_back_policy(void)
-{
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_WELCOME,
-               CLASSICSETUP_EVENT_BACK) == CLASSICSETUP_STATE_WELCOME);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_KEYBOARD,
-               CLASSICSETUP_EVENT_BACK) == CLASSICSETUP_STATE_WELCOME);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_INSTALL_MODE,
-               CLASSICSETUP_EVENT_BACK) == CLASSICSETUP_STATE_KEYBOARD);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_DISK,
-               CLASSICSETUP_EVENT_BACK) ==
-           CLASSICSETUP_STATE_INSTALL_MODE);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_PARTITION,
-               CLASSICSETUP_EVENT_BACK) == CLASSICSETUP_STATE_DISK);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_FORMAT,
-               CLASSICSETUP_EVENT_BACK) == CLASSICSETUP_STATE_FORMAT);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_APPLY_PREVIEW,
-               CLASSICSETUP_EVENT_BACK) == CLASSICSETUP_STATE_FORMAT);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_APPLY_CONFIRMATION,
-               CLASSICSETUP_EVENT_BACK) ==
-           CLASSICSETUP_STATE_APPLY_PREVIEW);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_APPLY_RESULT,
-               CLASSICSETUP_EVENT_BACK) ==
-           CLASSICSETUP_STATE_APPLY_PREVIEW);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW,
-               CLASSICSETUP_EVENT_BACK) ==
-           CLASSICSETUP_STATE_APPLY_RESULT);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION,
-               CLASSICSETUP_EVENT_BACK) ==
-           CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_FORMAT_APPLY_RESULT,
-               CLASSICSETUP_EVENT_BACK) ==
-           CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW);
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_AFTER_FORMAT,
-               CLASSICSETUP_EVENT_BACK) ==
-           CLASSICSETUP_STATE_FORMAT_APPLY_RESULT);
-}
-
-static void test_quit_request_policy(void)
+static void test_advanced_flow_is_preserved(void)
 {
     enum classicsetup_state states[] = {
         CLASSICSETUP_STATE_WELCOME,
+        CLASSICSETUP_STATE_SETUP_MODE,
         CLASSICSETUP_STATE_KEYBOARD,
         CLASSICSETUP_STATE_INSTALL_MODE,
         CLASSICSETUP_STATE_DISK,
@@ -170,14 +60,76 @@ static void test_quit_request_policy(void)
         CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW,
         CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION,
         CLASSICSETUP_STATE_FORMAT_APPLY_RESULT,
-        CLASSICSETUP_STATE_AFTER_FORMAT
+        CLASSICSETUP_STATE_AFTER_FORMAT,
+        CLASSICSETUP_STATE_GUI_TRANSITION,
+        CLASSICSETUP_STATE_EXIT
+    };
+    size_t index;
+
+    for (index = 0; index + 1 < sizeof(states) / sizeof(states[0]); ++index) {
+        assert(next(states[index], CLASSICSETUP_EVENT_CONTINUE,
+                    CLASSICSETUP_SETUP_ADVANCED) == states[index + 1]);
+    }
+}
+
+static void test_back_and_cancel_policy(void)
+{
+    assert(next(CLASSICSETUP_STATE_KEYBOARD, CLASSICSETUP_EVENT_BACK,
+                CLASSICSETUP_SETUP_RECOMMENDED) ==
+           CLASSICSETUP_STATE_SETUP_MODE);
+    assert(next(CLASSICSETUP_STATE_RECOMMENDED_DISK,
+                CLASSICSETUP_EVENT_BACK,
+                CLASSICSETUP_SETUP_RECOMMENDED) ==
+           CLASSICSETUP_STATE_KEYBOARD);
+    assert(next(CLASSICSETUP_STATE_WINDOWS_SOURCE, CLASSICSETUP_EVENT_BACK,
+                CLASSICSETUP_SETUP_RECOMMENDED) ==
+           CLASSICSETUP_STATE_RECOMMENDED_DISK);
+    assert(next(CLASSICSETUP_STATE_INSTALL_SUMMARY, CLASSICSETUP_EVENT_BACK,
+                CLASSICSETUP_SETUP_RECOMMENDED) ==
+           CLASSICSETUP_STATE_WINDOWS_SOURCE);
+    assert(next(CLASSICSETUP_STATE_INSTALL_MODE, CLASSICSETUP_EVENT_BACK,
+                CLASSICSETUP_SETUP_ADVANCED) ==
+           CLASSICSETUP_STATE_KEYBOARD);
+    assert(next(CLASSICSETUP_STATE_DISK, CLASSICSETUP_EVENT_BACK,
+                CLASSICSETUP_SETUP_ADVANCED) ==
+           CLASSICSETUP_STATE_INSTALL_MODE);
+    assert(next(CLASSICSETUP_STATE_FORMAT, CLASSICSETUP_EVENT_CANCEL,
+                CLASSICSETUP_SETUP_ADVANCED) ==
+           CLASSICSETUP_STATE_PARTITION);
+    assert(next(CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION,
+                CLASSICSETUP_EVENT_CANCEL,
+                CLASSICSETUP_SETUP_ADVANCED) ==
+           CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION);
+}
+
+static void test_quit_request_policy(void)
+{
+    enum classicsetup_state states[] = {
+        CLASSICSETUP_STATE_WELCOME,
+        CLASSICSETUP_STATE_SETUP_MODE,
+        CLASSICSETUP_STATE_KEYBOARD,
+        CLASSICSETUP_STATE_RECOMMENDED_DISK,
+        CLASSICSETUP_STATE_WINDOWS_SOURCE,
+        CLASSICSETUP_STATE_INSTALL_SUMMARY,
+        CLASSICSETUP_STATE_RECOMMENDED_RESULT,
+        CLASSICSETUP_STATE_INSTALL_MODE,
+        CLASSICSETUP_STATE_DISK,
+        CLASSICSETUP_STATE_PARTITION,
+        CLASSICSETUP_STATE_FORMAT,
+        CLASSICSETUP_STATE_APPLY_PREVIEW,
+        CLASSICSETUP_STATE_APPLY_CONFIRMATION,
+        CLASSICSETUP_STATE_APPLY_RESULT,
+        CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW,
+        CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION,
+        CLASSICSETUP_STATE_FORMAT_APPLY_RESULT,
+        CLASSICSETUP_STATE_AFTER_FORMAT,
+        CLASSICSETUP_STATE_GUI_TRANSITION
     };
     size_t index;
 
     for (index = 0; index < sizeof(states) / sizeof(states[0]); ++index) {
-        assert(classicsetup_next_state(
-                   states[index],
-                   CLASSICSETUP_EVENT_QUIT_REQUEST) == states[index]);
+        assert(next(states[index], CLASSICSETUP_EVENT_QUIT_REQUEST,
+                    CLASSICSETUP_SETUP_RECOMMENDED) == states[index]);
         assert(classicsetup_resolve_quit_request(states[index], false) ==
                states[index]);
         assert(classicsetup_resolve_quit_request(states[index], true) ==
@@ -187,19 +139,12 @@ static void test_quit_request_policy(void)
 
 int main(void)
 {
-    test_continue_flow();
-    test_cancel_policy();
-    test_back_policy();
+    test_recommended_flow_skips_advanced_screens();
+    test_advanced_flow_is_preserved();
+    test_back_and_cancel_policy();
     test_quit_request_policy();
-
-    assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_EXIT,
-               CLASSICSETUP_EVENT_CONTINUE) == CLASSICSETUP_STATE_EXIT);
     assert(classicsetup_next_state(
                (enum classicsetup_state)999,
                CLASSICSETUP_EVENT_CONTINUE) == CLASSICSETUP_STATE_EXIT);
-    assert(classicsetup_resolve_quit_request(
-               (enum classicsetup_state)999,
-               false) == CLASSICSETUP_STATE_EXIT);
     return 0;
 }

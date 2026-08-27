@@ -2,9 +2,10 @@
 
 Linux 기반 Windows 설치 프로그램을 개발하기 위한 C 프로젝트입니다.
 
-현재 M8 단계로, UEFI/GPT와 Legacy BIOS/MBR 설치 계획을 구분합니다.
-제한된 테스트 VM의 UEFI/GPT 경로에서 partition apply 뒤 FAT32/NTFS
-filesystem apply를 별도 확인 단계로 수행합니다. BIOS/MBR 실제 적용은 차단됩니다.
+현재 M9 단계로, Recommended와 Advanced 설치 흐름을 구분합니다.
+Recommended는 강한 identity로 확인된 빈 디스크와 UEFI/GPT만 자동 계획하며,
+Advanced는 M8의 partition/format 선택과 Preview 흐름을 그대로 제공합니다.
+BIOS/MBR 실제 적용과 Windows image 처리는 아직 차단되어 있습니다.
 
 ## Build
 
@@ -20,13 +21,20 @@ ctest --test-dir build --output-on-failure
 ./build/classicsetup
 ```
 
-주요 화면 흐름은 다음과 같습니다.
+Recommended 흐름은 다음과 같습니다.
 
 ```text
-Welcome -> Keyboard -> Installation Mode -> Disk -> Partition -> Format
-        -> Partition Apply Preview -> Partition Apply Confirmation
-        -> Partition Apply Result -> Format Apply Preview
-        -> Format Apply Confirmation -> Format Result
+Welcome -> Setup Mode -> Keyboard -> Recommended Disk -> Windows Source
+        -> Install Summary -> Partition/Format orchestration -> Result
+        -> GUI Transition placeholder
+```
+
+Advanced 흐름은 다음과 같습니다.
+
+```text
+Welcome -> Setup Mode -> Keyboard -> Installation Mode -> Disk
+        -> Partition -> Format -> Partition Apply -> Format Apply
+        -> GUI Transition placeholder
 ```
 
 Ubuntu 테스트 VM의 실제 filesystem apply에는 `dosfstools`, `ntfs-3g`,

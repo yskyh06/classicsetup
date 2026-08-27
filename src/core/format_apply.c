@@ -4,6 +4,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -441,6 +442,49 @@ int classicsetup_filesystem_type_matches(
     return 0;
 }
 
+enum classicsetup_filesystem_probe_result
+classicsetup_classify_blkid_type_result(
+    const struct classicsetup_process_result *result)
+{
+    const char *terminator;
+    size_t length;
+    size_t index;
+
+    if (result == NULL || !result->exited || result->signaled) {
+        return CLASSICSETUP_FILESYSTEM_VERIFICATION_ERROR;
+    }
+    terminator = memchr(
+        result->output,
+        '\0',
+        sizeof(result->output));
+    if (terminator == NULL) {
+        return CLASSICSETUP_FILESYSTEM_VERIFICATION_ERROR;
+    }
+    length = (size_t)(terminator - result->output);
+    while (length > 0 &&
+           (result->output[length - 1] == '\n' ||
+            result->output[length - 1] == '\r')) {
+        --length;
+    }
+    if (length == 0) {
+        return result->exit_status == 0 || result->exit_status == 2
+                   ? CLASSICSETUP_NO_FILESYSTEM
+                   : CLASSICSETUP_FILESYSTEM_VERIFICATION_ERROR;
+    }
+    if (result->exit_status != 0) {
+        return CLASSICSETUP_FILESYSTEM_VERIFICATION_ERROR;
+    }
+    for (index = 0; index < length; ++index) {
+        unsigned char character = (unsigned char)result->output[index];
+
+        if (!isalnum(character) && character != '_' && character != '-' &&
+            character != '+' && character != '.') {
+            return CLASSICSETUP_FILESYSTEM_VERIFICATION_ERROR;
+        }
+    }
+    return CLASSICSETUP_FILESYSTEM_PRESENT;
+}
+
 enum classicsetup_format_mount_status
 classicsetup_check_device_mounted_from(
     unsigned int device_major,
@@ -696,10 +740,19 @@ static int verify_real_filesystem(
     void *context)
 {
     struct classicsetup_format_tools tools;
+    enum classicsetup_filesystem_probe_result probe_result;
     char *arguments[CLASSICSETUP_FORMAT_ARGUMENT_CAPACITY];
     const char *executable;
+    int descriptor;
 
     (void)context;
+    descriptor = open(partition->device_path, O_RDONLY | O_CLOEXEC);
+    if (descriptor < 0) {
+        return -1;
+    }
+    if (close(descriptor) != 0) {
+        return -1;
+    }
     classicsetup_resolve_format_tools(&tools);
     if (classicsetup_build_blkid_arguments(
             partition,
@@ -711,10 +764,11 @@ static int verify_real_filesystem(
         !result->exited) {
         return -1;
     }
+    probe_result = classicsetup_classify_blkid_type_result(result);
     if (partition->filesystem == CLASSICSETUP_FS_NONE) {
-        return result->exit_status == 2 && result->output[0] == '\0';
+        return probe_result == CLASSICSETUP_NO_FILESYSTEM;
     }
-    if (result->exit_status != 0) {
+    if (probe_result != CLASSICSETUP_FILESYSTEM_PRESENT) {
         return -1;
     }
     return classicsetup_filesystem_type_matches(

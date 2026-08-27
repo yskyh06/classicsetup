@@ -309,6 +309,49 @@ static void test_formatter_and_blkid_arguments(void)
         "vfat\n"));
 }
 
+static void test_blkid_type_result_classification(void)
+{
+    struct classicsetup_process_result result = {
+        .exited = 1,
+        .exit_status = 2
+    };
+
+    assert(classicsetup_classify_blkid_type_result(&result) ==
+           CLASSICSETUP_NO_FILESYSTEM);
+
+    result.exit_status = 0;
+    assert(classicsetup_classify_blkid_type_result(&result) ==
+           CLASSICSETUP_NO_FILESYSTEM);
+
+    strcpy(result.output, "ntfs\n");
+    assert(classicsetup_classify_blkid_type_result(&result) ==
+           CLASSICSETUP_FILESYSTEM_PRESENT);
+
+    strcpy(result.output, "ntfs extra\n");
+    assert(classicsetup_classify_blkid_type_result(&result) ==
+           CLASSICSETUP_FILESYSTEM_VERIFICATION_ERROR);
+
+    result.output[0] = '\0';
+    result.exit_status = 4;
+    assert(classicsetup_classify_blkid_type_result(&result) ==
+           CLASSICSETUP_FILESYSTEM_VERIFICATION_ERROR);
+
+    result.exit_status = 2;
+    strcpy(result.output, "blkid: permission denied\n");
+    assert(classicsetup_classify_blkid_type_result(&result) ==
+           CLASSICSETUP_FILESYSTEM_VERIFICATION_ERROR);
+
+    result.output[0] = '\0';
+    result.exit_status = 8;
+    assert(classicsetup_classify_blkid_type_result(&result) ==
+           CLASSICSETUP_FILESYSTEM_VERIFICATION_ERROR);
+
+    result.exit_status = 0;
+    result.exited = 0;
+    assert(classicsetup_classify_blkid_type_result(&result) ==
+           CLASSICSETUP_FILESYSTEM_VERIFICATION_ERROR);
+}
+
 static struct classicsetup_format_safety_inputs safe_inputs(void)
 {
     struct classicsetup_format_safety_inputs inputs = {
@@ -426,6 +469,8 @@ struct mock_context {
     int fail_formatter_at;
     int fail_verifier_at;
     int block_safety_at;
+    int msr_probe_exit_status;
+    const char *msr_probe_output;
 };
 
 static int mock_collect_safety(
@@ -467,12 +512,20 @@ static int mock_verify_filesystem(
     void *opaque)
 {
     struct mock_context *context = opaque;
+    enum classicsetup_filesystem_probe_result probe_result;
     int call = context->verifier_calls++;
 
     memset(result, 0, sizeof(*result));
     result->exited = 1;
     if (partition->filesystem == CLASSICSETUP_FS_NONE) {
-        result->exit_status = 2;
+        result->exit_status = context->msr_probe_exit_status;
+        if (context->msr_probe_output != NULL) {
+            snprintf(
+                result->output,
+                sizeof(result->output),
+                "%s",
+                context->msr_probe_output);
+        }
     } else {
         result->exit_status = 0;
         snprintf(
@@ -483,7 +536,17 @@ static int mock_verify_filesystem(
                 ? "vfat"
                 : "ntfs");
     }
-    return call == context->fail_verifier_at ? 0 : 1;
+    if (call == context->fail_verifier_at) {
+        return 0;
+    }
+    probe_result = classicsetup_classify_blkid_type_result(result);
+    if (partition->filesystem == CLASSICSETUP_FS_NONE) {
+        return probe_result == CLASSICSETUP_NO_FILESYSTEM;
+    }
+    return probe_result == CLASSICSETUP_FILESYSTEM_PRESENT &&
+           classicsetup_filesystem_type_matches(
+               partition->filesystem,
+               result->output);
 }
 
 static struct classicsetup_format_executor_ops make_mock_ops(
@@ -518,7 +581,8 @@ static struct mock_context make_mock_context(void)
         },
         .fail_formatter_at = -1,
         .fail_verifier_at = -1,
-        .block_safety_at = -1
+        .block_safety_at = -1,
+        .msr_probe_exit_status = 2
     };
 
     return context;
@@ -540,6 +604,31 @@ static void test_mock_executor_success_and_failures(void)
     assert(result.completed_count == 3);
     assert(result.failed_role == CLASSICSETUP_PARTITION_ROLE_NONE);
     assert(context.safety_calls == 8);
+    assert(context.formatter_calls == 3);
+    assert(context.verifier_calls == 4);
+
+    context = make_mock_context();
+    context.msr_probe_exit_status = 0;
+    ops = make_mock_ops(&context);
+    assert(classicsetup_execute_format_apply_plan_with_ops(
+               &plan,
+               &ops,
+               &result) == 0);
+    assert(result.code == CLASSICSETUP_FORMAT_RESULT_SUCCESS);
+    assert(context.formatter_calls == 3);
+    assert(context.verifier_calls == 4);
+
+    context = make_mock_context();
+    context.msr_probe_exit_status = 0;
+    context.msr_probe_output = "ntfs\n";
+    ops = make_mock_ops(&context);
+    assert(classicsetup_execute_format_apply_plan_with_ops(
+               &plan,
+               &ops,
+               &result) == 0);
+    assert(result.code == CLASSICSETUP_FORMAT_RESULT_VERIFY_FAILED);
+    assert(result.failed_role == CLASSICSETUP_PARTITION_ROLE_MSR);
+    assert(result.completed_count == 3);
     assert(context.formatter_calls == 3);
     assert(context.verifier_calls == 4);
 
@@ -654,6 +743,7 @@ int main(void)
     test_gpt_format_plan_and_range_matching();
     test_mmc_path_and_mismatch_rejection();
     test_formatter_and_blkid_arguments();
+    test_blkid_type_result_classification();
     test_format_safety_matrix();
     test_mountinfo_check();
     test_mock_executor_success_and_failures();

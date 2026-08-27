@@ -24,11 +24,21 @@ static void test_mock_disks(void)
     assert(strcmp(disks[0].device_path, "/dev/nvme0n1") == 0);
     assert(strcmp(disks[0].model, "Mock NVMe Disk") == 0);
     assert(disks[0].size_bytes == 1024000000ULL);
+    assert(disks[0].has_serial);
+    assert(strcmp(disks[0].serial, "NVME-MOCK-SERIAL") == 0);
+    assert(disks[0].has_logical_sector_size);
+    assert(disks[0].logical_sector_size == 512U);
+    assert(disks[0].has_removable);
+    assert(!disks[0].removable);
+    assert(classicsetup_disk_has_recommended_identity(&disks[0]));
 
     assert(strcmp(disks[1].name, "sda") == 0);
     assert(strcmp(disks[1].device_path, "/dev/sda") == 0);
     assert(strcmp(disks[1].model, "Mock Virtual Disk") == 0);
     assert(disks[1].size_bytes == 64000000000ULL);
+    assert(disks[1].has_serial);
+    assert(strcmp(disks[1].serial, "SDA-MOCK-SERIAL") == 0);
+    assert(classicsetup_disk_has_recommended_identity(&disks[1]));
 }
 
 static void test_no_disks(void)

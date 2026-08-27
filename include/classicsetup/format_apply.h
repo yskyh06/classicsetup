@@ -89,6 +89,12 @@ enum classicsetup_format_result_code {
     CLASSICSETUP_FORMAT_RESULT_SUCCESS
 };
 
+enum classicsetup_filesystem_probe_result {
+    CLASSICSETUP_FILESYSTEM_PRESENT,
+    CLASSICSETUP_NO_FILESYSTEM,
+    CLASSICSETUP_FILESYSTEM_VERIFICATION_ERROR
+};
+
 struct classicsetup_format_result {
     enum classicsetup_format_result_code code;
     enum classicsetup_format_safety_code safety_code;
@@ -153,6 +159,10 @@ int classicsetup_build_blkid_arguments(
 int classicsetup_filesystem_type_matches(
     enum classicsetup_filesystem_type expected,
     const char *detected);
+
+enum classicsetup_filesystem_probe_result
+classicsetup_classify_blkid_type_result(
+    const struct classicsetup_process_result *result);
 
 enum classicsetup_format_mount_status
 classicsetup_check_device_mounted_from(

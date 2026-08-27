@@ -4,20 +4,70 @@ enum classicsetup_state classicsetup_next_state(
     enum classicsetup_state state,
     enum classicsetup_event event)
 {
+    return classicsetup_next_state_for_setup_mode(
+        state,
+        event,
+        CLASSICSETUP_SETUP_RECOMMENDED);
+}
+
+enum classicsetup_state classicsetup_next_state_for_setup_mode(
+    enum classicsetup_state state,
+    enum classicsetup_event event,
+    enum classicsetup_setup_mode setup_mode)
+{
     switch (state) {
     case CLASSICSETUP_STATE_WELCOME:
         if (event == CLASSICSETUP_EVENT_CONTINUE) {
-            return CLASSICSETUP_STATE_KEYBOARD;
+            return CLASSICSETUP_STATE_SETUP_MODE;
         }
         return CLASSICSETUP_STATE_WELCOME;
+    case CLASSICSETUP_STATE_SETUP_MODE:
+        if (event == CLASSICSETUP_EVENT_CONTINUE) {
+            return CLASSICSETUP_STATE_KEYBOARD;
+        }
+        return CLASSICSETUP_STATE_SETUP_MODE;
     case CLASSICSETUP_STATE_KEYBOARD:
         if (event == CLASSICSETUP_EVENT_CONTINUE) {
-            return CLASSICSETUP_STATE_INSTALL_MODE;
+            return setup_mode == CLASSICSETUP_SETUP_ADVANCED
+                       ? CLASSICSETUP_STATE_INSTALL_MODE
+                       : CLASSICSETUP_STATE_RECOMMENDED_DISK;
         }
         if (event == CLASSICSETUP_EVENT_BACK) {
-            return CLASSICSETUP_STATE_WELCOME;
+            return CLASSICSETUP_STATE_SETUP_MODE;
         }
         return CLASSICSETUP_STATE_KEYBOARD;
+    case CLASSICSETUP_STATE_RECOMMENDED_DISK:
+        if (event == CLASSICSETUP_EVENT_CONTINUE) {
+            return CLASSICSETUP_STATE_WINDOWS_SOURCE;
+        }
+        if (event == CLASSICSETUP_EVENT_BACK) {
+            return CLASSICSETUP_STATE_KEYBOARD;
+        }
+        return CLASSICSETUP_STATE_RECOMMENDED_DISK;
+    case CLASSICSETUP_STATE_WINDOWS_SOURCE:
+        if (event == CLASSICSETUP_EVENT_CONTINUE) {
+            return CLASSICSETUP_STATE_INSTALL_SUMMARY;
+        }
+        if (event == CLASSICSETUP_EVENT_BACK) {
+            return CLASSICSETUP_STATE_RECOMMENDED_DISK;
+        }
+        return CLASSICSETUP_STATE_WINDOWS_SOURCE;
+    case CLASSICSETUP_STATE_INSTALL_SUMMARY:
+        if (event == CLASSICSETUP_EVENT_CONTINUE) {
+            return CLASSICSETUP_STATE_RECOMMENDED_RESULT;
+        }
+        if (event == CLASSICSETUP_EVENT_BACK) {
+            return CLASSICSETUP_STATE_WINDOWS_SOURCE;
+        }
+        return CLASSICSETUP_STATE_INSTALL_SUMMARY;
+    case CLASSICSETUP_STATE_RECOMMENDED_RESULT:
+        if (event == CLASSICSETUP_EVENT_CONTINUE) {
+            return CLASSICSETUP_STATE_GUI_TRANSITION;
+        }
+        if (event == CLASSICSETUP_EVENT_BACK) {
+            return CLASSICSETUP_STATE_INSTALL_SUMMARY;
+        }
+        return CLASSICSETUP_STATE_RECOMMENDED_RESULT;
     case CLASSICSETUP_STATE_INSTALL_MODE:
         if (event == CLASSICSETUP_EVENT_CONTINUE) {
             return CLASSICSETUP_STATE_DISK;
@@ -100,12 +150,22 @@ enum classicsetup_state classicsetup_next_state(
         return CLASSICSETUP_STATE_FORMAT_APPLY_RESULT;
     case CLASSICSETUP_STATE_AFTER_FORMAT:
         if (event == CLASSICSETUP_EVENT_CONTINUE) {
-            return CLASSICSETUP_STATE_EXIT;
+            return CLASSICSETUP_STATE_GUI_TRANSITION;
         }
         if (event == CLASSICSETUP_EVENT_BACK) {
             return CLASSICSETUP_STATE_FORMAT_APPLY_RESULT;
         }
         return CLASSICSETUP_STATE_AFTER_FORMAT;
+    case CLASSICSETUP_STATE_GUI_TRANSITION:
+        if (event == CLASSICSETUP_EVENT_CONTINUE) {
+            return CLASSICSETUP_STATE_EXIT;
+        }
+        if (event == CLASSICSETUP_EVENT_BACK) {
+            return setup_mode == CLASSICSETUP_SETUP_ADVANCED
+                       ? CLASSICSETUP_STATE_AFTER_FORMAT
+                       : CLASSICSETUP_STATE_RECOMMENDED_RESULT;
+        }
+        return CLASSICSETUP_STATE_GUI_TRANSITION;
     case CLASSICSETUP_STATE_EXIT:
         return CLASSICSETUP_STATE_EXIT;
     }
@@ -119,7 +179,12 @@ enum classicsetup_state classicsetup_resolve_quit_request(
 {
     switch (state) {
     case CLASSICSETUP_STATE_WELCOME:
+    case CLASSICSETUP_STATE_SETUP_MODE:
     case CLASSICSETUP_STATE_KEYBOARD:
+    case CLASSICSETUP_STATE_RECOMMENDED_DISK:
+    case CLASSICSETUP_STATE_WINDOWS_SOURCE:
+    case CLASSICSETUP_STATE_INSTALL_SUMMARY:
+    case CLASSICSETUP_STATE_RECOMMENDED_RESULT:
     case CLASSICSETUP_STATE_INSTALL_MODE:
     case CLASSICSETUP_STATE_DISK:
     case CLASSICSETUP_STATE_PARTITION:
@@ -131,6 +196,7 @@ enum classicsetup_state classicsetup_resolve_quit_request(
     case CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION:
     case CLASSICSETUP_STATE_FORMAT_APPLY_RESULT:
     case CLASSICSETUP_STATE_AFTER_FORMAT:
+    case CLASSICSETUP_STATE_GUI_TRANSITION:
         return confirmed ? CLASSICSETUP_STATE_EXIT : state;
     case CLASSICSETUP_STATE_EXIT:
         return CLASSICSETUP_STATE_EXIT;

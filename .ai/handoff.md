@@ -2,102 +2,94 @@
 
 ## Current milestone
 
-- M8 완료
-- M7/M7.5 partition apply 뒤 filesystem apply를 별도 Preview/Confirmation/Result 단계로 추가
-- 실제 destructive format은 UEFI/GPT + 허용된 VMware/VirtualBox 테스트 VM에서만 가능하며 BIOS/MBR와 WSL은 차단
+- M9 완료
+- Recommended/Advanced UX 분리, 보수적 disk classification, 자동 GPT/Quick 계획과 단일 Install 확인 오케스트레이션 구현
+- Windows source와 TUI->GUI transition은 state/interface placeholder만 추가; download/image apply/GTK는 미구현
 
 ## Changed files
 
+- New core/API: `include/classicsetup/setup_mode.h`, `include/classicsetup/recommended.h`, `src/core/setup_mode.c`, `src/core/recommended.c`
+- New TUI: `include/classicsetup/setup_mode_selection.h`, `include/classicsetup/recommended_tui.h`, `src/tui/setup_mode_selection.c`, `src/tui/recommended.c`
+- App/state/config: `include/classicsetup/config.h`, `include/classicsetup/state.h`, `src/app.c`, `src/config.c`, `src/state.c`
+- Disk identity/revalidation: `include/classicsetup/disk.h`, `src/core/disk.c`, `src/core/apply.c`
 - Build/docs: `CMakeLists.txt`, `README.md`, `.ai/handoff.md`
-- New API: `include/classicsetup/format_apply.h`, `include/classicsetup/format_apply_tui.h`
-- New implementation: `src/core/format_apply.c`, `src/tui/format_apply.c`
-- App/config/state: `include/classicsetup/config.h`, `include/classicsetup/state.h`, `src/app.c`, `src/config.c`, `src/state.c`
-- Process wrapper: `include/classicsetup/process.h`, `src/core/process.c`
-- Existing TUI text: `include/classicsetup/after_format.h`, `src/tui/after_format.c`, `src/tui/apply.c`
-- Tests: `tests/format_apply_test.c`, `tests/partition_plan_test.c`, `tests/state_test.c`
+- Tests/fixtures: `tests/recommended_test.c`, `tests/state_test.c`, `tests/disk_test.c`, `tests/apply_test.c`, `tests/partition_plan_test.c`, `tests/fixtures/sys_block/{sda,nvme0n1}` identity files
 
 ## Implementation result
 
-### Format policy and data
+### Recommended vs Advanced
 
-- Immutable `classicsetup_format_apply_plan`은 검증된 M7 `partition_apply_plan`, formatter 대상, exact sysfs device path/range를 보존한다.
-- GPT formatter 순서: EFI FAT32 Quick -> Windows NTFS Quick/Full -> Recovery NTFS Quick. MSR에는 formatter를 호출하지 않고 filesystem이 없음을 검증한다.
-- MBR plan은 System Reserved NTFS Quick -> Windows NTFS Quick/Full -> Recovery NTFS Quick으로 생성/preview 가능하지만 executor 진입 전에 `MBR_NOT_ENABLED`로 차단한다.
-- 고정 label: EFI/System Reserved=`SYSTEM`, Windows=`Windows`, Recovery=`Recovery`.
-- `classicsetup_format_result`는 overall code, failed role, safety code, child/verification status와 output, 완료 partition 수를 유지한다.
+- `classicsetup_setup_mode`: `RECOMMENDED`(기본), `ADVANCED`.
+- Welcome 다음 Setup Mode 화면에서 UP/DOWN, ENTER, Q로 선택한다.
+- Recommended: Welcome -> Setup Mode -> Keyboard -> Recommended Disk -> Windows Source placeholder -> Install Summary -> Recommended Result -> GUI Transition placeholder.
+- Recommended는 Installation Mode, Partition, Format, partition/format Preview를 노출하지 않는다.
+- Advanced: Setup Mode/GUI boundary만 추가되고 M8의 Installation Mode -> Disk -> Partition -> Format -> 두 apply Preview/Confirmation/Result 경로와 C/D/U/B/Q/A 동작은 유지한다.
+- setup mode 변경 시 selected disk, partition/format/apply/recommended snapshot을 초기화한다.
+
+### Disk classification policy and identity
+
+- `classicsetup_disk_class`: EMPTY, HAS_UNALLOCATED_SPACE, HAS_EXISTING_PARTITIONS, SYSTEM, INSTALL_MEDIA, REMOVABLE, UNKNOWN.
+- Recommended selectable policy는 오직 `EMPTY`; 나머지는 화면에 이유를 표시하고 ENTER를 차단한다.
+- system mount target은 SYSTEM, mounted removable target은 INSTALL_MEDIA, 독립 removable은 REMOVABLE로 분류한다.
+- partition/sysfs/system mapping 실패 또는 identity 부족은 UNKNOWN; fail-open하지 않는다.
+- Recommended strong identity는 name/path/model/size, serial 또는 WWN, 512-byte logical sector size, known removable flag를 요구한다.
+- sysfs scanner가 `device/serial`, `device/wwid` 또는 `wwid`, `queue/logical_block_size`, `removable`, optional `device/transport`를 읽는다.
+- M7/M8 disk revalidation은 기존 name/path/model/size에 선택 시 존재했던 serial, WWN, sector size, removable, transport를 추가 비교한다. Advanced의 기존 fallback은 유지한다.
 
 ### Functions and logic
 
-| Function | File | Role / flow |
+| Function | File | Role |
 |---|---|---|
-| `classicsetup_build_format_apply_plan(...)` | `src/core/format_apply.c` | immutable M7 plan과 role format policy를 받고, scan된 partition을 range로 exact match한 temporary plan을 검증 후 commit한다. GPT MSR은 별도 no-filesystem target으로 보존한다. |
-| `classicsetup_match_partition_device(...)` | `src/core/format_apply.c` | start sector + sector count가 유일하게 일치하는 sysfs scan 결과의 실제 `/dev` path를 반환한다. `sdX`, NVMe, MMC 이름을 조합하지 않는다. |
-| `classicsetup_validate_format_apply_plan(...)` | `src/core/format_apply.c` | embedded apply plan, role/order, filesystem/mode/label, range/path uniqueness, GPT MSR 또는 MBR no-MSR invariant를 검증한다. |
-| `classicsetup_resolve_format_tools(...)` | `src/core/format_apply.c` | 허용된 absolute path에서 `mkfs.fat`/`mkfs.vfat`, `mkfs.ntfs`, `blkid` executable을 찾는다. 누락 시 fail-closed다. |
-| `classicsetup_build_format_arguments(...)` | `src/core/format_apply.c` | FAT32는 `-F 32 -n SYSTEM`, NTFS Quick은 `-f -L`, Full은 quick flag 없이 `-L` argv를 만든다. shell text를 만들지 않는다. |
-| `classicsetup_build_blkid_arguments(...)` | `src/core/format_apply.c` | `blkid -p -o value -s TYPE <exact-device>` argv를 만든다. |
-| `classicsetup_check_device_mounted_from(...)` | `src/core/format_apply.c` | `/proc/self/mountinfo`의 major:minor를 검사하고 mounted/not-mounted/unknown을 반환한다. parse/read 실패는 unknown이다. |
-| `classicsetup_evaluate_format_safety(...)` | `src/core/format_apply.c` | WSL, VM allowlist, unlock, disk identity, system disk, 512-byte sector, plan/layout/device, mount, tool 조건을 순서대로 fail-closed 평가한다. MBR는 process 이전에 차단한다. |
-| `collect_real_safety(...)` | `src/core/format_apply.c` | 각 target 직전에 environment/disk/sysfs/mount/tool 상태를 다시 수집한다. executor가 partition마다 두 번 호출한다. |
-| `classicsetup_execute_format_apply_plan_with_ops(...)` | `src/core/format_apply.c` | 테스트 가능한 executor. target마다 double safety -> formatter -> verifier 순서이며 실패 즉시 이후 target을 중단한다. MSR은 double safety -> no-filesystem verification만 수행한다. |
-| `classicsetup_execute_format_apply_plan(...)` | `src/core/format_apply.c` | 실제 callback을 연결한다. 기존 fork/execv process wrapper를 사용하며 shell/system/popen은 사용하지 않는다. |
-| `classicsetup_run_process(...)` | `src/core/process.c` | stdin이 필요 없는 formatter/blkid용 wrapper이며 기존 pipe/fork/execv/waitpid 구현에 빈 입력을 전달한다. |
-| `classicsetup_show_format_apply_preview(...)` | `src/tui/format_apply.c` | disk/scheme, exact path, FAT32/NTFS mode, MSR skip과 partial-retry 경고를 표시한다. ENTER/B/Q만 처리한다. |
-| `classicsetup_show_format_apply_confirmation(...)` | `src/tui/format_apply.c` | destructive 경고 후 A/a만 APPLY를 반환한다. ENTER는 실행하지 않고 B/Q만 추가 처리한다. |
-| `classicsetup_show_format_apply_result(...)` | `src/tui/format_apply.c` | success verification 또는 blocked/failed role/부분 완료 경고를 표시한다. 실패 시 ENTER 진행을 막는다. |
+| `classicsetup_default_setup_mode()` | `src/core/setup_mode.c` | Recommended 기본값 반환 |
+| `classicsetup_detect_firmware_from()` | `src/core/recommended.c` | sysfs firmware root/efi directory로 UEFI, BIOS candidate, UNKNOWN 구분 |
+| `classicsetup_classify_disk()` | `src/core/recommended.c` | identity, partition scan, unallocated 여부, system mount 상태를 disk class로 변환 |
+| `classicsetup_assess_disk()` | `src/core/recommended.c` | partition scan + system-disk 검사 + class/selectable 결과 생성 |
+| `classicsetup_disk_has_recommended_identity()` | `src/core/disk.c` | Recommended 자동 변경에 필요한 strong identity 확인 |
+| `classicsetup_build_recommended_plan()` | `src/core/recommended.c` | UEFI + EMPTY만 temporary plan에서 EFI/MSR/Windows/Recovery, Windows target, role formats, immutable GPT apply plan 생성 후 commit |
+| `populate_format_policy()` | `src/core/recommended.c` | role별 기존 M8 policy를 Quick mode로 생성; Windows NTFS Quick 자동 선택 |
+| `classicsetup_execute_recommended_plan_with_ops()` | `src/core/recommended.c` | mock 가능한 orchestration: EMPTY 재검증 -> partition apply -> format plan -> format apply; 실패 시 즉시 후속 단계 중단 |
+| `classicsetup_execute_recommended_plan()` | `src/core/recommended.c` | 기존 M7/M8 actual executor와 post-partition sysfs scan을 orchestration callbacks에 연결 |
+| `classicsetup_recommended_result_can_continue()` | `src/core/recommended.c` | format까지 SUCCESS인 경우에만 next stage 진행 허용 |
+| `classicsetup_config_set_setup_mode()` | `src/config.c` | UX mode commit과 stale state 제거 |
+| `classicsetup_config_set_recommended_plan()` | `src/config.c` | 자동 plan을 config partition/selection/format/apply snapshot에 저장 |
+| `classicsetup_next_state_for_setup_mode()` | `src/state.c` | Recommended/Advanced 분기와 Windows Source/GUI boundary 전이 |
+| `classicsetup_show_recommended_disk_selection()` | `src/tui/recommended.c` | model/size/class 중심 disk UI; device path는 보조 표시; non-selectable ENTER 차단 |
+| `classicsetup_show_install_summary()` | `src/tui/recommended.c` | 한 번의 destructive A=Install 확인; ENTER는 apply하지 않음 |
 
-### Process execution and Quick/Full
+### Recommended orchestration and safety
 
-- 기존 `classicsetup_run_process_with_input()`의 pipe/fork/execv/waitpid 및 stdout/stderr capture를 재사용한다.
-- executable과 argv는 검증된 absolute path와 고정 option/label로 구성하며 shell을 통하지 않는다.
-- NTFS Quick은 현재 `mkfs.ntfs` 문서의 `-f`를 사용한다. Full은 `-f/-Q` 없이 호출하는 ClassicSetup 정책이며 Windows Setup의 full format과 동일하다고 보장하지 않는다.
-- FAT32는 `mkfs.fat`/`mkfs.vfat -F 32`; 강제 우회용 formatter option은 사용하지 않는다.
-- formatter exit 0 뒤에도 `blkid` TYPE을 확인한다. MSR은 `blkid`가 type을 식별하지 못한 exit 2를 성공 조건으로 사용한다.
-
-### Safety and control/data flow
-
-- GPT: Partition Apply SUCCESS -> sysfs rescan -> immutable format plan -> Format Preview -> A confirmation -> per-partition double safety -> EFI formatter/verify -> Windows formatter/verify -> Recovery formatter/verify -> MSR no-filesystem verify -> Result.
-- MBR: format plan/preview 가능 -> A -> `CLASSICSETUP_FORMAT_SAFETY_MBR_NOT_ENABLED` -> formatter callback/process 0회.
-- M7 safety를 유지한다: WSL block, VMware/VirtualBox allowlist, explicit unlock, disk identity revalidation, root/system/target mount protection, 512-byte sector, immutable plan, shell 없는 exec.
-- M8 추가 safety: exact child range/path matching, block-device 재확인, partition별 mount 검사, formatter/verifier availability, 실행 직전 두 번째 safety collection.
-- 중간 실패 시 이후 formatter를 실행하지 않는다. 성공한 filesystem은 rollback하지 않으며 result/UI가 partial state를 알린다.
-
-### Key mapping
-
-| Screen | ENTER | B | ESC | Q | A |
-|---|---|---|---|---|---|
-| Partition Apply Result | Continue on success | Preview | - | Quit | - |
-| Format Apply Preview | Continue | Partition Apply Result | - | Quit | - |
-| Format Apply Confirmation | no action | Preview | - | Quit | Apply |
-| Format Result | Continue on success only | Preview | - | Quit | - |
-
-- 기존 Function-key-free `ENTER/B/ESC/Q/A/C/D/U` 정책과 공통 Quit Confirmation을 유지한다.
+- Disk ENTER 시 UEFI/EMPTY/strong identity를 다시 검증하고 기존 UEFI auto layout 및 M8 Quick policy로 immutable apply plan을 준비한다.
+- Summary 전까지 executor 호출은 0회다. A 입력 뒤에만 orchestration을 시작한다.
+- A 이후 target을 다시 scan/classify하여 여전히 exact same EMPTY disk인지 확인한다.
+- partition apply가 SUCCESS일 때만 sysfs ranges를 실제 child paths에 match하여 immutable format apply plan을 만든다.
+- format failure 또는 verification failure 시 GUI transition으로 진행하지 않는다.
+- 기존 WSL block, VM allowlist, explicit unlock, system/mount protection, exact range matching, immutable plans, double safety, shell-free exec, post-write/format verify, MBR block을 모두 재사용한다.
+- Recommended는 UI 확인 횟수만 한 번으로 줄이며 내부 safety check는 생략하지 않는다.
 
 ## Build/test result
 
 - Clean CMake Debug build 성공: GCC 15.2, C17, `-Wall -Wextra -Wpedantic`, 경고 없음.
-- CTest 9/9 통과: 기존 M7.5 suite + `format_apply`.
-- ASan/UBSan Debug build 및 CTest 9/9 통과 (`ASAN_OPTIONS=detect_leaks=0`).
-- 검증 항목: GPT/MBR format plan, NVMe/MMC exact range matching, mismatch transactional rejection, FAT32/NTFS Quick/Full/blkid argv golden, mountinfo, safety matrix, MBR process 0, double safety, process/verify 중간 실패 중단, MSR formatter 0/no-filesystem verification, WSL block.
-- 현재 환경은 WSL2로 확인됨. 실제 `/dev` write, `sfdisk`, `mkfs.*`, destructive VM test는 실행하지 않았다.
-- 현재 환경의 `mkfs.fat`/`mkfs.vfat`와 `mkfs.ntfs`는 미설치, `/usr/sbin/blkid`는 `util-linux`에서 확인. Ubuntu VM 준비 패키지: `dosfstools`, `ntfs-3g`, `util-linux`.
-- Manual VMware: UEFI VM의 Linux boot disk와 별도 빈 GPT test disk를 준비 -> 패키지 설치 -> `CLASSICSETUP_ALLOW_DESTRUCTIVE=YES`를 사용자가 설정 -> UEFI/GPT 자동 layout -> NTFS mode -> partition A apply 성공 -> format preview 확인 -> format A apply -> EFI/Windows/Recovery verified 확인. 대상 device를 매 단계 재확인한다.
+- CTest 10/10 통과: 기존 M8 suite + `recommended_policy`.
+- ASan/UBSan Debug build 및 CTest 10/10 통과 (`ASAN_OPTIONS=detect_leaks=0`).
+- 테스트: default mode, UEFI/BIOS/UNKNOWN detection, identity scanner, disk classes/selectability, EMPTY auto GPT/NTFS Quick, BIOS/existing reject, Recommended state skip, Advanced flow, A 전 invocation 0, execution order, partition failure format 0, format failure continuation block, mode-change reset.
+- TUI smoke: Welcome Q -> common Quit Confirmation Q -> 정상 종료 확인.
+- 현재 환경에서 실제 `/dev` write, `sfdisk`, `mkfs.*`, Windows source 처리, destructive VM test는 수행하지 않았다.
 
 ## Topics for ChatGPT to explain
 
-- `classicsetup_format_apply_plan`: mutable config와 immutable execution input 분리.
-- `classicsetup_match_partition_device()`: 이름 조합 대신 sector range로 NVMe/MMC path를 찾는 이유.
-- `classicsetup_evaluate_format_safety()`/`collect_real_safety()`: M7 safety 재사용, partition mount 보호, double check와 TOCTOU 제한.
-- `classicsetup_build_format_arguments()`: FAT32/NTFS와 Quick/non-quick argv 정책; MSR을 포맷하지 않는 이유.
-- `classicsetup_run_process()`: shell 없이 fork/execv/waitpid로 formatter를 실행하는 흐름.
-- `verify_real_filesystem()`: child exit status와 실제 signature/type verification을 함께 확인하는 이유.
-- `classicsetup_format_result`: partial failure와 rollback 부재를 표현하는 방식.
+- `classicsetup_classify_disk()`의 policy layer와 M7/M8 executor engine 분리.
+- strong disk identity와 `classicsetup_disk_identity_matches()` 재검증이 TOCTOU 위험을 줄이는 방식.
+- UNKNOWN/non-empty/system/removable을 non-selectable로 만드는 fail-closed UX.
+- `classicsetup_build_recommended_plan()`이 Advanced partition/format 엔진을 자동 policy로 재사용하는 구조.
+- Summary의 사용자 확인 1회와 executor 내부 다중 safety 검증의 차이.
+- `classicsetup_execute_recommended_plan_with_ops()`의 orchestration 순서와 실패 단락.
+- Windows Source/GUI Transition state가 향후 TUI와 GTK/core 경계를 만드는 방식.
 
 ## Issues/cautions
 
-- BIOS/MBR partition apply와 filesystem apply는 destructive 실행이 계속 비활성화되어 있다.
-- NTFS Full은 `mkfs.ntfs` non-quick invocation 정책이며 Windows Setup의 surface scan/full format과 동등하지 않을 수 있다.
-- formatter 성공 뒤 후속 target 실패 시 부분 포맷 상태가 남고 자동 rollback은 없다.
-- 실제 VMware UEFI/GPT filesystem apply는 사용자가 별도 test disk에서 검증해야 한다.
-- filesystem UUID/label의 post-check는 필수 TYPE 검증 외에는 아직 하지 않는다.
-- Windows image apply, boot files/BCD, mount 및 Windows 설치는 아직 구현하지 않았다.
+- Recommended actual apply는 strong identity가 있는 EMPTY UEFI/GPT disk만 지원한다.
+- serial/WWN, logical sector, removable 정보를 sysfs에서 확인하지 못하면 Recommended에서 UNKNOWN으로 차단된다.
+- 기존 partition 보존, 전체 erase 선택, HAS_UNALLOCATED_SPACE 자동 사용은 미구현이다.
+- BIOS/MBR actual partition/format apply는 계속 비활성화되어 Advanced 안내만 가능하다.
+- Windows download/ISO/image apply와 GTK GUI는 placeholder이며 실제 구현이 없다.
+- partition apply 성공 후 format 실패 시 부분 변경 rollback은 없고 다음 단계 진행은 차단된다.
