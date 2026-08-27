@@ -12,9 +12,10 @@ enum classicsetup_welcome_result classicsetup_show_welcome(void)
     classicsetup_tui_begin_screen("ClassicSetup Setup");
 
     classicsetup_tui_add_text(3, 3, "Welcome to ClassicSetup.");
-    classicsetup_tui_add_text(
+    classicsetup_tui_draw_wrapped_text(
         5,
         3,
+        classicsetup_tui_canvas_width() - 6,
         "This program prepares a computer for Windows installation.");
     classicsetup_tui_draw_bullet(8, "To continue, press ENTER.");
     classicsetup_tui_draw_bullet(10, "To quit Setup, press Q.");

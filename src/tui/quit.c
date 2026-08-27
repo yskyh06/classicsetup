@@ -9,9 +9,10 @@ enum classicsetup_quit_confirmation_result classicsetup_confirm_quit(void)
 {
     classicsetup_tui_begin_screen("ClassicSetup");
     classicsetup_tui_draw_warning(4, "Setup has not been completed.");
-    classicsetup_tui_add_text(
+    classicsetup_tui_draw_wrapped_text(
         6,
         4,
+        classicsetup_tui_canvas_width() - 8,
         "If you quit now, Windows will not be installed.");
     classicsetup_tui_add_text(8, 4, "Press Q to quit Setup.");
     classicsetup_tui_add_text(9, 4, "Press ESC to continue Setup.");

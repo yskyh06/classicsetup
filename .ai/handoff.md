@@ -2,78 +2,62 @@
 
 ## Current milestone
 
-- M9.1 TUI visual refinement 완료.
-- Advanced/ncurses 화면을 80x25 Windows XP text-mode Setup 밀도와 영역 구성에 맞게 정리.
-- Core behavior, state machine, disk policy, key mapping, destructive safety는 변경하지 않음.
+- M9.1 TUI UX/safety refinement 완료.
+- 공통 흐름은 `Welcome -> License / Risk Agreement -> Setup Mode`로 변경했으며 Recommended와 Advanced 모두 동의 화면을 통과한다.
+- Disk policy, Recommended 제한, M7/M8 destructive safety와 기존 화면 key mapping은 변경하지 않았다.
 
 ## Changed files
 
-- Shared layout: `include/classicsetup/tui.h`, `src/tui/tui.c`.
-- Retouched screens: `src/tui/{welcome,setup_mode_selection,keyboard,install_mode_selection,disk_selection,partition_selection,format_selection,apply,format_apply,after_format,quit,recommended}.c`.
-- Layout test/build: `tests/tui_layout_test.c`, `CMakeLists.txt`.
+- Agreement/state: `include/classicsetup/license_agreement.h`, `include/classicsetup/state.h`, `src/tui/license_agreement.c`, `src/state.c`, `src/app.c`.
+- Shared layout/wrapping: `include/classicsetup/tui.h`, `src/tui/tui.c`.
+- Wrapped TUI text: `src/tui/{welcome,setup_mode_selection,keyboard,install_mode_selection,disk_selection,partition_selection,format_selection,apply,format_apply,after_format,quit,recommended}.c`.
+- Tests/build: `tests/state_test.c`, `tests/tui_layout_test.c`, `tests/recommended_test.c`, `CMakeLists.txt`.
 - Documentation: `.ai/handoff.md`.
 
 ## Implementation result
 
-### Visual issues fixed
+### Agreement state
 
-- 실제 터미널 전체 높이/너비를 사용해 생기던 과도한 빈 공간과 세로 분산을 제거.
-- 내용 없는 대형 frame을 제거하고 선택 목록 frame을 실제 표시 항목 수에 맞춤.
-- 일반 안내, warning, confirmation, result를 중앙 정렬 중심에서 compact left alignment로 변경.
-- Disk metadata를 목록 바로 아래 `Model / Device / Capacity` 블록으로 배치.
-- 모든 화면 footer 간격과 색을 공통 처리.
+- `CLASSICSETUP_STATE_LICENSE_AGREEMENT`와 XP Setup 스타일 risk notice 화면을 추가했다.
+- `A/a`만 동의 및 진행, `B/b`는 Welcome 복귀, `Q/q`는 기존 app-level Quit Confirmation 요청이다. ENTER와 그 외 키는 화면을 유지한다.
+- 안내에는 partition table/filesystem/boot configuration 변경 가능성, 영구 데이터 삭제 위험, 사전 backup, hardware/layout 비보장, target 확인 및 backup 책임, 위험 인지 확인을 포함한다.
+- `CLASSICSETUP_RISK_AGREEMENT_VERSION` 상수를 준비했으며 persistent acceptance는 저장하지 않는다.
 
-### Logical canvas strategy
+### Word wrapping
 
-- `classicsetup_tui_canvas_width()` / `classicsetup_tui_canvas_height()`가 최대 80x25 논리 영역을 반환.
-- 큰 터미널에서는 80x25 canvas를 수평/수직 중앙에 유지하고 내부 요소를 확장하지 않음.
-- 80x25 이하에서는 실제 terminal 크기를 canvas로 사용하며 기존 clipping/fail-safe drawing을 유지.
-- Header는 canvas 첫 줄, underline은 바로 다음 줄, footer는 canvas 마지막 줄에 고정.
+- `classicsetup_tui_wrap_text()`는 word boundary, 명시적 newline, 긴 단어 분할, 출력 buffer 제한을 처리하고 소비 line 수를 반환한다.
+- `classicsetup_tui_draw_wrapped_text()`가 logical canvas 좌표와 clipping을 유지하며 래핑 결과를 출력한다.
+- `classicsetup_tui_draw_warning()`, bullet, metadata와 warning/error/agreement/policy reason/confirmation/descriptive text를 wrapped rendering으로 전환했다.
+- Legacy BIOS Recommended 차단 사유는 content width 안에서 여러 줄로 표시된다.
 
-### Dynamic lists and details
+### Adaptive logical canvas
 
-- `classicsetup_tui_compact_list_height(item_count, maximum_rows)`가 항목 수와 화면별 최대 행을 사용해 목록 높이를 결정.
-- Advanced Disk는 최대 7행, Partition은 최대 8행, Recommended Disk는 최대 4개 항목을 표시하고 선택 위치에 따라 scroll window를 이동.
-- Keyboard, Installation Mode, Setup Mode, Format은 고정된 작은 frame만 사용.
-- Selection은 frame 내부 전체 행을 white/gray 배경과 dark blue text로 표시.
-
-### Footer and shared helpers
-
-- `classicsetup_tui_draw_footer()`는 80-column logical footer bar에 gray background/black text를 적용.
-- `classicsetup_tui_draw_frame()`과 `classicsetup_tui_draw_list_row()`가 logical-to-terminal 좌표 변환과 clipping을 담당.
-- `classicsetup_tui_draw_bullet()`은 Welcome/placeholder action 문구를 classic Setup 형식으로 출력.
-- `classicsetup_tui_draw_metadata()`는 compact label/value detail block을 출력.
-- `classicsetup_tui_draw_warning()`은 yellow 강조를 warning line에만 제한.
-
-### Screens retouched
-
-- Welcome: giant empty frame 제거, intro와 action bullet을 상단에 compact 배치.
-- Setup Mode: modern card 느낌을 줄이고 two-choice Setup list와 짧은 설명으로 변경.
-- Keyboard / Installation Mode / Format: vertical centering 제거, instruction -> compact frame -> footer 리듬 통일.
-- Disk / Partition: dynamic framed list와 바로 이어지는 detail block 적용.
-- Partition create/delete/undo, Quit, Apply/Format confirmation/result: left-aligned warning/confirmation 구조 적용.
-- Recommended GUI transition과 future-state placeholders: 빈 frame 없이 간단한 action text만 표시.
+- terminal `COLS/LINES`를 한 곳에서 profile로 변환한다: Compact는 80x25 미만의 실제 크기, Classic은 80x25, Medium은 100x30, Large는 최대 120x40이다.
+- physical terminal과 logical canvas를 분리하고 큰 terminal에서는 logical canvas를 중앙 정렬한다. Header는 canvas 상단, footer gray bar는 canvas 하단에 고정된다.
+- 기존 item-count 기반 dynamic list height는 유지하며 추가 공간은 frame 확대가 아니라 wrapping 폭과 가독성에 사용한다.
+- ncurses는 terminal row/column만 사용한다. GNOME Terminal font는 변경하지 않으며 향후 boot ISO가 framebuffer/HiDPI에 맞는 Linux console font를 선택하는 영역으로 남긴다.
 
 ## Build/test result
 
-- Clean CMake Debug build 성공: GCC 15.2, C17, `-Wall -Wextra -Wpedantic`, warning 0.
-- CTest 11/11 통과; 새 `tui_compact_layout`에서 empty/exact/capped list height 검증.
-- ASan/UBSan Debug build 및 CTest 11/11 통과 (`ASAN_OPTIONS=detect_leaks=0`).
-- 80x25 smoke: Welcome, Setup Mode, Advanced Keyboard, Installation Mode, Disk, Partition, Quit 확인.
-- 120x40 medium 및 160x60 large smoke: 80x25 canvas가 늘어나지 않고 중앙에 유지되며 title/footer clipping 없음 확인.
-- 실제 destructive disk operation은 실행하지 않음.
+- Clean CMake Debug build 성공: C17, `-Wall -Wextra -Wpedantic`, warning 0.
+- CTest 11/11 통과: Agreement 전이/키, exact-width·multi-line·long-word·newline wrapping, Compact/Classic/Medium/Large 선택, maximum cap, small terminal, Legacy BIOS reason wrapping 포함.
+- ASan/UBSan Debug build와 CTest 11/11 통과 (`ASAN_OPTIONS=detect_leaks=0`).
+- PTY smoke: 80x25, 100x30, 120x40, 160x60에서 Welcome/Agreement/footer 확인. ENTER 비동의, Q common quit, large-terminal 120x40 cap/centering을 확인했다.
+- 실제 destructive disk operation은 실행하지 않았다.
 
 ## Topics for ChatGPT to explain
 
-- Physical terminal coordinates와 80x25 logical canvas 좌표 분리.
-- Item-count 기반 dynamic frame height와 selected-item scrolling.
-- Shared ncurses helper가 화면별 좌표 중복과 visual drift를 줄이는 방식.
-- Full-row selection color pair와 logical footer bar 구성.
-- Small terminal에서 invalid frame을 생략하고 text를 clip하는 fail-safe drawing.
+- Agreement가 별도 app state이고 입력 결과를 기존 event/state 흐름으로 전달하는 구조.
+- Word-boundary wrapping, explicit newline, 긴 단어 fallback과 consumed-line 계산.
+- Physical terminal `COLS/LINES`와 adaptive logical canvas profile의 분리.
+- Logical canvas centering과 safe clipped drawing이 small/large terminal을 함께 처리하는 방식.
+- Font scaling을 ncurses가 아닌 향후 boot environment에서 담당해야 하는 이유.
 
 ## Issues/cautions
 
-- 80x25보다 작은 터미널에서는 중요 text/footer를 우선하고 일부 frame 또는 긴 문구가 생략/절단될 수 있음.
-- ncurses glyph와 gray/white 색감은 terminal palette/font에 따라 다르게 보일 수 있음.
-- Recommended GTK 전환 이후의 실제 GUI visual system은 아직 구현되지 않음.
-- 자동 screenshot regression은 없으며 layout helper는 deterministic unit test, 실제 화면은 PTY smoke로 확인함.
+- Agreement acceptance는 실행 중 전이만 의미하며 disk나 persistent config에 기록하지 않는다.
+- 극단적으로 작은 terminal에서는 안전하게 clipping하지만 모든 agreement 문장을 동시에 표시할 수는 없으며 scrolling은 아직 없다.
+- Unicode display width는 다루지 않고 현재 영문 ASCII 문구 기준으로 wrapping한다.
+- Terminal palette/font에 따라 XP 스타일 색과 glyph가 다르게 보일 수 있다.
+- 현재 환경에는 VMware GUI terminal이 없어 160x60 PTY로 large-terminal 동작을 대신 확인했다.
+- Boot ISO의 console font 선택과 automated screenshot regression은 후속 범위다.

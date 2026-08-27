@@ -50,13 +50,15 @@ classicsetup_show_recommended_disk_selection(
         }
 
         classicsetup_tui_begin_screen("ClassicSetup - Choose a Disk");
-        classicsetup_tui_add_text(
+        classicsetup_tui_draw_wrapped_text(
             3,
             3,
+            classicsetup_tui_canvas_width() - 6,
             "The following list shows the disks available for Windows installation.");
-        classicsetup_tui_add_text(
+        classicsetup_tui_draw_wrapped_text(
             4,
             3,
+            classicsetup_tui_canvas_width() - 6,
             "Use the UP and DOWN ARROW keys to select a disk.");
         if (scan_failed || assessment_count == 0) {
             classicsetup_tui_add_text(
@@ -159,8 +161,16 @@ static enum classicsetup_simple_screen_result show_placeholder(
         int key;
 
         classicsetup_tui_begin_screen(title);
-        classicsetup_tui_add_text(3, 3, line_one);
-        classicsetup_tui_add_text(5, 3, line_two);
+        classicsetup_tui_draw_wrapped_text(
+            3,
+            3,
+            classicsetup_tui_canvas_width() - 6,
+            line_one);
+        classicsetup_tui_draw_wrapped_text(
+            5,
+            3,
+            classicsetup_tui_canvas_width() - 6,
+            line_two);
         classicsetup_tui_draw_bullet(8, "Press ENTER to continue.");
         classicsetup_tui_draw_bullet(10, "Press B to return to the previous step.");
         classicsetup_tui_draw_footer("ENTER=Continue    B=Back    Q=Quit");
@@ -238,7 +248,11 @@ enum classicsetup_install_summary_result classicsetup_show_install_summary(
         int key;
 
         classicsetup_tui_begin_screen("ClassicSetup - Ready to Install");
-        classicsetup_tui_add_text(4, 4, "Windows source: Not selected (placeholder)");
+        classicsetup_tui_draw_wrapped_text(
+            4,
+            4,
+            classicsetup_tui_canvas_width() - 8,
+            "Windows source: Not selected (placeholder)");
         if (plan != NULL) {
             format_size(
                 plan->apply_plan.target_disk.size_bytes,
@@ -253,13 +267,15 @@ enum classicsetup_install_summary_result classicsetup_show_install_summary(
             classicsetup_tui_add_text(7, 6, line);
             classicsetup_tui_add_text(9, 6, "Installation mode: UEFI / GPT");
         }
-        classicsetup_tui_add_text(
+        classicsetup_tui_draw_wrapped_text(
             11,
             6,
+            classicsetup_tui_canvas_width() - 12,
             "ClassicSetup will create the required Windows partitions,");
-        classicsetup_tui_add_text(
+        classicsetup_tui_draw_wrapped_text(
             12,
             6,
+            classicsetup_tui_canvas_width() - 12,
             "format the Windows partition as NTFS Quick, and verify the disk.");
         classicsetup_tui_draw_warning(15, "WARNING: All data on this disk will be erased.");
         classicsetup_tui_draw_footer("A=Install    B=Back    Q=Quit");
@@ -293,24 +309,28 @@ enum classicsetup_simple_screen_result classicsetup_show_recommended_result(
             success ? "ClassicSetup - Storage Preparation Complete"
                     : "ClassicSetup - Installation Result");
         if (success) {
-            classicsetup_tui_add_text(
+            classicsetup_tui_draw_wrapped_text(
                 5,
                 4,
+                classicsetup_tui_canvas_width() - 8,
                 "The GPT layout and filesystems were applied and verified.");
-            classicsetup_tui_add_text(
+            classicsetup_tui_draw_wrapped_text(
                 7,
                 4,
+                classicsetup_tui_canvas_width() - 8,
                 "Windows image application is not implemented yet.");
         } else if (result_code == CLASSICSETUP_RECOMMENDED_BLOCKED) {
-            classicsetup_tui_add_text(
+            classicsetup_tui_draw_wrapped_text(
                 6,
                 4,
+                classicsetup_tui_canvas_width() - 8,
                 "Recommended installation was blocked by a safety check.");
         } else if (result_code ==
                    CLASSICSETUP_RECOMMENDED_PARTITION_FAILED) {
-            classicsetup_tui_add_text(
+            classicsetup_tui_draw_wrapped_text(
                 6,
                 4,
+                classicsetup_tui_canvas_width() - 8,
                 partition_result == NULL ||
                         partition_result->code !=
                             CLASSICSETUP_APPLY_RESULT_BLOCKED
@@ -318,9 +338,10 @@ enum classicsetup_simple_screen_result classicsetup_show_recommended_result(
                     : classicsetup_apply_safety_message(
                           partition_result->safety_code));
         } else if (result_code == CLASSICSETUP_RECOMMENDED_FORMAT_FAILED) {
-            classicsetup_tui_add_text(
+            classicsetup_tui_draw_wrapped_text(
                 6,
                 4,
+                classicsetup_tui_canvas_width() - 8,
                 format_result == NULL ||
                         format_result->code !=
                             CLASSICSETUP_FORMAT_RESULT_BLOCKED
@@ -328,9 +349,10 @@ enum classicsetup_simple_screen_result classicsetup_show_recommended_result(
                     : classicsetup_format_safety_message(
                           format_result->safety_code));
         } else {
-            classicsetup_tui_add_text(
+            classicsetup_tui_draw_wrapped_text(
                 6,
                 4,
+                classicsetup_tui_canvas_width() - 8,
                 "The filesystem apply plan could not be built safely.");
         }
         classicsetup_tui_draw_footer(
@@ -357,13 +379,15 @@ classicsetup_show_next_stage_placeholder(void)
         int key;
 
         classicsetup_tui_begin_screen("ClassicSetup - Next Stage");
-        classicsetup_tui_add_text(
+        classicsetup_tui_draw_wrapped_text(
             4,
             4,
+            classicsetup_tui_canvas_width() - 8,
             "The TUI-to-GUI transition boundary is ready.");
-        classicsetup_tui_add_text(
+        classicsetup_tui_draw_wrapped_text(
             6,
             4,
+            classicsetup_tui_canvas_width() - 8,
             "GTK and Windows image application are not implemented yet.");
         classicsetup_tui_draw_footer("ENTER=Finish    B=Back    Q=Quit");
         refresh();

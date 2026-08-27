@@ -14,6 +14,7 @@
 #include "classicsetup/format_apply_tui.h"
 #include "classicsetup/install_mode_selection.h"
 #include "classicsetup/keyboard.h"
+#include "classicsetup/license_agreement.h"
 #include "classicsetup/partition.h"
 #include "classicsetup/partition_selection.h"
 #include "classicsetup/quit.h"
@@ -33,6 +34,20 @@ static enum classicsetup_event show_welcome(void)
         return CLASSICSETUP_EVENT_CONTINUE;
     }
 
+    return CLASSICSETUP_EVENT_QUIT_REQUEST;
+}
+
+static enum classicsetup_event show_license_agreement(void)
+{
+    enum classicsetup_license_agreement_result result =
+        classicsetup_show_license_agreement();
+
+    if (result == CLASSICSETUP_LICENSE_AGREEMENT_ACCEPT) {
+        return CLASSICSETUP_EVENT_CONTINUE;
+    }
+    if (result == CLASSICSETUP_LICENSE_AGREEMENT_BACK) {
+        return CLASSICSETUP_EVENT_BACK;
+    }
     return CLASSICSETUP_EVENT_QUIT_REQUEST;
 }
 
@@ -581,6 +596,8 @@ int classicsetup_run(void)
 
         if (state == CLASSICSETUP_STATE_WELCOME) {
             event = show_welcome();
+        } else if (state == CLASSICSETUP_STATE_LICENSE_AGREEMENT) {
+            event = show_license_agreement();
         } else if (state == CLASSICSETUP_STATE_SETUP_MODE) {
             event = show_setup_mode(&config);
         } else if (state == CLASSICSETUP_STATE_RECOMMENDED_GUI_TRANSITION) {

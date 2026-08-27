@@ -23,21 +23,25 @@ static void draw_option(int row, const char *text, bool selected)
 static void draw_format_screen(enum classicsetup_format_mode selected)
 {
     classicsetup_tui_begin_screen("ClassicSetup - Format Partition");
-    classicsetup_tui_add_text(
+    classicsetup_tui_draw_wrapped_text(
         3,
         3,
+        classicsetup_tui_canvas_width() - 6,
         "The selected Windows partition needs a format plan.");
-    classicsetup_tui_add_text(
+    classicsetup_tui_draw_wrapped_text(
         5,
         3,
+        classicsetup_tui_canvas_width() - 6,
         "Use the UP and DOWN ARROW keys to select a method,");
-    classicsetup_tui_add_text(
+    classicsetup_tui_draw_wrapped_text(
         6,
         3,
+        classicsetup_tui_canvas_width() - 6,
         "and then press ENTER to continue.");
-    classicsetup_tui_add_text(
+    classicsetup_tui_draw_wrapped_text(
         8,
         3,
+        classicsetup_tui_canvas_width() - 6,
         "Press ESC to select a different partition.");
 
     classicsetup_tui_draw_frame(

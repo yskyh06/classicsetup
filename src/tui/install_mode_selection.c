@@ -34,9 +34,10 @@ static void draw_screen(enum classicsetup_install_mode selected)
         first_row = 5;
     }
     classicsetup_tui_begin_screen("ClassicSetup - Installation Mode");
-    classicsetup_tui_add_text(
+    classicsetup_tui_draw_wrapped_text(
         first_row - 3,
         4,
+        classicsetup_tui_canvas_width() - 8,
         "Select the firmware and partitioning mode.");
     classicsetup_tui_draw_frame(
         first_row - 1,

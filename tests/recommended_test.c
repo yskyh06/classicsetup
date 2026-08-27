@@ -10,6 +10,7 @@
 #include "classicsetup/config.h"
 #include "classicsetup/recommended.h"
 #include "classicsetup/setup_mode.h"
+#include "classicsetup/tui.h"
 
 static struct classicsetup_disk_info make_disk(void)
 {
@@ -148,6 +149,25 @@ static void test_disk_classification_policy(void)
                "Existing Windows installation") == 0);
     assert(!classicsetup_disk_class_is_recommended_selectable(
         CLASSICSETUP_DISK_UNKNOWN));
+}
+
+static void test_legacy_bios_reason_wraps(void)
+{
+    char wrapped[512];
+    char *line;
+
+    assert(classicsetup_tui_wrap_text(
+               classicsetup_recommended_policy_reason(
+                   CLASSICSETUP_DISK_RAW_EMPTY,
+                   CLASSICSETUP_FIRMWARE_BIOS),
+               38,
+               wrapped,
+               sizeof(wrapped)) > 1);
+    line = strtok(wrapped, "\n");
+    while (line != NULL) {
+        assert(strlen(line) <= 38);
+        line = strtok(NULL, "\n");
+    }
 }
 
 static struct classicsetup_recommended_plan make_plan(void)
@@ -413,6 +433,7 @@ int main(void)
 {
     test_default_mode_and_firmware_detection();
     test_disk_classification_policy();
+    test_legacy_bios_reason_wraps();
     test_recommended_auto_plan();
     test_recommended_orchestration();
     test_setup_mode_change_clears_stale_plan();

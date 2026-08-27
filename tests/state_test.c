@@ -15,6 +15,10 @@ static void test_recommended_flow_skips_advanced_screens(void)
 {
     assert(next(CLASSICSETUP_STATE_WELCOME, CLASSICSETUP_EVENT_CONTINUE,
                 CLASSICSETUP_SETUP_RECOMMENDED) ==
+           CLASSICSETUP_STATE_LICENSE_AGREEMENT);
+    assert(next(CLASSICSETUP_STATE_LICENSE_AGREEMENT,
+                CLASSICSETUP_EVENT_CONTINUE,
+                CLASSICSETUP_SETUP_RECOMMENDED) ==
            CLASSICSETUP_STATE_SETUP_MODE);
     assert(next(CLASSICSETUP_STATE_SETUP_MODE, CLASSICSETUP_EVENT_CONTINUE,
                 CLASSICSETUP_SETUP_RECOMMENDED) ==
@@ -64,6 +68,7 @@ static void test_advanced_flow_is_preserved(void)
 {
     enum classicsetup_state states[] = {
         CLASSICSETUP_STATE_WELCOME,
+        CLASSICSETUP_STATE_LICENSE_AGREEMENT,
         CLASSICSETUP_STATE_SETUP_MODE,
         CLASSICSETUP_STATE_KEYBOARD,
         CLASSICSETUP_STATE_INSTALL_MODE,
@@ -90,6 +95,10 @@ static void test_advanced_flow_is_preserved(void)
 
 static void test_back_and_cancel_policy(void)
 {
+    assert(next(CLASSICSETUP_STATE_LICENSE_AGREEMENT,
+                CLASSICSETUP_EVENT_BACK,
+                CLASSICSETUP_SETUP_RECOMMENDED) ==
+           CLASSICSETUP_STATE_WELCOME);
     assert(next(CLASSICSETUP_STATE_KEYBOARD, CLASSICSETUP_EVENT_BACK,
                 CLASSICSETUP_SETUP_RECOMMENDED) ==
            CLASSICSETUP_STATE_SETUP_MODE);
@@ -122,6 +131,7 @@ static void test_quit_request_policy(void)
 {
     enum classicsetup_state states[] = {
         CLASSICSETUP_STATE_WELCOME,
+        CLASSICSETUP_STATE_LICENSE_AGREEMENT,
         CLASSICSETUP_STATE_SETUP_MODE,
         CLASSICSETUP_STATE_RECOMMENDED_GUI_TRANSITION,
         CLASSICSETUP_STATE_KEYBOARD,

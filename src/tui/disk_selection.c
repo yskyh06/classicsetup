@@ -53,10 +53,15 @@ static void draw_disk_screen(
     size_t index;
 
     classicsetup_tui_begin_screen("ClassicSetup - Disk Selection");
-    classicsetup_tui_add_text(3, 3, "The following list shows the available disks.");
-    classicsetup_tui_add_text(
+    classicsetup_tui_draw_wrapped_text(
+        3,
+        3,
+        classicsetup_tui_canvas_width() - 6,
+        "The following list shows the available disks.");
+    classicsetup_tui_draw_wrapped_text(
         4,
         3,
+        classicsetup_tui_canvas_width() - 6,
         "Use the UP and DOWN ARROW keys to select a disk.");
     classicsetup_tui_draw_frame(
         LIST_TOP - 1,

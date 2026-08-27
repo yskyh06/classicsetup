@@ -53,11 +53,16 @@ classicsetup_show_format_apply_preview(
         size_t index;
 
         classicsetup_tui_begin_screen("ClassicSetup - Format Partitions");
-        classicsetup_tui_add_text(3, 3, "The following filesystems will be created:");
+        classicsetup_tui_draw_wrapped_text(
+            3,
+            3,
+            classicsetup_tui_canvas_width() - 6,
+            "The following filesystems will be created:");
         if (!valid || plan == NULL) {
-            classicsetup_tui_add_text(
+            classicsetup_tui_draw_wrapped_text(
                 6,
                 4,
+                classicsetup_tui_canvas_width() - 8,
                 "The filesystem apply plan could not be built safely.");
             classicsetup_tui_draw_footer("B=Back    Q=Quit");
         } else {
@@ -104,9 +109,10 @@ classicsetup_show_format_apply_preview(
             }
             if (plan->partition_apply_plan.table_type ==
                 CLASSICSETUP_PARTITION_TABLE_GPT) {
-                classicsetup_tui_add_text(
+                classicsetup_tui_draw_wrapped_text(
                     16,
                     4,
+                    classicsetup_tui_canvas_width() - 8,
                     "Microsoft Reserved will not be formatted.");
             }
             classicsetup_tui_add_text(
@@ -150,9 +156,10 @@ classicsetup_show_format_apply_confirmation(
 
         classicsetup_tui_begin_screen("ClassicSetup - Confirm Format");
         classicsetup_tui_draw_warning(3, "WARNING");
-        classicsetup_tui_add_text(
+        classicsetup_tui_draw_wrapped_text(
             5,
             4,
+            classicsetup_tui_canvas_width() - 8,
             "Existing data on the listed partitions will be destroyed.");
         if (plan != NULL) {
             classicsetup_tui_add_text(
@@ -160,9 +167,10 @@ classicsetup_show_format_apply_confirmation(
                 4,
                 plan->partition_apply_plan.target_disk.device_path);
         }
-        classicsetup_tui_add_text(
+        classicsetup_tui_draw_wrapped_text(
             10,
             4,
+            classicsetup_tui_canvas_width() - 8,
             "Press A to create the planned filesystems.");
         classicsetup_tui_draw_footer("A=Apply    B=Back    Q=Quit");
         refresh();
@@ -214,9 +222,10 @@ classicsetup_show_format_apply_result(
                     4,
                     line);
             }
-            classicsetup_tui_add_text(
+            classicsetup_tui_draw_wrapped_text(
                 10,
                 4,
+                classicsetup_tui_canvas_width() - 8,
                 "The filesystems were created and verified successfully.");
         } else if (result != NULL) {
             char line[256];
@@ -248,9 +257,10 @@ classicsetup_show_format_apply_result(
                 "%zu partition(s) were completed before the failure.",
                 result->completed_count);
             classicsetup_tui_add_text(6, 4, line);
-            classicsetup_tui_add_text(
+            classicsetup_tui_draw_wrapped_text(
                 7,
                 4,
+                classicsetup_tui_canvas_width() - 8,
                 "The disk may now be partially formatted; no rollback was attempted.");
         }
         classicsetup_tui_draw_footer(

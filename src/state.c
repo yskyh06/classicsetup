@@ -18,9 +18,17 @@ enum classicsetup_state classicsetup_next_state_for_setup_mode(
     switch (state) {
     case CLASSICSETUP_STATE_WELCOME:
         if (event == CLASSICSETUP_EVENT_CONTINUE) {
-            return CLASSICSETUP_STATE_SETUP_MODE;
+            return CLASSICSETUP_STATE_LICENSE_AGREEMENT;
         }
         return CLASSICSETUP_STATE_WELCOME;
+    case CLASSICSETUP_STATE_LICENSE_AGREEMENT:
+        if (event == CLASSICSETUP_EVENT_CONTINUE) {
+            return CLASSICSETUP_STATE_SETUP_MODE;
+        }
+        if (event == CLASSICSETUP_EVENT_BACK) {
+            return CLASSICSETUP_STATE_WELCOME;
+        }
+        return CLASSICSETUP_STATE_LICENSE_AGREEMENT;
     case CLASSICSETUP_STATE_SETUP_MODE:
         if (event == CLASSICSETUP_EVENT_CONTINUE) {
             return setup_mode == CLASSICSETUP_SETUP_ADVANCED
@@ -213,6 +221,7 @@ enum classicsetup_state classicsetup_resolve_quit_request(
 {
     switch (state) {
     case CLASSICSETUP_STATE_WELCOME:
+    case CLASSICSETUP_STATE_LICENSE_AGREEMENT:
     case CLASSICSETUP_STATE_SETUP_MODE:
     case CLASSICSETUP_STATE_RECOMMENDED_GUI_TRANSITION:
     case CLASSICSETUP_STATE_KEYBOARD:

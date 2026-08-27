@@ -181,14 +181,16 @@ static void draw_partition_screen(
     classicsetup_tui_begin_screen("ClassicSetup - Partition Selection");
     format_size(disk->size_bytes, size_text, sizeof(size_text));
     if (layout.instruction_row >= 0) {
-        draw_at(
+        classicsetup_tui_draw_wrapped_text(
             layout.instruction_row,
-            "The list shows existing partitions and unallocated disk space.",
-            false);
-        draw_at(
+            3,
+            classicsetup_tui_canvas_width() - 6,
+            "The list shows existing partitions and unallocated disk space.");
+        classicsetup_tui_draw_wrapped_text(
             layout.instruction_row + 1,
-            "Use the UP and DOWN ARROW keys to select an item.",
-            false);
+            3,
+            classicsetup_tui_canvas_width() - 6,
+            "Use the UP and DOWN ARROW keys to select an item.");
     }
     snprintf(
         line,
@@ -286,9 +288,10 @@ static enum modal_result prompt_create_size(
         int key;
 
         classicsetup_tui_begin_screen("ClassicSetup - Create Partition");
-        classicsetup_tui_add_text(
+        classicsetup_tui_draw_wrapped_text(
             4,
             4,
+            classicsetup_tui_canvas_width() - 8,
             "Create a planned partition in the selected free space.");
         snprintf(
             line,
@@ -363,9 +366,10 @@ static enum modal_result show_windows_layout_error(void)
         int key;
 
         classicsetup_tui_begin_screen("ClassicSetup - Windows Layout");
-        classicsetup_tui_add_text(
+        classicsetup_tui_draw_wrapped_text(
             4,
             4,
+            classicsetup_tui_canvas_width() - 8,
             "The selected space is too small or invalid for the current policy.");
         classicsetup_tui_add_text(
             6,
@@ -395,9 +399,10 @@ static enum modal_result confirm_delete(
         int key;
 
         classicsetup_tui_begin_screen("ClassicSetup - Delete Partition");
-        classicsetup_tui_add_text(
+        classicsetup_tui_draw_wrapped_text(
             4,
             4,
+            classicsetup_tui_canvas_width() - 8,
             item->state == CLASSICSETUP_PLAN_NEW
                 ? "Remove this new partition from the plan?"
                 : "Mark this existing partition for deletion?");
@@ -435,9 +440,10 @@ static enum modal_result confirm_undo_windows_layout(void)
 
         classicsetup_tui_begin_screen(
             "ClassicSetup - Undo Windows Layout");
-        classicsetup_tui_add_text(
+        classicsetup_tui_draw_wrapped_text(
             4,
             4,
+            classicsetup_tui_canvas_width() - 8,
             "The automatically created Windows partitions will be removed");
         classicsetup_tui_add_text(
             5,

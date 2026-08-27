@@ -56,12 +56,17 @@ enum classicsetup_apply_preview_result classicsetup_show_apply_preview(
         classicsetup_tui_draw_warning(
             3,
             "WARNING: The planned partition layout will erase partition information");
-        classicsetup_tui_add_text(4, 4, "on the selected test disk.");
+        classicsetup_tui_draw_wrapped_text(
+            4,
+            4,
+            classicsetup_tui_canvas_width() - 8,
+            "on the selected test disk.");
 
         if (!valid || apply_plan == NULL) {
-            classicsetup_tui_add_text(
+            classicsetup_tui_draw_wrapped_text(
                 7,
                 4,
+                classicsetup_tui_canvas_width() - 8,
                 "This layout is not eligible for the restricted M7 apply path.");
             classicsetup_tui_draw_footer("B=Back    Q=Quit");
         } else {
@@ -152,9 +157,10 @@ classicsetup_show_apply_confirmation(
 
         classicsetup_tui_begin_screen("ClassicSetup - Confirm Disk Changes");
         classicsetup_tui_draw_warning(3, "WARNING");
-        classicsetup_tui_add_text(
+        classicsetup_tui_draw_wrapped_text(
             5,
             4,
+            classicsetup_tui_canvas_width() - 8,
             "ALL EXISTING PARTITION DATA ON THIS TEST DISK WILL BE LOST:");
         snprintf(
             line,
@@ -164,9 +170,10 @@ classicsetup_show_apply_confirmation(
             apply_plan->target_disk.model);
         classicsetup_tui_add_text(7, 4, line);
         classicsetup_tui_add_text(8, 4, disk_size);
-        classicsetup_tui_add_text(
+        classicsetup_tui_draw_wrapped_text(
             10,
             4,
+            classicsetup_tui_canvas_width() - 8,
             "Press A to apply the partition table changes.");
         classicsetup_tui_draw_footer("A=Apply    B=Back    Q=Quit");
         refresh();
@@ -206,14 +213,16 @@ enum classicsetup_apply_result_screen_result classicsetup_show_apply_result(
         classicsetup_tui_begin_screen("ClassicSetup - Partition Apply Result");
         classicsetup_tui_add_text(4, 4, message);
         if (!success) {
-            classicsetup_tui_add_text(
+            classicsetup_tui_draw_wrapped_text(
                 6,
                 4,
+                classicsetup_tui_canvas_width() - 8,
                 "Review the safety checks before trying again.");
         } else {
-            classicsetup_tui_add_text(
+            classicsetup_tui_draw_wrapped_text(
                 6,
                 4,
+                classicsetup_tui_canvas_width() - 8,
                 "Filesystem creation is the next confirmed step.");
         }
         classicsetup_tui_draw_footer(

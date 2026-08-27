@@ -38,9 +38,10 @@ static void draw_keyboard_screen(int selected)
     }
 
     classicsetup_tui_begin_screen("ClassicSetup Setup");
-    classicsetup_tui_add_text(
+    classicsetup_tui_draw_wrapped_text(
         first_row - 2,
         4,
+        classicsetup_tui_canvas_width() - 8,
         "Choose the keyboard type for this setup.");
     classicsetup_tui_draw_frame(
         first_row - 1,

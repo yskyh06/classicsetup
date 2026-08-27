@@ -18,10 +18,15 @@ classicsetup_show_setup_mode_selection(
         int key;
 
         classicsetup_tui_begin_screen("ClassicSetup");
-        classicsetup_tui_add_text(4, 4, "Choose how you want to install Windows.");
-        classicsetup_tui_add_text(
+        classicsetup_tui_draw_wrapped_text(
+            4,
+            4,
+            classicsetup_tui_canvas_width() - 8,
+            "Choose how you want to install Windows.");
+        classicsetup_tui_draw_wrapped_text(
             5,
             4,
+            classicsetup_tui_canvas_width() - 8,
             "Use the UP and DOWN ARROW keys to select an option.");
         classicsetup_tui_draw_frame(
             6,
@@ -34,9 +39,10 @@ classicsetup_show_setup_mode_selection(
             classicsetup_tui_canvas_width() - 10,
             "Recommended installation",
             selected == CLASSICSETUP_SETUP_RECOMMENDED);
-        classicsetup_tui_add_text(
+        classicsetup_tui_draw_wrapped_text(
             8,
             8,
+            classicsetup_tui_canvas_width() - 12,
             "Automatic settings and a simplified installation experience.");
         classicsetup_tui_draw_list_row(
             10,
@@ -44,9 +50,10 @@ classicsetup_show_setup_mode_selection(
             classicsetup_tui_canvas_width() - 10,
             "Advanced installation",
             selected == CLASSICSETUP_SETUP_ADVANCED);
-        classicsetup_tui_add_text(
+        classicsetup_tui_draw_wrapped_text(
             11,
             8,
+            classicsetup_tui_canvas_width() - 12,
             "Manually configure firmware, disks, partitions, and formatting.");
         classicsetup_tui_draw_footer(
             "UP/DOWN=Select    ENTER=Continue    Q=Quit");

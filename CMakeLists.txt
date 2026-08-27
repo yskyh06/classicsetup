@@ -29,6 +29,7 @@ add_executable(classicsetup
     src/tui/install_mode_selection.c
     src/tui/keymap.c
     src/tui/keyboard.c
+    src/tui/license_agreement.c
     src/tui/partition_selection.c
     src/tui/quit.c
     src/tui/recommended.c
@@ -241,6 +242,7 @@ if(BUILD_TESTING)
         src/core/recommended.c
         src/core/setup_mode.c
         src/core/system_disk.c
+        src/tui/tui.c
     )
 
     set_target_properties(classicsetup_recommended_test PROPERTIES
@@ -249,7 +251,13 @@ if(BUILD_TESTING)
         C_EXTENSIONS NO
     )
 
-    target_include_directories(classicsetup_recommended_test PRIVATE include)
+    target_include_directories(classicsetup_recommended_test PRIVATE
+        include
+        ${CURSES_INCLUDE_DIRS}
+    )
+    target_link_libraries(classicsetup_recommended_test PRIVATE
+        ${CURSES_LIBRARIES}
+    )
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(classicsetup_recommended_test PRIVATE
             -Wall -Wextra -Wpedantic
@@ -260,6 +268,8 @@ if(BUILD_TESTING)
 
     add_executable(classicsetup_tui_layout_test
         tests/tui_layout_test.c
+        src/tui/keymap.c
+        src/tui/license_agreement.c
         src/tui/tui.c
     )
 
