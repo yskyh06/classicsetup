@@ -231,6 +231,14 @@ int classicsetup_disk_class_is_recommended_selectable(
            CLASSICSETUP_RECOMMENDED_AUTO_INSTALL_ALLOWED;
 }
 
+int classicsetup_recommended_assessment_is_selectable(
+    const struct classicsetup_disk_assessment *assessment,
+    enum classicsetup_firmware_mode firmware)
+{
+    return assessment != NULL && firmware == CLASSICSETUP_FIRMWARE_UEFI &&
+           assessment->selectable;
+}
+
 int classicsetup_recommended_result_can_continue(
     enum classicsetup_recommended_result_code result_code)
 {

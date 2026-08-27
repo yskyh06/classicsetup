@@ -115,8 +115,9 @@ classicsetup_show_recommended_disk_selection(
             }
         }
         if (assessment_count > 0 &&
-            (!assessments[selected].selectable ||
-             firmware != CLASSICSETUP_FIRMWARE_UEFI)) {
+            !classicsetup_recommended_assessment_is_selectable(
+                &assessments[selected],
+                firmware)) {
             classicsetup_tui_draw_warning(
                 frame_bottom + 1 < classicsetup_tui_canvas_height() - 1
                     ? frame_bottom + 1
@@ -136,8 +137,9 @@ classicsetup_show_recommended_disk_selection(
             ++selected;
         } else if ((key == '\n' || key == '\r' || key == KEY_ENTER) &&
                    assessment_count > 0) {
-            if (firmware == CLASSICSETUP_FIRMWARE_UEFI &&
-                assessments[selected].selectable) {
+            if (classicsetup_recommended_assessment_is_selectable(
+                    &assessments[selected],
+                    firmware)) {
                 if (selected_index != NULL) {
                     *selected_index = selected;
                 }
@@ -195,12 +197,40 @@ classicsetup_show_windows_source_placeholder(void)
 }
 
 enum classicsetup_simple_screen_result
+classicsetup_show_recommended_gui_unavailable(void)
+{
+    for (;;) {
+        int key;
+
+        classicsetup_tui_begin_screen(
+            "ClassicSetup - Recommended Installation");
+        classicsetup_tui_draw_wrapped_text(
+            4,
+            4,
+            classicsetup_tui_canvas_width() - 8,
+            "The Recommended GTK frontend is not available in this build.");
+        classicsetup_tui_draw_wrapped_text(
+            7,
+            4,
+            classicsetup_tui_canvas_width() - 8,
+            "Return to Setup Mode and choose Advanced installation, or install GTK4 and rebuild ClassicSetup.");
+        classicsetup_tui_draw_footer("B=Back    Q=Quit");
+        refresh();
+        key = getch();
+        if (key == 'b' || key == 'B' || key == '\n' || key == '\r' ||
+            key == KEY_ENTER) {
+            return CLASSICSETUP_SIMPLE_BACK;
+        }
+        if (classicsetup_key_is_quit(key)) {
+            return CLASSICSETUP_SIMPLE_QUIT;
+        }
+    }
+}
+
+enum classicsetup_simple_screen_result
 classicsetup_show_recommended_gui_transition(void)
 {
-    return show_placeholder(
-        "ClassicSetup - Recommended Installation",
-        "Recommended installation is separated from the Advanced TUI.",
-        "A GTK frontend will take ownership at this boundary in a future milestone.");
+    return classicsetup_show_recommended_gui_unavailable();
 }
 
 enum classicsetup_simple_screen_result

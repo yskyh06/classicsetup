@@ -4,6 +4,28 @@ project(classicsetup LANGUAGES C)
 
 find_package(Curses REQUIRED)
 
+option(CLASSICSETUP_ENABLE_GTK
+    "Build the optional GTK4 Recommended frontend when GTK4 is available"
+    ON)
+
+set(CLASSICSETUP_GTK_FRONTEND src/gui/gtk_stub.c)
+set(CLASSICSETUP_GTK_ENABLED OFF)
+if(CLASSICSETUP_ENABLE_GTK)
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(GTK4 QUIET IMPORTED_TARGET gtk4)
+    endif()
+    if(GTK4_FOUND)
+        set(CLASSICSETUP_GTK_FRONTEND src/gui/gtk_frontend.c)
+        set(CLASSICSETUP_GTK_ENABLED ON)
+        message(STATUS "ClassicSetup GTK4 frontend: enabled")
+    else()
+        message(STATUS "ClassicSetup GTK4 frontend: disabled (GTK4 not found)")
+    endif()
+else()
+    message(STATUS "ClassicSetup GTK4 frontend: disabled by option")
+endif()
+
 add_executable(classicsetup
     src/app.c
     src/config.c
@@ -19,6 +41,9 @@ add_executable(classicsetup
     src/core/recommended.c
     src/core/setup_mode.c
     src/core/system_disk.c
+    src/gui/gui.c
+    src/gui/session.c
+    ${CLASSICSETUP_GTK_FRONTEND}
     src/main.c
     src/state.c
     src/tui/after_format.c
@@ -51,6 +76,16 @@ target_include_directories(classicsetup PRIVATE
 
 target_link_libraries(classicsetup PRIVATE ${CURSES_LIBRARIES})
 
+if(CLASSICSETUP_GTK_ENABLED)
+    target_compile_definitions(classicsetup PRIVATE
+        CLASSICSETUP_ENABLE_GTK=1
+        CLASSICSETUP_GUI_CSS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/src/gui/classicsetup.css"
+    )
+    target_link_libraries(classicsetup PRIVATE PkgConfig::GTK4)
+else()
+    target_compile_definitions(classicsetup PRIVATE CLASSICSETUP_ENABLE_GTK=0)
+endif()
+
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(classicsetup PRIVATE -Wall -Wextra -Wpedantic)
 endif()
@@ -76,6 +111,26 @@ if(BUILD_TESTING)
         )
     endif()
     add_test(NAME state_transitions COMMAND classicsetup_state_test)
+
+    add_executable(classicsetup_gui_test
+        tests/gui_test.c
+        src/gui/gui.c
+        src/gui/gtk_stub.c
+    )
+
+    set_target_properties(classicsetup_gui_test PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED YES
+        C_EXTENSIONS NO
+    )
+
+    target_include_directories(classicsetup_gui_test PRIVATE include)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(classicsetup_gui_test PRIVATE
+            -Wall -Wextra -Wpedantic
+        )
+    endif()
+    add_test(NAME gui_navigation COMMAND classicsetup_gui_test)
 
     add_executable(classicsetup_disk_test
         tests/disk_test.c

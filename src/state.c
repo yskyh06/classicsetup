@@ -38,7 +38,7 @@ enum classicsetup_state classicsetup_next_state_for_setup_mode(
         return CLASSICSETUP_STATE_SETUP_MODE;
     case CLASSICSETUP_STATE_RECOMMENDED_GUI_TRANSITION:
         if (event == CLASSICSETUP_EVENT_CONTINUE) {
-            return CLASSICSETUP_STATE_RECOMMENDED_DISK;
+            return CLASSICSETUP_STATE_NEXT_STAGE;
         }
         if (event == CLASSICSETUP_EVENT_BACK) {
             return CLASSICSETUP_STATE_SETUP_MODE;

@@ -12,6 +12,7 @@
 #include "classicsetup/format_selection.h"
 #include "classicsetup/format_apply.h"
 #include "classicsetup/format_apply_tui.h"
+#include "classicsetup/gui.h"
 #include "classicsetup/install_mode_selection.h"
 #include "classicsetup/keyboard.h"
 #include "classicsetup/license_agreement.h"
@@ -148,10 +149,32 @@ static enum classicsetup_event simple_result_to_event(
     return CLASSICSETUP_EVENT_QUIT_REQUEST;
 }
 
-static enum classicsetup_event show_recommended_gui_transition(void)
+static enum classicsetup_event show_recommended_gui(void)
 {
-    return simple_result_to_event(
-        classicsetup_show_recommended_gui_transition());
+    struct classicsetup_gui_session session;
+    int result;
+
+    classicsetup_tui_shutdown();
+    if (classicsetup_gui_session_init(&session) != 0) {
+        result = CLASSICSETUP_GUI_ERROR;
+    } else {
+        result = classicsetup_gui_run(&session);
+    }
+    if (!classicsetup_tui_init()) {
+        return CLASSICSETUP_EVENT_QUIT_REQUEST;
+    }
+    if (result == CLASSICSETUP_GUI_FINISHED) {
+        return CLASSICSETUP_EVENT_CONTINUE;
+    }
+    if (result == CLASSICSETUP_GUI_BACK) {
+        return CLASSICSETUP_EVENT_BACK;
+    }
+    if (result == CLASSICSETUP_GUI_UNAVAILABLE ||
+        result == CLASSICSETUP_GUI_ERROR) {
+        return simple_result_to_event(
+            classicsetup_show_recommended_gui_unavailable());
+    }
+    return CLASSICSETUP_EVENT_QUIT_REQUEST;
 }
 
 static enum classicsetup_event show_network(void)
@@ -601,7 +624,7 @@ int classicsetup_run(void)
         } else if (state == CLASSICSETUP_STATE_SETUP_MODE) {
             event = show_setup_mode(&config);
         } else if (state == CLASSICSETUP_STATE_RECOMMENDED_GUI_TRANSITION) {
-            event = show_recommended_gui_transition();
+            event = show_recommended_gui();
         } else if (state == CLASSICSETUP_STATE_KEYBOARD) {
             event = show_keyboard(&config);
         } else if (state == CLASSICSETUP_STATE_RECOMMENDED_DISK) {

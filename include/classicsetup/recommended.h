@@ -135,6 +135,10 @@ const char *classicsetup_recommended_policy_reason(
 int classicsetup_disk_class_is_recommended_selectable(
     enum classicsetup_disk_class disk_class);
 
+int classicsetup_recommended_assessment_is_selectable(
+    const struct classicsetup_disk_assessment *assessment,
+    enum classicsetup_firmware_mode firmware);
+
 int classicsetup_recommended_result_can_continue(
     enum classicsetup_recommended_result_code result_code);
 
