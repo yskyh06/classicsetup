@@ -1,3 +1,5 @@
+#define _XOPEN_SOURCE 700
+
 #include "classicsetup/disk.h"
 
 #include <ctype.h>
@@ -115,8 +117,29 @@ static int read_disk(
     char path[SYSFS_PATH_SIZE];
     char size_text[64];
     char value[CLASSICSETUP_DISK_ID_SIZE];
+    char *resolved_path;
     unsigned int parsed;
     int written;
+
+    written = snprintf(path, sizeof(path), "%s/%s", sys_block_path, name);
+    if (written < 0 || (size_t)written >= sizeof(path)) {
+        return -1;
+    }
+    resolved_path = realpath(path, NULL);
+    if (resolved_path == NULL) {
+        snprintf(disk->sysfs_path, sizeof(disk->sysfs_path), "%s", path);
+    } else {
+        if (strlen(resolved_path) >= sizeof(disk->sysfs_path)) {
+            free(resolved_path);
+            return -1;
+        }
+        snprintf(
+            disk->sysfs_path,
+            sizeof(disk->sysfs_path),
+            "%s",
+            resolved_path);
+        free(resolved_path);
+    }
 
     written = snprintf(path, sizeof(path), "%s/%s/size", sys_block_path, name);
     if (written < 0 || (size_t)written >= sizeof(path) ||
@@ -204,6 +227,18 @@ int classicsetup_disk_has_recommended_identity(
            disk->has_logical_sector_size &&
            disk->logical_sector_size == CLASSICSETUP_SECTOR_SIZE_BYTES &&
            disk->has_removable;
+}
+
+int classicsetup_disk_has_vm_test_identity(
+    const struct classicsetup_disk_info *disk)
+{
+    return disk != NULL && disk->name[0] != '\0' &&
+           disk->device_path[0] != '\0' && disk->sysfs_path[0] != '\0' &&
+           disk->size_bytes > 0 && disk->model[0] != '\0' &&
+           strcmp(disk->model, "Unknown model") != 0 &&
+           disk->has_logical_sector_size &&
+           disk->logical_sector_size == CLASSICSETUP_SECTOR_SIZE_BYTES &&
+           disk->has_removable && !disk->removable;
 }
 
 static int compare_disks(const void *left, const void *right)

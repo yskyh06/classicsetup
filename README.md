@@ -1,5 +1,16 @@
 # ClassicSetup
 
+ClassicSetup currently provides two interfaces over the same storage engine:
+
+- Recommended prepares a future GTK flow and only auto-installs to a disk that
+  policy classifies as safely raw and empty.
+- Advanced keeps the ncurses firmware, disk, partition, format, and apply flow.
+
+The Recommended state graph is: Setup Mode -> GUI transition boundary -> Disk
+-> Network -> Windows Version -> Download -> Installation Options -> Summary.
+The intermediate product screens are placeholders; no Windows source is
+downloaded or applied.
+
 Linux 기반 Windows 설치 프로그램을 개발하기 위한 C 프로젝트입니다.
 
 현재 M9 단계로, Recommended와 Advanced 설치 흐름을 구분합니다.

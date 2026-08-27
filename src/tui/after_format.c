@@ -20,11 +20,7 @@ enum classicsetup_after_format_result classicsetup_show_after_format(
     classicsetup_tui_add_centered(
         LINES / 2 + 1,
         "Later installation steps are not implemented yet.");
-    attron(A_BOLD);
-    classicsetup_tui_add_centered(
-        LINES - 3,
-        "ENTER=Finish    B=Back    Q=Quit");
-    attroff(A_BOLD);
+    classicsetup_tui_draw_footer("ENTER=Finish    B=Back    Q=Quit");
     refresh();
 
     for (;;) {

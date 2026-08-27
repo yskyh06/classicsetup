@@ -20,13 +20,7 @@ static void draw_option(int row, const char *text, int selected)
     if (row < 0 || row >= LINES || column >= COLS) {
         return;
     }
-    if (selected) {
-        attron(A_REVERSE | A_BOLD);
-    }
-    mvaddnstr(row, column, text, COLS - column);
-    if (selected) {
-        attroff(A_REVERSE | A_BOLD);
-    }
+    classicsetup_tui_draw_list_row(row, column, 30, text, selected != 0);
 }
 
 static void draw_screen(enum classicsetup_install_mode selected)
@@ -38,20 +32,19 @@ static void draw_screen(enum classicsetup_install_mode selected)
         first_row = 5;
     }
     classicsetup_tui_begin_screen("ClassicSetup - Installation Mode");
-    classicsetup_tui_add_centered(
+    classicsetup_tui_add_text(
         first_row - 3,
+        4,
         "Select the firmware and partitioning mode.");
+    classicsetup_tui_draw_frame(first_row - 1, 3, first_row + 3, COLS - 4);
     for (index = 0; index < CLASSICSETUP_INSTALL_MODE_COUNT; ++index) {
         draw_option(
             first_row + index,
             mode_names[index],
             index == (int)selected);
     }
-    attron(A_BOLD);
-    classicsetup_tui_add_centered(
-        LINES - 3,
+    classicsetup_tui_draw_footer(
         "UP/DOWN=Select    ENTER=Continue    B=Back    Q=Quit");
-    attroff(A_BOLD);
     refresh();
 }
 

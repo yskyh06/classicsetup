@@ -30,13 +30,7 @@ static void draw_at(int row, const char *text, bool selected)
         return;
     }
 
-    if (selected) {
-        attron(A_REVERSE | A_BOLD);
-    }
-    mvaddnstr(row, 2, text, COLS - 2);
-    if (selected) {
-        attroff(A_REVERSE | A_BOLD);
-    }
+    classicsetup_tui_draw_list_row(row, 3, COLS - 6, text, selected);
 }
 
 static void draw_disk_screen(
@@ -54,7 +48,8 @@ static void draw_disk_screen(
     size_t index;
 
     classicsetup_tui_begin_screen("ClassicSetup - Disk Selection");
-    classicsetup_tui_add_centered(3, "Choose a disk for the next setup step.");
+    classicsetup_tui_add_text(4, 4, "The following list shows the available disks.");
+    classicsetup_tui_draw_frame(6, 2, detail_row - 1, COLS - 3);
 
     if (disk_count == 0) {
         classicsetup_tui_add_centered(
@@ -98,13 +93,10 @@ static void draw_disk_screen(
         draw_at(detail_row + 2, line, false);
     }
 
-    attron(A_BOLD);
-    classicsetup_tui_add_centered(
-        LINES - 3,
+    classicsetup_tui_draw_footer(
         disk_count > 0
             ? "UP/DOWN=Select    ENTER=Continue    B=Back    Q=Quit"
             : "B=Back    Q=Quit");
-    attroff(A_BOLD);
     refresh();
 }
 

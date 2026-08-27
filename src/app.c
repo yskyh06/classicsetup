@@ -121,11 +121,9 @@ static enum classicsetup_event show_recommended_disk(
     return CLASSICSETUP_EVENT_CONTINUE;
 }
 
-static enum classicsetup_event show_windows_source(void)
+static enum classicsetup_event simple_result_to_event(
+    enum classicsetup_simple_screen_result result)
 {
-    enum classicsetup_simple_screen_result result =
-        classicsetup_show_windows_source_placeholder();
-
     if (result == CLASSICSETUP_SIMPLE_CONTINUE) {
         return CLASSICSETUP_EVENT_CONTINUE;
     }
@@ -133,6 +131,35 @@ static enum classicsetup_event show_windows_source(void)
         return CLASSICSETUP_EVENT_BACK;
     }
     return CLASSICSETUP_EVENT_QUIT_REQUEST;
+}
+
+static enum classicsetup_event show_recommended_gui_transition(void)
+{
+    return simple_result_to_event(
+        classicsetup_show_recommended_gui_transition());
+}
+
+static enum classicsetup_event show_network(void)
+{
+    return simple_result_to_event(classicsetup_show_network_placeholder());
+}
+
+static enum classicsetup_event show_windows_version(void)
+{
+    return simple_result_to_event(
+        classicsetup_show_windows_version_placeholder());
+}
+
+static enum classicsetup_event show_windows_download(void)
+{
+    return simple_result_to_event(
+        classicsetup_show_windows_download_placeholder());
+}
+
+static enum classicsetup_event show_install_options(void)
+{
+    return simple_result_to_event(
+        classicsetup_show_install_options_placeholder());
 }
 
 static enum classicsetup_event show_install_summary(
@@ -179,18 +206,9 @@ static enum classicsetup_event show_recommended_result(
     return CLASSICSETUP_EVENT_QUIT_REQUEST;
 }
 
-static enum classicsetup_event show_gui_transition(void)
+static enum classicsetup_event show_next_stage(void)
 {
-    enum classicsetup_simple_screen_result result =
-        classicsetup_show_gui_transition_placeholder();
-
-    if (result == CLASSICSETUP_SIMPLE_CONTINUE) {
-        return CLASSICSETUP_EVENT_CONTINUE;
-    }
-    if (result == CLASSICSETUP_SIMPLE_BACK) {
-        return CLASSICSETUP_EVENT_BACK;
-    }
-    return CLASSICSETUP_EVENT_QUIT_REQUEST;
+    return simple_result_to_event(classicsetup_show_next_stage_placeholder());
 }
 
 static enum classicsetup_event show_install_mode(
@@ -565,12 +583,20 @@ int classicsetup_run(void)
             event = show_welcome();
         } else if (state == CLASSICSETUP_STATE_SETUP_MODE) {
             event = show_setup_mode(&config);
+        } else if (state == CLASSICSETUP_STATE_RECOMMENDED_GUI_TRANSITION) {
+            event = show_recommended_gui_transition();
         } else if (state == CLASSICSETUP_STATE_KEYBOARD) {
             event = show_keyboard(&config);
         } else if (state == CLASSICSETUP_STATE_RECOMMENDED_DISK) {
             event = show_recommended_disk(&config);
-        } else if (state == CLASSICSETUP_STATE_WINDOWS_SOURCE) {
-            event = show_windows_source();
+        } else if (state == CLASSICSETUP_STATE_NETWORK) {
+            event = show_network();
+        } else if (state == CLASSICSETUP_STATE_WINDOWS_VERSION) {
+            event = show_windows_version();
+        } else if (state == CLASSICSETUP_STATE_WINDOWS_DOWNLOAD) {
+            event = show_windows_download();
+        } else if (state == CLASSICSETUP_STATE_INSTALL_OPTIONS) {
+            event = show_install_options();
         } else if (state == CLASSICSETUP_STATE_INSTALL_SUMMARY) {
             event = show_install_summary(&config);
         } else if (state == CLASSICSETUP_STATE_RECOMMENDED_RESULT) {
@@ -597,8 +623,8 @@ int classicsetup_run(void)
             event = show_format_apply_result(&config);
         } else if (state == CLASSICSETUP_STATE_AFTER_FORMAT) {
             event = show_after_format(&config);
-        } else if (state == CLASSICSETUP_STATE_GUI_TRANSITION) {
-            event = show_gui_transition();
+        } else if (state == CLASSICSETUP_STATE_NEXT_STAGE) {
+            event = show_next_stage();
         }
 
         if (event == CLASSICSETUP_EVENT_QUIT_REQUEST) {

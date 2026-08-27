@@ -11,13 +11,14 @@ enum classicsetup_welcome_result classicsetup_show_welcome(void)
 
     classicsetup_tui_begin_screen("ClassicSetup Setup");
 
-    classicsetup_tui_add_centered(LINES / 2 - 2, "Welcome to ClassicSetup");
-    classicsetup_tui_add_centered(LINES / 2, "This setup assistant is ready to begin.");
-    classicsetup_tui_add_centered(LINES / 2 + 1, "Press ENTER to continue or Q to quit.");
-
-    attron(A_BOLD);
-    classicsetup_tui_add_centered(LINES - 3, "ENTER=Continue    Q=Quit");
-    attroff(A_BOLD);
+    classicsetup_tui_add_text(5, 4, "Welcome to ClassicSetup.");
+    classicsetup_tui_add_text(
+        7,
+        4,
+        "This program prepares a computer for Windows installation.");
+    classicsetup_tui_add_text(9, 4, "Press ENTER to continue.");
+    classicsetup_tui_draw_frame(12, 3, LINES - 4, COLS - 4);
+    classicsetup_tui_draw_footer("ENTER=Continue    Q=Quit");
     refresh();
 
     for (;;) {

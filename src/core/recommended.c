@@ -54,34 +54,181 @@ enum classicsetup_disk_class classicsetup_classify_disk(
     int has_usable_unallocated,
     enum classicsetup_system_disk_status system_disk_status)
 {
-    if (disk == NULL) {
+    const struct classicsetup_disk_facts facts = {
+        .partition_scan_succeeded = partition_scan_succeeded,
+        .partition_table_present = partition_count > 0,
+        .partition_count = partition_count,
+        .has_usable_unallocated = has_usable_unallocated,
+        .unknown_filesystem = partition_count > 0,
+        .system_disk_status = system_disk_status
+    };
+
+    return classicsetup_classify_disk_facts(
+        disk,
+        &facts,
+        CLASSICSETUP_ENV_UNKNOWN);
+}
+
+static int identity_is_sufficient(
+    const struct classicsetup_disk_info *disk,
+    enum classicsetup_environment environment)
+{
+    if (classicsetup_disk_has_recommended_identity(disk)) {
+        return 1;
+    }
+    return classicsetup_environment_allows_apply(environment) &&
+           classicsetup_disk_has_vm_test_identity(disk);
+}
+
+enum classicsetup_disk_class classicsetup_classify_disk_facts(
+    const struct classicsetup_disk_info *disk,
+    const struct classicsetup_disk_facts *facts,
+    enum classicsetup_environment environment)
+{
+    if (disk == NULL || facts == NULL) {
         return CLASSICSETUP_DISK_UNKNOWN;
     }
-    if (system_disk_status == CLASSICSETUP_SYSTEM_DISK_TARGET_IN_USE) {
+    if (facts->system_disk_status ==
+        CLASSICSETUP_SYSTEM_DISK_TARGET_IN_USE) {
         return disk->has_removable && disk->removable
                    ? CLASSICSETUP_DISK_INSTALL_MEDIA
                    : CLASSICSETUP_DISK_SYSTEM;
     }
-    if (system_disk_status != CLASSICSETUP_SYSTEM_DISK_SAFE ||
-        !classicsetup_disk_has_recommended_identity(disk) ||
-        !partition_scan_succeeded) {
+    if (facts->system_disk_status != CLASSICSETUP_SYSTEM_DISK_SAFE ||
+        !facts->partition_scan_succeeded ||
+        !identity_is_sufficient(disk, environment)) {
+        return CLASSICSETUP_DISK_UNKNOWN;
+    }
+    if (!disk->has_removable) {
         return CLASSICSETUP_DISK_UNKNOWN;
     }
     if (disk->removable) {
         return CLASSICSETUP_DISK_REMOVABLE;
     }
-    if (partition_count == 0) {
-        return CLASSICSETUP_DISK_EMPTY;
+    if (facts->complex_storage) {
+        return CLASSICSETUP_DISK_WINDOWS_COMPLEX;
     }
-    return has_usable_unallocated
-               ? CLASSICSETUP_DISK_HAS_UNALLOCATED_SPACE
-               : CLASSICSETUP_DISK_HAS_EXISTING_PARTITIONS;
+    if (facts->multiple_operating_systems) {
+        return CLASSICSETUP_DISK_MULTI_OS;
+    }
+    if (facts->encryption_detected) {
+        return facts->encryption_unlocked
+                   ? CLASSICSETUP_DISK_WINDOWS_ENCRYPTED_UNLOCKED
+                   : CLASSICSETUP_DISK_WINDOWS_ENCRYPTED_LOCKED;
+    }
+    if (facts->windows_detected) {
+        return CLASSICSETUP_DISK_WINDOWS;
+    }
+    if (facts->user_data_detected) {
+        return CLASSICSETUP_DISK_DATA_PRESENT;
+    }
+    if (facts->partition_count == 0 &&
+        !facts->partition_table_present) {
+        return CLASSICSETUP_DISK_RAW_EMPTY;
+    }
+    if (facts->filesystems_inspected &&
+        facts->all_partitions_confirmed_empty &&
+        !facts->unknown_filesystem) {
+        return CLASSICSETUP_DISK_PARTITIONED_EMPTY;
+    }
+    return CLASSICSETUP_DISK_UNKNOWN_FILESYSTEM;
+}
+
+enum classicsetup_recommended_disk_action
+classicsetup_recommended_policy_for_disk(
+    enum classicsetup_disk_class disk_class)
+{
+    switch (disk_class) {
+    case CLASSICSETUP_DISK_RAW_EMPTY:
+        return CLASSICSETUP_RECOMMENDED_AUTO_INSTALL_ALLOWED;
+    case CLASSICSETUP_DISK_PARTITIONED_EMPTY:
+        return CLASSICSETUP_RECOMMENDED_REINITIALIZE_WITH_WARNING;
+    case CLASSICSETUP_DISK_WINDOWS:
+    case CLASSICSETUP_DISK_WINDOWS_ENCRYPTED_UNLOCKED:
+        return CLASSICSETUP_RECOMMENDED_KEEP_FILES_FUTURE;
+    case CLASSICSETUP_DISK_WINDOWS_ENCRYPTED_LOCKED:
+        return CLASSICSETUP_RECOMMENDED_EXPLICIT_ERASE_ONLY;
+    case CLASSICSETUP_DISK_DATA_PRESENT:
+        return CLASSICSETUP_RECOMMENDED_EXPLICIT_ERASE_ONLY;
+    case CLASSICSETUP_DISK_WINDOWS_COMPLEX:
+    case CLASSICSETUP_DISK_MULTI_OS:
+    case CLASSICSETUP_DISK_UNKNOWN_FILESYSTEM:
+        return CLASSICSETUP_RECOMMENDED_ADVANCED_ONLY;
+    case CLASSICSETUP_DISK_SYSTEM:
+    case CLASSICSETUP_DISK_INSTALL_MEDIA:
+    case CLASSICSETUP_DISK_REMOVABLE:
+    case CLASSICSETUP_DISK_UNKNOWN:
+        return CLASSICSETUP_RECOMMENDED_BLOCK;
+    }
+    return CLASSICSETUP_RECOMMENDED_BLOCK;
+}
+
+const char *classicsetup_disk_class_presentation(
+    enum classicsetup_disk_class disk_class)
+{
+    switch (disk_class) {
+    case CLASSICSETUP_DISK_RAW_EMPTY:
+        return "Empty disk";
+    case CLASSICSETUP_DISK_PARTITIONED_EMPTY:
+        return "Existing empty partition layout";
+    case CLASSICSETUP_DISK_WINDOWS:
+        return "Existing Windows installation";
+    case CLASSICSETUP_DISK_WINDOWS_ENCRYPTED_LOCKED:
+        return "Encrypted Windows installation (locked)";
+    case CLASSICSETUP_DISK_WINDOWS_ENCRYPTED_UNLOCKED:
+        return "Encrypted Windows installation (unlocked)";
+    case CLASSICSETUP_DISK_WINDOWS_COMPLEX:
+        return "Complex Windows disk layout";
+    case CLASSICSETUP_DISK_DATA_PRESENT:
+        return "Disk contains user data";
+    case CLASSICSETUP_DISK_MULTI_OS:
+        return "Multiple operating systems detected";
+    case CLASSICSETUP_DISK_UNKNOWN_FILESYSTEM:
+        return "Partition contents could not be classified safely";
+    case CLASSICSETUP_DISK_SYSTEM:
+        return "Running Linux system disk - not available";
+    case CLASSICSETUP_DISK_INSTALL_MEDIA:
+        return "ClassicSetup installation media - not available";
+    case CLASSICSETUP_DISK_REMOVABLE:
+        return "Removable disk - Advanced only";
+    case CLASSICSETUP_DISK_UNKNOWN:
+        return "Identity or safety status unknown";
+    }
+    return "Unknown disk status";
+}
+
+const char *classicsetup_recommended_policy_reason(
+    enum classicsetup_disk_class disk_class,
+    enum classicsetup_firmware_mode firmware)
+{
+    if (firmware == CLASSICSETUP_FIRMWARE_BIOS) {
+        return "ClassicSetup started in Legacy BIOS mode. Restart in UEFI mode or use Advanced installation.";
+    }
+    if (firmware == CLASSICSETUP_FIRMWARE_UNKNOWN) {
+        return "Firmware mode could not be identified safely. Use Advanced installation for diagnosis.";
+    }
+    switch (classicsetup_recommended_policy_for_disk(disk_class)) {
+    case CLASSICSETUP_RECOMMENDED_AUTO_INSTALL_ALLOWED:
+        return "Ready for automatic UEFI/GPT installation.";
+    case CLASSICSETUP_RECOMMENDED_REINITIALIZE_WITH_WARNING:
+        return "Automatic reinitialization is planned for a future milestone.";
+    case CLASSICSETUP_RECOMMENDED_KEEP_FILES_FUTURE:
+        return "File-preserving Windows reinstall is not implemented yet.";
+    case CLASSICSETUP_RECOMMENDED_EXPLICIT_ERASE_ONLY:
+        return "Automatic changes are blocked; backup or explicit erase support is required.";
+    case CLASSICSETUP_RECOMMENDED_ADVANCED_ONLY:
+        return "This disk requires Advanced installation or another target disk.";
+    case CLASSICSETUP_RECOMMENDED_BLOCK:
+        return "ClassicSetup cannot safely use this disk in Recommended mode.";
+    }
+    return "ClassicSetup cannot determine a safe automatic action.";
 }
 
 int classicsetup_disk_class_is_recommended_selectable(
     enum classicsetup_disk_class disk_class)
 {
-    return disk_class == CLASSICSETUP_DISK_EMPTY;
+    return classicsetup_recommended_policy_for_disk(disk_class) ==
+           CLASSICSETUP_RECOMMENDED_AUTO_INSTALL_ALLOWED;
 }
 
 int classicsetup_recommended_result_can_continue(
@@ -118,8 +265,9 @@ static int has_usable_unallocated_space(
     return 0;
 }
 
-int classicsetup_assess_disk(
+int classicsetup_assess_disk_in_environment(
     const struct classicsetup_disk_info *disk,
+    enum classicsetup_environment environment,
     struct classicsetup_disk_assessment *assessment)
 {
     struct classicsetup_partition_info
@@ -147,16 +295,47 @@ int classicsetup_assess_disk(
             partition_count);
     }
     assessment->partition_count = partition_count;
-    assessment->disk_class = classicsetup_classify_disk(
-        disk,
-        scan_succeeded,
-        partition_count,
-        has_unallocated,
-        system_status);
+    {
+        const struct classicsetup_disk_facts facts = {
+            .partition_scan_succeeded = scan_succeeded,
+            .partition_table_present = partition_count > 0,
+            .partition_count = partition_count,
+            .has_usable_unallocated = has_unallocated,
+            .unknown_filesystem = partition_count > 0,
+            .system_disk_status = system_status
+        };
+
+        assessment->disk_class = classicsetup_classify_disk_facts(
+            disk,
+            &facts,
+            environment);
+    }
+    assessment->action = classicsetup_recommended_policy_for_disk(
+        assessment->disk_class);
     assessment->selectable =
         classicsetup_disk_class_is_recommended_selectable(
             assessment->disk_class);
+    snprintf(
+        assessment->presentation,
+        sizeof(assessment->presentation),
+        "%s",
+        classicsetup_disk_class_presentation(assessment->disk_class));
     return 0;
+}
+
+int classicsetup_assess_disk(
+    const struct classicsetup_disk_info *disk,
+    struct classicsetup_disk_assessment *assessment)
+{
+    enum classicsetup_environment environment = CLASSICSETUP_ENV_UNKNOWN;
+
+    if (classicsetup_detect_environment(&environment) != 0) {
+        environment = CLASSICSETUP_ENV_UNKNOWN;
+    }
+    return classicsetup_assess_disk_in_environment(
+        disk,
+        environment,
+        assessment);
 }
 
 static int populate_format_policy(
@@ -196,8 +375,9 @@ int classicsetup_build_recommended_plan(
 
     if (disk == NULL || plan == NULL ||
         firmware != CLASSICSETUP_FIRMWARE_UEFI ||
-        disk_class != CLASSICSETUP_DISK_EMPTY ||
-        !classicsetup_disk_has_recommended_identity(disk) ||
+        disk_class != CLASSICSETUP_DISK_RAW_EMPTY ||
+        (!classicsetup_disk_has_recommended_identity(disk) &&
+         !classicsetup_disk_has_vm_test_identity(disk)) ||
         classicsetup_plan_init(disk, NULL, 0, &temporary.partition_plan) != 0 ||
         temporary.partition_plan.item_count == 0 ||
         classicsetup_plan_prepare_install_target_for_mode(
@@ -235,7 +415,7 @@ static int actual_revalidate_empty_disk(
     (void)context;
     return classicsetup_revalidate_target_disk(disk, &current) == 0 &&
            classicsetup_assess_disk(&current, &assessment) == 0 &&
-           assessment.disk_class == CLASSICSETUP_DISK_EMPTY;
+           assessment.disk_class == CLASSICSETUP_DISK_RAW_EMPTY;
 }
 
 static int actual_execute_partition(

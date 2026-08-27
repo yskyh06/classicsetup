@@ -15,13 +15,7 @@ static void draw_option(int row, const char *text, bool selected)
     if (row < 0 || row >= LINES || column >= COLS) {
         return;
     }
-    if (selected) {
-        attron(A_REVERSE | A_BOLD);
-    }
-    mvaddnstr(row, column, text, COLS - column);
-    if (selected) {
-        attroff(A_REVERSE | A_BOLD);
-    }
+    classicsetup_tui_draw_list_row(row, column, 48, text, selected);
 }
 
 static void draw_format_screen(enum classicsetup_format_mode selected)
@@ -40,6 +34,12 @@ static void draw_format_screen(enum classicsetup_format_mode selected)
         LINES / 2 - 1,
         "Press ESC to select a different partition.");
 
+    classicsetup_tui_draw_frame(
+        LINES / 2 + 1,
+        3,
+        LINES / 2 + 5,
+        COLS - 4);
+
     draw_option(
         LINES / 2 + 2,
         "Format the partition using NTFS (Quick)",
@@ -49,11 +49,8 @@ static void draw_format_screen(enum classicsetup_format_mode selected)
         "Format the partition using NTFS",
         selected == CLASSICSETUP_FORMAT_FULL);
 
-    attron(A_BOLD);
-    classicsetup_tui_add_centered(
-        LINES - 3,
+    classicsetup_tui_draw_footer(
         "UP/DOWN=Select    ENTER=Continue    ESC=Cancel    Q=Quit");
-    attroff(A_BOLD);
     refresh();
 }
 

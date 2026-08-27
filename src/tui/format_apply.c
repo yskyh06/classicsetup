@@ -60,7 +60,7 @@ classicsetup_show_format_apply_preview(
             classicsetup_tui_add_centered(
                 LINES / 2,
                 "The filesystem apply plan could not be built safely.");
-            classicsetup_tui_add_centered(LINES - 3, "B=Back    Q=Quit");
+            classicsetup_tui_draw_footer("B=Back    Q=Quit");
         } else {
             char line[384];
 
@@ -115,11 +115,8 @@ classicsetup_show_format_apply_preview(
                             CLASSICSETUP_FORMAT_RESULT_BLOCKED
                     ? "WARNING: Some partitions may already be formatted."
                     : "No filesystem changes have been written yet.");
-            attron(A_BOLD);
-            classicsetup_tui_add_centered(
-                LINES - 3,
+            classicsetup_tui_draw_footer(
                 "ENTER=Continue    B=Back    Q=Quit");
-            attroff(A_BOLD);
         }
         refresh();
 
@@ -162,11 +159,7 @@ classicsetup_show_format_apply_confirmation(
         classicsetup_tui_add_centered(
             LINES / 2 + 2,
             "Press A to create the planned filesystems.");
-        attron(A_BOLD);
-        classicsetup_tui_add_centered(
-            LINES - 3,
-            "A=Apply    B=Back    Q=Quit");
-        attroff(A_BOLD);
+        classicsetup_tui_draw_footer("A=Apply    B=Back    Q=Quit");
         refresh();
 
         key = getch();
@@ -251,12 +244,9 @@ classicsetup_show_format_apply_result(
                 LINES / 2 + 1,
                 "The disk may now be partially formatted; no rollback was attempted.");
         }
-        attron(A_BOLD);
-        classicsetup_tui_add_centered(
-            LINES - 3,
+        classicsetup_tui_draw_footer(
             success ? "ENTER=Continue    B=Back    Q=Quit"
                     : "B=Back    Q=Quit");
-        attroff(A_BOLD);
         refresh();
 
         key = getch();

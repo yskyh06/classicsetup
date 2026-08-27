@@ -64,9 +64,7 @@ enum classicsetup_apply_preview_result classicsetup_show_apply_preview(
             classicsetup_tui_add_centered(
                 LINES / 2,
                 "This layout is not eligible for the restricted M7 apply path.");
-            classicsetup_tui_add_centered(
-                LINES - 3,
-                "B=Back    Q=Quit");
+            classicsetup_tui_draw_footer("B=Back    Q=Quit");
         } else {
             char line[384];
             char disk_size[32];
@@ -118,11 +116,8 @@ enum classicsetup_apply_preview_result classicsetup_show_apply_preview(
             classicsetup_tui_add_centered(
                 LINES - 5,
                 "No changes have been written yet.");
-            attron(A_BOLD);
-            classicsetup_tui_add_centered(
-                LINES - 3,
+            classicsetup_tui_draw_footer(
                 "ENTER=Continue    B=Back    Q=Quit");
-            attroff(A_BOLD);
         }
         refresh();
 
@@ -176,11 +171,7 @@ classicsetup_show_apply_confirmation(
         classicsetup_tui_add_centered(
             LINES / 2 + 2,
             "Press A to apply the partition table changes.");
-        attron(A_BOLD);
-        classicsetup_tui_add_centered(
-            LINES - 3,
-            "A=Apply    B=Back    Q=Quit");
-        attroff(A_BOLD);
+        classicsetup_tui_draw_footer("A=Apply    B=Back    Q=Quit");
         refresh();
 
         key = getch();
@@ -226,12 +217,9 @@ enum classicsetup_apply_result_screen_result classicsetup_show_apply_result(
                 LINES / 2,
                 "Filesystem creation is the next confirmed step.");
         }
-        attron(A_BOLD);
-        classicsetup_tui_add_centered(
-            LINES - 3,
+        classicsetup_tui_draw_footer(
             success ? "ENTER=Continue    B=Back    Q=Quit"
                     : "B=Back    Q=Quit");
-        attroff(A_BOLD);
         refresh();
 
         key = getch();

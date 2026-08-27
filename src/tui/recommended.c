@@ -8,27 +8,6 @@
 #include "classicsetup/keymap.h"
 #include "classicsetup/tui.h"
 
-static const char *disk_class_name(enum classicsetup_disk_class disk_class)
-{
-    switch (disk_class) {
-    case CLASSICSETUP_DISK_EMPTY:
-        return "Empty disk";
-    case CLASSICSETUP_DISK_HAS_UNALLOCATED_SPACE:
-        return "Contains partitions and unallocated space";
-    case CLASSICSETUP_DISK_HAS_EXISTING_PARTITIONS:
-        return "Contains existing partitions";
-    case CLASSICSETUP_DISK_SYSTEM:
-        return "Running Linux system disk - not available";
-    case CLASSICSETUP_DISK_INSTALL_MEDIA:
-        return "ClassicSetup installation media - not available";
-    case CLASSICSETUP_DISK_REMOVABLE:
-        return "Removable disk - Advanced only";
-    case CLASSICSETUP_DISK_UNKNOWN:
-        return "Identity or safety status unknown";
-    }
-    return "Unknown";
-}
-
 static void format_size(
     unsigned long long bytes,
     char *text,
@@ -61,21 +40,28 @@ classicsetup_show_recommended_disk_selection(
         int key;
 
         classicsetup_tui_begin_screen("ClassicSetup - Choose a Disk");
-        classicsetup_tui_add_centered(
-            3,
-            firmware == CLASSICSETUP_FIRMWARE_UEFI
-                ? "Recommended installation uses UEFI with GPT."
-                : firmware == CLASSICSETUP_FIRMWARE_BIOS
-                      ? "Legacy BIOS automatic installation is not enabled."
-                      : "Firmware mode could not be identified safely.");
+        classicsetup_tui_add_text(
+            4,
+            4,
+            "The following list shows the disks available for Windows installation.");
+        classicsetup_tui_add_text(
+            5,
+            4,
+            "Use the UP and DOWN ARROW keys to select a disk.");
         if (scan_failed || assessment_count == 0) {
             classicsetup_tui_add_centered(
                 LINES / 2,
                 scan_failed ? "Disk information could not be read safely."
                             : "No disks were found.");
         } else {
+            int frame_bottom = LINES - 7;
+            int frame_right = COLS - 3;
+
+            if (frame_bottom > 9 && frame_right > 20) {
+                classicsetup_tui_draw_frame(7, 2, frame_bottom, frame_right);
+            }
             for (index = 0;
-                 index < assessment_count && 6 + (int)(index * 3) < LINES - 5;
+                 index < assessment_count && 8 + (int)(index * 3) < LINES - 8;
                  ++index) {
                 char line[256];
                 char size[32];
@@ -84,43 +70,41 @@ classicsetup_show_recommended_disk_selection(
                     assessments[index].disk.size_bytes,
                     size,
                     sizeof(size));
-                if (index == selected) {
-                    attron(A_REVERSE | A_BOLD);
-                }
                 snprintf(
                     line,
                     sizeof(line),
-                    "%c %s    %s",
-                    index == selected ? '>' : ' ',
+                    "%s    %s",
                     assessments[index].disk.model,
                     size);
-                classicsetup_tui_add_centered(6 + (int)(index * 3), line);
-                if (index == selected) {
-                    attroff(A_REVERSE | A_BOLD);
-                }
-                classicsetup_tui_add_centered(
-                    7 + (int)(index * 3),
-                    disk_class_name(assessments[index].disk_class));
+                classicsetup_tui_draw_list_row(
+                    8 + (int)(index * 3),
+                    4,
+                    COLS - 8,
+                    line,
+                    index == selected);
+                classicsetup_tui_add_text(
+                    9 + (int)(index * 3),
+                    6,
+                    assessments[index].presentation);
                 snprintf(
                     line,
                     sizeof(line),
                     "Device: %s",
                     assessments[index].disk.device_path);
-                classicsetup_tui_add_centered(8 + (int)(index * 3), line);
+                classicsetup_tui_add_text(10 + (int)(index * 3), 6, line);
             }
         }
-        attron(A_BOLD);
         if (assessment_count > 0 &&
             (!assessments[selected].selectable ||
              firmware != CLASSICSETUP_FIRMWARE_UEFI)) {
-            classicsetup_tui_add_centered(
+            classicsetup_tui_draw_warning(
                 LINES - 5,
-                "Choose another disk, or press B and select Advanced installation.");
+                classicsetup_recommended_policy_reason(
+                    assessments[selected].disk_class,
+                    firmware));
         }
-        classicsetup_tui_add_centered(
-            LINES - 3,
+        classicsetup_tui_draw_footer(
             "UP/DOWN=Select    ENTER=Continue    B=Back    Q=Quit");
-        attroff(A_BOLD);
         refresh();
 
         key = getch();
@@ -146,22 +130,19 @@ classicsetup_show_recommended_disk_selection(
     }
 }
 
-enum classicsetup_simple_screen_result
-classicsetup_show_windows_source_placeholder(void)
+static enum classicsetup_simple_screen_result show_placeholder(
+    const char *title,
+    const char *line_one,
+    const char *line_two)
 {
     for (;;) {
         int key;
 
-        classicsetup_tui_begin_screen("ClassicSetup - Windows Source");
-        classicsetup_tui_add_centered(
-            LINES / 2 - 1,
-            "Windows download and image selection will be added next.");
-        classicsetup_tui_add_centered(
-            LINES / 2 + 1,
-            "M9 uses a placeholder source only.");
-        classicsetup_tui_add_centered(
-            LINES - 3,
-            "ENTER=Continue    B=Back    Q=Quit");
+        classicsetup_tui_begin_screen(title);
+        classicsetup_tui_add_text(5, 4, line_one);
+        classicsetup_tui_add_text(7, 4, line_two);
+        classicsetup_tui_draw_frame(9, 3, LINES - 4, COLS - 4);
+        classicsetup_tui_draw_footer("ENTER=Continue    B=Back    Q=Quit");
         refresh();
         key = getch();
         if (key == '\n' || key == '\r' || key == KEY_ENTER) {
@@ -176,6 +157,57 @@ classicsetup_show_windows_source_placeholder(void)
     }
 }
 
+enum classicsetup_simple_screen_result
+classicsetup_show_windows_source_placeholder(void)
+{
+    return classicsetup_show_windows_download_placeholder();
+}
+
+enum classicsetup_simple_screen_result
+classicsetup_show_recommended_gui_transition(void)
+{
+    return show_placeholder(
+        "ClassicSetup - Recommended Installation",
+        "Recommended installation is separated from the Advanced TUI.",
+        "A GTK frontend will take ownership at this boundary in a future milestone.");
+}
+
+enum classicsetup_simple_screen_result
+classicsetup_show_network_placeholder(void)
+{
+    return show_placeholder(
+        "ClassicSetup - Network",
+        "Network selection will be provided by the Recommended GUI.",
+        "No network configuration is changed in this milestone.");
+}
+
+enum classicsetup_simple_screen_result
+classicsetup_show_windows_version_placeholder(void)
+{
+    return show_placeholder(
+        "ClassicSetup - Windows Version",
+        "Windows 10 and Windows 11 selection will be added later.",
+        "No source has been selected or downloaded.");
+}
+
+enum classicsetup_simple_screen_result
+classicsetup_show_windows_download_placeholder(void)
+{
+    return show_placeholder(
+        "ClassicSetup - Windows Download",
+        "Windows source discovery and download will be added later.",
+        "No ISO, WIM, or ESD operation is performed.");
+}
+
+enum classicsetup_simple_screen_result
+classicsetup_show_install_options_placeholder(void)
+{
+    return show_placeholder(
+        "ClassicSetup - Installation Options",
+        "Recommended unattended installation options will be added later.",
+        "The current storage plan continues to use safe automatic defaults.");
+}
+
 enum classicsetup_install_summary_result classicsetup_show_install_summary(
     const struct classicsetup_recommended_plan *plan)
 {
@@ -185,7 +217,7 @@ enum classicsetup_install_summary_result classicsetup_show_install_summary(
         int key;
 
         classicsetup_tui_begin_screen("ClassicSetup - Ready to Install");
-        classicsetup_tui_add_centered(3, "Windows source: Placeholder");
+        classicsetup_tui_add_text(4, 4, "Windows source: Not selected (placeholder)");
         if (plan != NULL) {
             format_size(
                 plan->apply_plan.target_disk.size_bytes,
@@ -197,21 +229,19 @@ enum classicsetup_install_summary_result classicsetup_show_install_summary(
                 "Target: %s    %s",
                 plan->apply_plan.target_disk.model,
                 size);
-            classicsetup_tui_add_centered(6, line);
-            classicsetup_tui_add_centered(8, "Installation mode: UEFI / GPT");
+            classicsetup_tui_add_text(7, 6, line);
+            classicsetup_tui_add_text(9, 6, "Installation mode: UEFI / GPT");
         }
-        classicsetup_tui_add_centered(
+        classicsetup_tui_add_text(
             11,
+            6,
             "ClassicSetup will create the required Windows partitions,");
-        classicsetup_tui_add_centered(
+        classicsetup_tui_add_text(
             12,
+            6,
             "format the Windows partition as NTFS Quick, and verify the disk.");
-        attron(A_BOLD);
-        classicsetup_tui_add_centered(15, "WARNING: All data on this disk will be erased.");
-        classicsetup_tui_add_centered(
-            LINES - 3,
-            "A=Install    B=Back    Q=Quit");
-        attroff(A_BOLD);
+        classicsetup_tui_draw_warning(15, "WARNING: All data on this disk will be erased.");
+        classicsetup_tui_draw_footer("A=Install    B=Back    Q=Quit");
         refresh();
 
         key = getch();
@@ -276,8 +306,7 @@ enum classicsetup_simple_screen_result classicsetup_show_recommended_result(
                 LINES / 2,
                 "The filesystem apply plan could not be built safely.");
         }
-        classicsetup_tui_add_centered(
-            LINES - 3,
+        classicsetup_tui_draw_footer(
             success ? "ENTER=Continue    B=Back    Q=Quit"
                     : "B=Back    Q=Quit");
         refresh();
@@ -295,7 +324,7 @@ enum classicsetup_simple_screen_result classicsetup_show_recommended_result(
 }
 
 enum classicsetup_simple_screen_result
-classicsetup_show_gui_transition_placeholder(void)
+classicsetup_show_next_stage_placeholder(void)
 {
     for (;;) {
         int key;
@@ -307,9 +336,7 @@ classicsetup_show_gui_transition_placeholder(void)
         classicsetup_tui_add_centered(
             LINES / 2 + 1,
             "GTK and Windows image application are not implemented yet.");
-        classicsetup_tui_add_centered(
-            LINES - 3,
-            "ENTER=Finish    B=Back    Q=Quit");
+        classicsetup_tui_draw_footer("ENTER=Finish    B=Back    Q=Quit");
         refresh();
         key = getch();
         if (key == '\n' || key == '\r' || key == KEY_ENTER) {

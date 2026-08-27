@@ -27,6 +27,7 @@ static struct classicsetup_disk_info make_disk(void)
     strcpy(disk.model, "Mock VMware Empty Disk");
     strcpy(disk.serial, "M9-TEST-DISK-001");
     strcpy(disk.transport, "scsi");
+    strcpy(disk.sysfs_path, "/sys/devices/mock/block/sdz");
     return disk;
 }
 
@@ -54,72 +55,97 @@ static void test_default_mode_and_firmware_detection(void)
 static void test_disk_classification_policy(void)
 {
     struct classicsetup_disk_info disk = make_disk();
+    struct classicsetup_disk_facts facts = {
+        .partition_scan_succeeded = 1,
+        .system_disk_status = CLASSICSETUP_SYSTEM_DISK_SAFE
+    };
 
     assert(classicsetup_disk_has_recommended_identity(&disk));
-    assert(classicsetup_classify_disk(
-               &disk,
-               1,
-               0,
-               0,
-               CLASSICSETUP_SYSTEM_DISK_SAFE) ==
-           CLASSICSETUP_DISK_EMPTY);
+    assert(classicsetup_classify_disk_facts(
+               &disk, &facts, CLASSICSETUP_ENV_UNKNOWN) ==
+           CLASSICSETUP_DISK_RAW_EMPTY);
     assert(classicsetup_disk_class_is_recommended_selectable(
-        CLASSICSETUP_DISK_EMPTY));
-    assert(classicsetup_classify_disk(
-               &disk,
-               1,
-               2,
-               0,
-               CLASSICSETUP_SYSTEM_DISK_SAFE) ==
-           CLASSICSETUP_DISK_HAS_EXISTING_PARTITIONS);
-    assert(classicsetup_classify_disk(
-               &disk,
-               1,
-               2,
-               1,
-               CLASSICSETUP_SYSTEM_DISK_SAFE) ==
-           CLASSICSETUP_DISK_HAS_UNALLOCATED_SPACE);
-    assert(classicsetup_classify_disk(
-               &disk,
-               1,
-               0,
-               0,
-               CLASSICSETUP_SYSTEM_DISK_TARGET_IN_USE) ==
+        CLASSICSETUP_DISK_RAW_EMPTY));
+
+    facts.partition_table_present = 1;
+    facts.partition_count = 2;
+    facts.filesystems_inspected = 1;
+    facts.all_partitions_confirmed_empty = 1;
+    assert(classicsetup_classify_disk_facts(
+               &disk, &facts, CLASSICSETUP_ENV_UNKNOWN) ==
+           CLASSICSETUP_DISK_PARTITIONED_EMPTY);
+    assert(classicsetup_recommended_policy_for_disk(
+               CLASSICSETUP_DISK_PARTITIONED_EMPTY) ==
+           CLASSICSETUP_RECOMMENDED_REINITIALIZE_WITH_WARNING);
+
+    facts.all_partitions_confirmed_empty = 0;
+    facts.windows_detected = 1;
+    assert(classicsetup_classify_disk_facts(
+               &disk, &facts, CLASSICSETUP_ENV_UNKNOWN) ==
+           CLASSICSETUP_DISK_WINDOWS);
+    facts.windows_detected = 0;
+    facts.user_data_detected = 1;
+    assert(classicsetup_classify_disk_facts(
+               &disk, &facts, CLASSICSETUP_ENV_UNKNOWN) ==
+           CLASSICSETUP_DISK_DATA_PRESENT);
+    facts.user_data_detected = 0;
+    facts.encryption_detected = 1;
+    assert(classicsetup_classify_disk_facts(
+               &disk, &facts, CLASSICSETUP_ENV_UNKNOWN) ==
+           CLASSICSETUP_DISK_WINDOWS_ENCRYPTED_LOCKED);
+    assert(!classicsetup_disk_class_is_recommended_selectable(
+        CLASSICSETUP_DISK_WINDOWS_ENCRYPTED_LOCKED));
+
+    facts.encryption_detected = 0;
+    facts.complex_storage = 1;
+    assert(classicsetup_classify_disk_facts(
+               &disk, &facts, CLASSICSETUP_ENV_UNKNOWN) ==
+           CLASSICSETUP_DISK_WINDOWS_COMPLEX);
+    facts.complex_storage = 0;
+    facts.unknown_filesystem = 1;
+    assert(classicsetup_classify_disk_facts(
+               &disk, &facts, CLASSICSETUP_ENV_UNKNOWN) ==
+           CLASSICSETUP_DISK_UNKNOWN_FILESYSTEM);
+
+    facts.system_disk_status = CLASSICSETUP_SYSTEM_DISK_TARGET_IN_USE;
+    assert(classicsetup_classify_disk_facts(
+               &disk, &facts, CLASSICSETUP_ENV_UNKNOWN) ==
            CLASSICSETUP_DISK_SYSTEM);
 
     disk.removable = true;
-    assert(classicsetup_classify_disk(
-               &disk,
-               1,
-               0,
-               0,
-               CLASSICSETUP_SYSTEM_DISK_TARGET_IN_USE) ==
+    assert(classicsetup_classify_disk_facts(
+               &disk, &facts, CLASSICSETUP_ENV_UNKNOWN) ==
            CLASSICSETUP_DISK_INSTALL_MEDIA);
-    assert(classicsetup_classify_disk(
-               &disk,
-               1,
-               0,
-               0,
-               CLASSICSETUP_SYSTEM_DISK_SAFE) ==
+    facts.system_disk_status = CLASSICSETUP_SYSTEM_DISK_SAFE;
+    assert(classicsetup_classify_disk_facts(
+               &disk, &facts, CLASSICSETUP_ENV_UNKNOWN) ==
            CLASSICSETUP_DISK_REMOVABLE);
 
     disk = make_disk();
     disk.has_serial = false;
     disk.serial[0] = '\0';
-    assert(classicsetup_classify_disk(
-               &disk,
-               1,
-               0,
-               0,
-               CLASSICSETUP_SYSTEM_DISK_SAFE) ==
+    memset(&facts, 0, sizeof(facts));
+    facts.partition_scan_succeeded = 1;
+    facts.system_disk_status = CLASSICSETUP_SYSTEM_DISK_SAFE;
+    assert(classicsetup_classify_disk_facts(
+               &disk, &facts, CLASSICSETUP_ENV_UNKNOWN) ==
            CLASSICSETUP_DISK_UNKNOWN);
-    assert(classicsetup_classify_disk(
-               &disk,
-               0,
-               0,
-               0,
-               CLASSICSETUP_SYSTEM_DISK_SAFE) ==
-           CLASSICSETUP_DISK_UNKNOWN);
+    assert(classicsetup_disk_has_vm_test_identity(&disk));
+    assert(classicsetup_classify_disk_facts(
+               &disk, &facts, CLASSICSETUP_ENV_VMWARE) ==
+           CLASSICSETUP_DISK_RAW_EMPTY);
+    assert(classicsetup_recommended_policy_for_disk(
+               CLASSICSETUP_DISK_RAW_EMPTY) ==
+           CLASSICSETUP_RECOMMENDED_AUTO_INSTALL_ALLOWED);
+    assert(strstr(
+               classicsetup_recommended_policy_reason(
+                   CLASSICSETUP_DISK_RAW_EMPTY,
+                   CLASSICSETUP_FIRMWARE_BIOS),
+               "Restart in UEFI") != NULL);
+    assert(strcmp(
+               classicsetup_disk_class_presentation(
+                   CLASSICSETUP_DISK_WINDOWS),
+               "Existing Windows installation") == 0);
     assert(!classicsetup_disk_class_is_recommended_selectable(
         CLASSICSETUP_DISK_UNKNOWN));
 }
@@ -132,7 +158,7 @@ static struct classicsetup_recommended_plan make_plan(void)
     assert(classicsetup_build_recommended_plan(
                CLASSICSETUP_FIRMWARE_UEFI,
                &disk,
-               CLASSICSETUP_DISK_EMPTY,
+               CLASSICSETUP_DISK_RAW_EMPTY,
                &plan) == 0);
     return plan;
 }
@@ -155,17 +181,17 @@ static void test_recommended_auto_plan(void)
     assert(classicsetup_build_recommended_plan(
                CLASSICSETUP_FIRMWARE_BIOS,
                &disk,
-               CLASSICSETUP_DISK_EMPTY,
+               CLASSICSETUP_DISK_RAW_EMPTY,
                &plan) == -1);
     assert(classicsetup_build_recommended_plan(
                CLASSICSETUP_FIRMWARE_UNKNOWN,
                &disk,
-               CLASSICSETUP_DISK_EMPTY,
+               CLASSICSETUP_DISK_RAW_EMPTY,
                &plan) == -1);
     assert(classicsetup_build_recommended_plan(
                CLASSICSETUP_FIRMWARE_UEFI,
                &disk,
-               CLASSICSETUP_DISK_HAS_EXISTING_PARTITIONS,
+               CLASSICSETUP_DISK_DATA_PRESENT,
                &plan) == -1);
 }
 

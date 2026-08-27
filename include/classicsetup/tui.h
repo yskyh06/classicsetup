@@ -8,5 +8,15 @@ void classicsetup_tui_shutdown(void);
 
 void classicsetup_tui_begin_screen(const char *title);
 void classicsetup_tui_add_centered(int row, const char *text);
+void classicsetup_tui_add_text(int row, int column, const char *text);
+void classicsetup_tui_draw_frame(int top, int left, int bottom, int right);
+void classicsetup_tui_draw_list_row(
+    int row,
+    int left,
+    int width,
+    const char *text,
+    bool selected);
+void classicsetup_tui_draw_footer(const char *text);
+void classicsetup_tui_draw_warning(int row, const char *text);
 
 #endif

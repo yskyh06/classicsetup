@@ -40,13 +40,7 @@ static void draw_at(int row, const char *text, bool selected)
         return;
     }
 
-    if (selected) {
-        attron(A_REVERSE | A_BOLD);
-    }
-    mvaddnstr(row, 2, text, COLS - 4);
-    if (selected) {
-        attroff(A_REVERSE | A_BOLD);
-    }
+    classicsetup_tui_draw_list_row(row, 3, COLS - 6, text, selected);
 }
 
 static const char *state_tag(enum classicsetup_plan_item_state state)
@@ -170,20 +164,11 @@ static void draw_partition_footer(
     const struct partition_screen_layout *layout,
     bool has_windows_layout)
 {
-    if (COLS >= 58) {
-        draw_at(
-            layout->footer_top,
-            has_windows_layout
-                ? "ENTER=Install  C=Create  D=Delete  U=Undo Layout"
-                : "ENTER=Install  C=Create  D=Delete",
-            false);
-        draw_at(layout->footer_bottom, "B=Back  Q=Quit", false);
-    } else {
-        draw_at(
-            layout->footer_top,
-            has_windows_layout ? "ENTER C D U B Q" : "ENTER C D B Q",
-            false);
-    }
+    (void)layout;
+    classicsetup_tui_draw_footer(
+        has_windows_layout
+            ? "ENTER=Install  C=Create  D=Delete  U=Undo Layout  B=Back  Q=Quit"
+            : "ENTER=Install  C=Create  D=Delete  B=Back  Q=Quit");
 }
 
 static void draw_partition_screen(
@@ -223,6 +208,13 @@ static void draw_partition_screen(
             ? "Legacy BIOS/MBR"
             : "UEFI/GPT");
     draw_at(layout.disk_row, line, false);
+    if (layout.list_end > layout.list_top && COLS > 12) {
+        classicsetup_tui_draw_frame(
+            layout.list_top - 1,
+            2,
+            layout.list_end,
+            COLS - 3);
+    }
 
     if (plan->item_count == 0) {
         if (LINES >= 6) {
@@ -272,7 +264,7 @@ static void draw_partition_screen(
                 plan,
                 install_mode));
     } else {
-        draw_at(layout.footer_top, "B=Back  Q=Quit", false);
+        classicsetup_tui_draw_footer("B=Back  Q=Quit");
     }
     attroff(A_BOLD);
     refresh();
@@ -313,8 +305,7 @@ static enum modal_result prompt_create_size(
         snprintf(line, sizeof(line), "[ %s ]", input);
         classicsetup_tui_add_centered(LINES / 2 + 1, line);
         classicsetup_tui_add_centered(LINES / 2 + 3, message);
-        classicsetup_tui_add_centered(
-            LINES - 3,
+        classicsetup_tui_draw_footer(
             "ENTER=Create    BACKSPACE=Edit    ESC=Cancel    Q=Quit");
         refresh();
 
@@ -382,8 +373,7 @@ static enum modal_result show_windows_layout_error(void)
         classicsetup_tui_add_centered(
             LINES / 2 + 1,
             "The planned layout was not changed.");
-        classicsetup_tui_add_centered(
-            LINES - 3,
+        classicsetup_tui_draw_footer(
             "ENTER=Return    ESC=Return    Q=Quit");
         refresh();
 
@@ -422,8 +412,7 @@ static enum modal_result confirm_delete(
         attron(A_BOLD);
         classicsetup_tui_add_centered(LINES / 2 + 2, "Press D again to confirm.");
         attroff(A_BOLD);
-        classicsetup_tui_add_centered(
-            LINES - 3,
+        classicsetup_tui_draw_footer(
             "D=Delete    ESC=Cancel    Q=Quit");
         refresh();
 
@@ -461,8 +450,7 @@ static enum modal_result confirm_undo_windows_layout(void)
             LINES / 2 + 2,
             "Press U again to confirm.");
         attroff(A_BOLD);
-        classicsetup_tui_add_centered(
-            LINES - 3,
+        classicsetup_tui_draw_footer(
             "U=Confirm    ESC=Cancel    Q=Quit");
         refresh();
 

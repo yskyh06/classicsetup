@@ -457,6 +457,10 @@ int classicsetup_disk_identity_matches(
         strcmp(selected->transport, current->transport) != 0) {
         return 0;
     }
+    if (selected->sysfs_path[0] != '\0' &&
+        strcmp(selected->sysfs_path, current->sysfs_path) != 0) {
+        return 0;
+    }
     return 1;
 }
 

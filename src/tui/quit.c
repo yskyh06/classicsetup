@@ -14,11 +14,7 @@ enum classicsetup_quit_confirmation_result classicsetup_confirm_quit(void)
     classicsetup_tui_add_centered(
         LINES / 2,
         "If you quit now, Windows will not be installed.");
-    attron(A_BOLD);
-    classicsetup_tui_add_centered(
-        LINES - 3,
-        "Q=Quit Setup    ESC=Continue Setup");
-    attroff(A_BOLD);
+    classicsetup_tui_draw_footer("Q=Quit Setup    ESC=Continue Setup");
     refresh();
 
     for (;;) {

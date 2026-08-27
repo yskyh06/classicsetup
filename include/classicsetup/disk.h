@@ -10,6 +10,7 @@ enum {
     CLASSICSETUP_DISK_MODEL_SIZE = 128,
     CLASSICSETUP_DISK_ID_SIZE = 128,
     CLASSICSETUP_DISK_TRANSPORT_SIZE = 32,
+    CLASSICSETUP_DISK_SYSFS_PATH_SIZE = 512,
     CLASSICSETUP_SECTOR_SIZE_BYTES = 512
 };
 
@@ -20,6 +21,7 @@ struct classicsetup_disk_info {
     char serial[CLASSICSETUP_DISK_ID_SIZE];
     char wwn[CLASSICSETUP_DISK_ID_SIZE];
     char transport[CLASSICSETUP_DISK_TRANSPORT_SIZE];
+    char sysfs_path[CLASSICSETUP_DISK_SYSFS_PATH_SIZE];
     unsigned long long size_bytes;
     unsigned int logical_sector_size;
     bool has_serial;
@@ -30,6 +32,9 @@ struct classicsetup_disk_info {
 };
 
 int classicsetup_disk_has_recommended_identity(
+    const struct classicsetup_disk_info *disk);
+
+int classicsetup_disk_has_vm_test_identity(
     const struct classicsetup_disk_info *disk);
 
 int classicsetup_scan_disks(

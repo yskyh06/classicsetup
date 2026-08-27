@@ -6,6 +6,7 @@
 #include "classicsetup/apply.h"
 #include "classicsetup/format.h"
 #include "classicsetup/format_apply.h"
+#include "classicsetup/environment.h"
 #include "classicsetup/system_disk.h"
 
 enum classicsetup_firmware_mode {
@@ -15,20 +16,54 @@ enum classicsetup_firmware_mode {
 };
 
 enum classicsetup_disk_class {
-    CLASSICSETUP_DISK_EMPTY,
-    CLASSICSETUP_DISK_HAS_UNALLOCATED_SPACE,
-    CLASSICSETUP_DISK_HAS_EXISTING_PARTITIONS,
+    CLASSICSETUP_DISK_RAW_EMPTY,
+    CLASSICSETUP_DISK_PARTITIONED_EMPTY,
+    CLASSICSETUP_DISK_WINDOWS,
+    CLASSICSETUP_DISK_WINDOWS_ENCRYPTED_LOCKED,
+    CLASSICSETUP_DISK_WINDOWS_ENCRYPTED_UNLOCKED,
+    CLASSICSETUP_DISK_WINDOWS_COMPLEX,
+    CLASSICSETUP_DISK_DATA_PRESENT,
+    CLASSICSETUP_DISK_MULTI_OS,
+    CLASSICSETUP_DISK_UNKNOWN_FILESYSTEM,
     CLASSICSETUP_DISK_SYSTEM,
     CLASSICSETUP_DISK_INSTALL_MEDIA,
     CLASSICSETUP_DISK_REMOVABLE,
     CLASSICSETUP_DISK_UNKNOWN
 };
 
+enum classicsetup_recommended_disk_action {
+    CLASSICSETUP_RECOMMENDED_AUTO_INSTALL_ALLOWED,
+    CLASSICSETUP_RECOMMENDED_REINITIALIZE_WITH_WARNING,
+    CLASSICSETUP_RECOMMENDED_KEEP_FILES_FUTURE,
+    CLASSICSETUP_RECOMMENDED_EXPLICIT_ERASE_ONLY,
+    CLASSICSETUP_RECOMMENDED_ADVANCED_ONLY,
+    CLASSICSETUP_RECOMMENDED_BLOCK
+};
+
+struct classicsetup_disk_facts {
+    int partition_scan_succeeded;
+    int partition_table_present;
+    size_t partition_count;
+    int has_usable_unallocated;
+    int filesystems_inspected;
+    int all_partitions_confirmed_empty;
+    int windows_detected;
+    int encryption_detected;
+    int encryption_unlocked;
+    int user_data_detected;
+    int multiple_operating_systems;
+    int complex_storage;
+    int unknown_filesystem;
+    enum classicsetup_system_disk_status system_disk_status;
+};
+
 struct classicsetup_disk_assessment {
     struct classicsetup_disk_info disk;
     enum classicsetup_disk_class disk_class;
+    enum classicsetup_recommended_disk_action action;
     size_t partition_count;
     int selectable;
+    char presentation[192];
 };
 
 struct classicsetup_recommended_plan {
@@ -81,6 +116,22 @@ enum classicsetup_disk_class classicsetup_classify_disk(
     int has_usable_unallocated,
     enum classicsetup_system_disk_status system_disk_status);
 
+enum classicsetup_disk_class classicsetup_classify_disk_facts(
+    const struct classicsetup_disk_info *disk,
+    const struct classicsetup_disk_facts *facts,
+    enum classicsetup_environment environment);
+
+enum classicsetup_recommended_disk_action
+classicsetup_recommended_policy_for_disk(
+    enum classicsetup_disk_class disk_class);
+
+const char *classicsetup_disk_class_presentation(
+    enum classicsetup_disk_class disk_class);
+
+const char *classicsetup_recommended_policy_reason(
+    enum classicsetup_disk_class disk_class,
+    enum classicsetup_firmware_mode firmware);
+
 int classicsetup_disk_class_is_recommended_selectable(
     enum classicsetup_disk_class disk_class);
 
@@ -89,6 +140,11 @@ int classicsetup_recommended_result_can_continue(
 
 int classicsetup_assess_disk(
     const struct classicsetup_disk_info *disk,
+    struct classicsetup_disk_assessment *assessment);
+
+int classicsetup_assess_disk_in_environment(
+    const struct classicsetup_disk_info *disk,
+    enum classicsetup_environment environment,
     struct classicsetup_disk_assessment *assessment);
 
 int classicsetup_build_recommended_plan(

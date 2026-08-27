@@ -23,15 +23,7 @@ static void draw_option(int row, const char *name, bool selected)
         return;
     }
 
-    if (selected) {
-        attron(A_REVERSE | A_BOLD);
-    }
-
-    mvaddnstr(row, column, name, COLS - column);
-
-    if (selected) {
-        attroff(A_REVERSE | A_BOLD);
-    }
+    classicsetup_tui_draw_list_row(row, column, 44, name, selected);
 }
 
 static void draw_keyboard_screen(int selected)
@@ -44,17 +36,22 @@ static void draw_keyboard_screen(int selected)
     }
 
     classicsetup_tui_begin_screen("ClassicSetup Setup");
-    classicsetup_tui_add_centered(first_row - 2, "Choose the keyboard type for this setup.");
+    classicsetup_tui_add_text(
+        first_row - 2,
+        4,
+        "Choose the keyboard type for this setup.");
+    classicsetup_tui_draw_frame(
+        first_row - 1,
+        3,
+        first_row + CLASSICSETUP_KEYBOARD_TYPE_COUNT + 1,
+        COLS - 4);
 
     for (index = 0; index < CLASSICSETUP_KEYBOARD_TYPE_COUNT; ++index) {
         draw_option(first_row + index, keyboard_names[index], index == selected);
     }
 
-    attron(A_BOLD);
-    classicsetup_tui_add_centered(
-        LINES - 3,
+    classicsetup_tui_draw_footer(
         "UP/DOWN=Select    ENTER=Continue    B=Back    Q=Quit");
-    attroff(A_BOLD);
     refresh();
 }
 

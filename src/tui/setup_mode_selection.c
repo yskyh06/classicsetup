@@ -18,31 +18,34 @@ classicsetup_show_setup_mode_selection(
         int key;
 
         classicsetup_tui_begin_screen("ClassicSetup");
-        classicsetup_tui_add_centered(4, "Choose an installation experience.");
-        if (selected == CLASSICSETUP_SETUP_RECOMMENDED) {
-            attron(A_REVERSE | A_BOLD);
-        }
-        classicsetup_tui_add_centered(8, "Recommended installation");
-        if (selected == CLASSICSETUP_SETUP_RECOMMENDED) {
-            attroff(A_REVERSE | A_BOLD);
-        }
-        if (selected == CLASSICSETUP_SETUP_ADVANCED) {
-            attron(A_REVERSE | A_BOLD);
-        }
-        classicsetup_tui_add_centered(10, "Advanced installation");
-        if (selected == CLASSICSETUP_SETUP_ADVANCED) {
-            attroff(A_REVERSE | A_BOLD);
-        }
-        classicsetup_tui_add_centered(
+        classicsetup_tui_add_text(4, 4, "Choose how you want to install Windows.");
+        classicsetup_tui_add_text(
+            5,
+            4,
+            "Use the UP and DOWN ARROW keys to select an option.");
+        classicsetup_tui_draw_frame(7, 3, 15, COLS - 4);
+        classicsetup_tui_draw_list_row(
+            9,
+            5,
+            COLS - 10,
+            "Recommended installation",
+            selected == CLASSICSETUP_SETUP_RECOMMENDED);
+        classicsetup_tui_add_text(
+            10,
+            8,
+            "Automatic settings and a simplified installation experience.");
+        classicsetup_tui_draw_list_row(
+            12,
+            5,
+            COLS - 10,
+            "Advanced installation",
+            selected == CLASSICSETUP_SETUP_ADVANCED);
+        classicsetup_tui_add_text(
             13,
-            selected == CLASSICSETUP_SETUP_RECOMMENDED
-                ? "Automatic safe defaults for an empty test disk."
-                : "Manual firmware, partition, and format choices.");
-        attron(A_BOLD);
-        classicsetup_tui_add_centered(
-            LINES - 3,
+            8,
+            "Manually configure firmware, disks, partitions, and formatting.");
+        classicsetup_tui_draw_footer(
             "UP/DOWN=Select    ENTER=Continue    Q=Quit");
-        attroff(A_BOLD);
         refresh();
 
         key = getch();
