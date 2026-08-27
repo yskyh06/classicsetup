@@ -11,6 +11,7 @@ add_executable(classicsetup
     src/core/disk.c
     src/core/environment.c
     src/core/format.c
+    src/core/format_apply.c
     src/core/install_mode.c
     src/core/partition.c
     src/core/partition_plan.c
@@ -22,6 +23,7 @@ add_executable(classicsetup
     src/tui/apply.c
     src/tui/disk_selection.c
     src/tui/format_selection.c
+    src/tui/format_apply.c
     src/tui/install_mode_selection.c
     src/tui/keymap.c
     src/tui/keyboard.c
@@ -192,6 +194,34 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME apply_safety_and_render COMMAND classicsetup_apply_test)
+
+    add_executable(classicsetup_format_apply_test
+        tests/format_apply_test.c
+        src/core/apply.c
+        src/core/disk.c
+        src/core/environment.c
+        src/core/format.c
+        src/core/format_apply.c
+        src/core/partition.c
+        src/core/partition_plan.c
+        src/core/process.c
+        src/core/system_disk.c
+    )
+
+    set_target_properties(classicsetup_format_apply_test PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED YES
+        C_EXTENSIONS NO
+    )
+
+    target_include_directories(classicsetup_format_apply_test PRIVATE include)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(classicsetup_format_apply_test PRIVATE
+            -Wall -Wextra -Wpedantic
+        )
+    endif()
+
+    add_test(NAME format_apply COMMAND classicsetup_format_apply_test)
 
     add_executable(classicsetup_key_mapping_test
         tests/key_mapping_test.c

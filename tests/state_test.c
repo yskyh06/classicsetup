@@ -36,6 +36,18 @@ static void test_continue_flow(void)
     assert(classicsetup_next_state(
                CLASSICSETUP_STATE_APPLY_RESULT,
                CLASSICSETUP_EVENT_CONTINUE) ==
+           CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW);
+    assert(classicsetup_next_state(
+               CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW,
+               CLASSICSETUP_EVENT_CONTINUE) ==
+           CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION);
+    assert(classicsetup_next_state(
+               CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION,
+               CLASSICSETUP_EVENT_CONTINUE) ==
+           CLASSICSETUP_STATE_FORMAT_APPLY_RESULT);
+    assert(classicsetup_next_state(
+               CLASSICSETUP_STATE_FORMAT_APPLY_RESULT,
+               CLASSICSETUP_EVENT_CONTINUE) ==
            CLASSICSETUP_STATE_AFTER_FORMAT);
     assert(classicsetup_next_state(
                CLASSICSETUP_STATE_AFTER_FORMAT,
@@ -79,6 +91,18 @@ static void test_cancel_policy(void)
                CLASSICSETUP_STATE_APPLY_RESULT,
                CLASSICSETUP_EVENT_CANCEL) ==
            CLASSICSETUP_STATE_APPLY_RESULT);
+    assert(classicsetup_next_state(
+               CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW,
+               CLASSICSETUP_EVENT_CANCEL) ==
+           CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW);
+    assert(classicsetup_next_state(
+               CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION,
+               CLASSICSETUP_EVENT_CANCEL) ==
+           CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION);
+    assert(classicsetup_next_state(
+               CLASSICSETUP_STATE_FORMAT_APPLY_RESULT,
+               CLASSICSETUP_EVENT_CANCEL) ==
+           CLASSICSETUP_STATE_FORMAT_APPLY_RESULT);
 }
 
 static void test_back_policy(void)
@@ -114,9 +138,21 @@ static void test_back_policy(void)
                CLASSICSETUP_EVENT_BACK) ==
            CLASSICSETUP_STATE_APPLY_PREVIEW);
     assert(classicsetup_next_state(
-               CLASSICSETUP_STATE_AFTER_FORMAT,
+               CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW,
                CLASSICSETUP_EVENT_BACK) ==
            CLASSICSETUP_STATE_APPLY_RESULT);
+    assert(classicsetup_next_state(
+               CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION,
+               CLASSICSETUP_EVENT_BACK) ==
+           CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW);
+    assert(classicsetup_next_state(
+               CLASSICSETUP_STATE_FORMAT_APPLY_RESULT,
+               CLASSICSETUP_EVENT_BACK) ==
+           CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW);
+    assert(classicsetup_next_state(
+               CLASSICSETUP_STATE_AFTER_FORMAT,
+               CLASSICSETUP_EVENT_BACK) ==
+           CLASSICSETUP_STATE_FORMAT_APPLY_RESULT);
 }
 
 static void test_quit_request_policy(void)
@@ -131,6 +167,9 @@ static void test_quit_request_policy(void)
         CLASSICSETUP_STATE_APPLY_PREVIEW,
         CLASSICSETUP_STATE_APPLY_CONFIRMATION,
         CLASSICSETUP_STATE_APPLY_RESULT,
+        CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW,
+        CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION,
+        CLASSICSETUP_STATE_FORMAT_APPLY_RESULT,
         CLASSICSETUP_STATE_AFTER_FORMAT
     };
     size_t index;

@@ -10,6 +10,8 @@
 #include "classicsetup/disk.h"
 #include "classicsetup/disk_selection.h"
 #include "classicsetup/format_selection.h"
+#include "classicsetup/format_apply.h"
+#include "classicsetup/format_apply_tui.h"
 #include "classicsetup/install_mode_selection.h"
 #include "classicsetup/keyboard.h"
 #include "classicsetup/partition.h"
@@ -267,6 +269,7 @@ static enum classicsetup_event show_apply_confirmation(
     }
     result = classicsetup_show_apply_confirmation(&config->apply_plan);
     if (result == CLASSICSETUP_APPLY_CONFIRMATION_APPLY) {
+        classicsetup_config_clear_format_apply_state(config);
         if (classicsetup_execute_apply_plan(
                 &config->apply_plan,
                 &config->apply_result) != 0) {
@@ -277,6 +280,88 @@ static enum classicsetup_event show_apply_confirmation(
         return CLASSICSETUP_EVENT_CONTINUE;
     }
     if (result == CLASSICSETUP_APPLY_CONFIRMATION_BACK) {
+        return CLASSICSETUP_EVENT_BACK;
+    }
+    return CLASSICSETUP_EVENT_QUIT_REQUEST;
+}
+
+static enum classicsetup_event show_format_apply_preview(
+    struct classicsetup_config *config)
+{
+    struct classicsetup_partition_info partitions[
+        CLASSICSETUP_CONFIG_MAX_ORIGINAL_PARTITIONS];
+    enum classicsetup_format_apply_preview_result result;
+    size_t partition_count = 0;
+
+    memset(&config->format_apply_plan, 0, sizeof(config->format_apply_plan));
+    config->has_format_apply_plan = false;
+    if (config->apply_result.code == CLASSICSETUP_APPLY_RESULT_SUCCESS &&
+        classicsetup_scan_partitions(
+            &config->selected_disk,
+            partitions,
+            CLASSICSETUP_CONFIG_MAX_ORIGINAL_PARTITIONS,
+            &partition_count) == 0) {
+        config->has_format_apply_plan =
+            classicsetup_build_format_apply_plan(
+                &config->apply_plan,
+                config->role_format_plans,
+                partitions,
+                partition_count,
+                &config->format_apply_plan) == 0;
+    }
+    result = classicsetup_show_format_apply_preview(
+        &config->format_apply_plan,
+        &config->format_result,
+        config->has_format_apply_plan);
+    if (result == CLASSICSETUP_FORMAT_APPLY_PREVIEW_CONTINUE) {
+        return CLASSICSETUP_EVENT_CONTINUE;
+    }
+    if (result == CLASSICSETUP_FORMAT_APPLY_PREVIEW_BACK) {
+        return CLASSICSETUP_EVENT_BACK;
+    }
+    return CLASSICSETUP_EVENT_QUIT_REQUEST;
+}
+
+static enum classicsetup_event show_format_apply_confirmation(
+    struct classicsetup_config *config)
+{
+    enum classicsetup_format_apply_confirmation_result result;
+
+    if (!config->has_format_apply_plan ||
+        !classicsetup_validate_format_apply_plan(
+            &config->format_apply_plan)) {
+        return CLASSICSETUP_EVENT_BACK;
+    }
+    result = classicsetup_show_format_apply_confirmation(
+        &config->format_apply_plan);
+    if (result == CLASSICSETUP_FORMAT_APPLY_CONFIRMATION_APPLY) {
+        if (classicsetup_execute_format_apply_plan(
+                &config->format_apply_plan,
+                &config->format_result) != 0) {
+            memset(&config->format_result, 0, sizeof(config->format_result));
+            config->format_result.code =
+                CLASSICSETUP_FORMAT_RESULT_PROCESS_FAILED;
+        }
+        return CLASSICSETUP_EVENT_CONTINUE;
+    }
+    if (result == CLASSICSETUP_FORMAT_APPLY_CONFIRMATION_BACK) {
+        return CLASSICSETUP_EVENT_BACK;
+    }
+    return CLASSICSETUP_EVENT_QUIT_REQUEST;
+}
+
+static enum classicsetup_event show_format_apply_result(
+    const struct classicsetup_config *config)
+{
+    enum classicsetup_format_apply_result_screen_result result =
+        classicsetup_show_format_apply_result(
+            &config->format_apply_plan,
+            &config->format_result);
+
+    if (result == CLASSICSETUP_FORMAT_APPLY_RESULT_SCREEN_CONTINUE) {
+        return CLASSICSETUP_EVENT_CONTINUE;
+    }
+    if (result == CLASSICSETUP_FORMAT_APPLY_RESULT_SCREEN_BACK) {
         return CLASSICSETUP_EVENT_BACK;
     }
     return CLASSICSETUP_EVENT_QUIT_REQUEST;
@@ -302,7 +387,8 @@ static enum classicsetup_event show_after_format(
 {
     enum classicsetup_after_format_result result =
         classicsetup_show_after_format(
-            config->apply_result.code == CLASSICSETUP_APPLY_RESULT_SUCCESS);
+            config->format_result.code ==
+                CLASSICSETUP_FORMAT_RESULT_SUCCESS);
 
     if (result == CLASSICSETUP_AFTER_FORMAT_FINISH) {
         return CLASSICSETUP_EVENT_CONTINUE;
@@ -348,6 +434,12 @@ int classicsetup_run(void)
             event = show_apply_confirmation(&config);
         } else if (state == CLASSICSETUP_STATE_APPLY_RESULT) {
             event = show_apply_result(&config);
+        } else if (state == CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW) {
+            event = show_format_apply_preview(&config);
+        } else if (state == CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION) {
+            event = show_format_apply_confirmation(&config);
+        } else if (state == CLASSICSETUP_STATE_FORMAT_APPLY_RESULT) {
+            event = show_format_apply_result(&config);
         } else if (state == CLASSICSETUP_STATE_AFTER_FORMAT) {
             event = show_after_format(&config);
         }

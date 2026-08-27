@@ -215,7 +215,7 @@ enum classicsetup_apply_result_screen_result classicsetup_show_apply_result(
     for (;;) {
         int key;
 
-        classicsetup_tui_begin_screen("ClassicSetup - Apply Result");
+        classicsetup_tui_begin_screen("ClassicSetup - Partition Apply Result");
         classicsetup_tui_add_centered(LINES / 2 - 2, message);
         if (!success) {
             classicsetup_tui_add_centered(
@@ -224,7 +224,7 @@ enum classicsetup_apply_result_screen_result classicsetup_show_apply_result(
         } else {
             classicsetup_tui_add_centered(
                 LINES / 2,
-                "No filesystem has been created in this milestone.");
+                "Filesystem creation is the next confirmed step.");
         }
         attron(A_BOLD);
         classicsetup_tui_add_centered(

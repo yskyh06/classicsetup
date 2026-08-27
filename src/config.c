@@ -27,6 +27,15 @@ void classicsetup_config_clear_apply_state(struct classicsetup_config *config)
     memset(&config->apply_plan, 0, sizeof(config->apply_plan));
     config->has_apply_plan = false;
     memset(&config->apply_result, 0, sizeof(config->apply_result));
+    classicsetup_config_clear_format_apply_state(config);
+}
+
+void classicsetup_config_clear_format_apply_state(
+    struct classicsetup_config *config)
+{
+    memset(&config->format_apply_plan, 0, sizeof(config->format_apply_plan));
+    config->has_format_apply_plan = false;
+    memset(&config->format_result, 0, sizeof(config->format_result));
 }
 
 void classicsetup_config_reset_partition_plan(

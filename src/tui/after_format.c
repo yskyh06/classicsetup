@@ -6,17 +6,17 @@
 #include "classicsetup/tui.h"
 
 enum classicsetup_after_format_result classicsetup_show_after_format(
-    int partitions_applied)
+    int filesystems_applied)
 {
-    classicsetup_tui_begin_screen("ClassicSetup - Partition Step Complete");
+    classicsetup_tui_begin_screen("ClassicSetup - Storage Step Complete");
     classicsetup_tui_add_centered(
         LINES / 2 - 2,
-        partitions_applied
-            ? "The GPT partition layout was applied and verified."
-            : "The partition apply step has not completed.");
+        filesystems_applied
+            ? "The partition layout and filesystems were applied and verified."
+            : "The filesystem apply step has not completed.");
     classicsetup_tui_add_centered(
         LINES / 2,
-        "The filesystem format plan is still stored only in memory.");
+        "Windows image application is not implemented yet.");
     classicsetup_tui_add_centered(
         LINES / 2 + 1,
         "Later installation steps are not implemented yet.");

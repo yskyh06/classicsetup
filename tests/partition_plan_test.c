@@ -996,6 +996,9 @@ static void populate_stale_config(struct classicsetup_config *config)
         CLASSICSETUP_PARTITION_ROLE_WINDOWS].valid = true;
     config->has_apply_plan = true;
     config->apply_result.code = CLASSICSETUP_APPLY_RESULT_SUCCESS;
+    config->has_format_apply_plan = true;
+    config->format_apply_plan.partition_count = 1;
+    config->format_result.code = CLASSICSETUP_FORMAT_RESULT_SUCCESS;
 }
 
 static void assert_mode_change_cleared(
@@ -1013,6 +1016,9 @@ static void assert_mode_change_cleared(
     assert(!config->has_apply_plan);
     assert(config->apply_plan.partition_count == 0);
     assert(config->apply_result.code == CLASSICSETUP_APPLY_RESULT_NOT_RUN);
+    assert(!config->has_format_apply_plan);
+    assert(config->format_apply_plan.partition_count == 0);
+    assert(config->format_result.code == CLASSICSETUP_FORMAT_RESULT_NOT_RUN);
 }
 
 static void test_install_mode_default_and_reset(void)

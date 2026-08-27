@@ -8,6 +8,6 @@ enum classicsetup_after_format_result {
 };
 
 enum classicsetup_after_format_result classicsetup_show_after_format(
-    int partitions_applied);
+    int filesystems_applied);
 
 #endif

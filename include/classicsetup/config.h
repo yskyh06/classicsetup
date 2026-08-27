@@ -6,6 +6,7 @@
 #include "classicsetup/apply.h"
 #include "classicsetup/disk.h"
 #include "classicsetup/format.h"
+#include "classicsetup/format_apply.h"
 #include "classicsetup/install_mode.h"
 #include "classicsetup/partition.h"
 #include "classicsetup/partition_plan.h"
@@ -43,6 +44,9 @@ struct classicsetup_config {
     struct classicsetup_apply_plan apply_plan;
     bool has_apply_plan;
     struct classicsetup_apply_result apply_result;
+    struct classicsetup_format_apply_plan format_apply_plan;
+    bool has_format_apply_plan;
+    struct classicsetup_format_result format_result;
 };
 
 void classicsetup_config_set_install_mode(
@@ -53,6 +57,9 @@ void classicsetup_config_reset_partition_plan(
     struct classicsetup_config *config);
 
 void classicsetup_config_clear_apply_state(
+    struct classicsetup_config *config);
+
+void classicsetup_config_clear_format_apply_state(
     struct classicsetup_config *config);
 
 int classicsetup_config_select_plan_item(

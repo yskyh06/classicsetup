@@ -141,3 +141,15 @@ int classicsetup_run_process_with_input(
     }
     return 0;
 }
+
+int classicsetup_run_process(
+    const char *executable,
+    char *const arguments[],
+    struct classicsetup_process_result *result)
+{
+    return classicsetup_run_process_with_input(
+        executable,
+        arguments,
+        "",
+        result);
+}

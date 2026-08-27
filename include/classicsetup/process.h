@@ -21,4 +21,9 @@ int classicsetup_run_process_with_input(
     const char *input,
     struct classicsetup_process_result *result);
 
+int classicsetup_run_process(
+    const char *executable,
+    char *const arguments[],
+    struct classicsetup_process_result *result);
+
 #endif
