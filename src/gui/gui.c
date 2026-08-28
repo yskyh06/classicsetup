@@ -11,6 +11,7 @@ void classicsetup_gui_session_reset(
     memset(session, 0, sizeof(*session));
     session->page = CLASSICSETUP_GUI_PAGE_DISK;
     session->windows_version = CLASSICSETUP_GUI_WINDOWS_11;
+    classicsetup_network_snapshot_reset(&session->network);
 }
 
 enum classicsetup_gui_page classicsetup_gui_page_next(

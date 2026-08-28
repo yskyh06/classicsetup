@@ -9,6 +9,7 @@ option(CLASSICSETUP_ENABLE_GTK
     ON)
 
 set(CLASSICSETUP_GTK_FRONTEND src/gui/gtk_stub.c)
+set(CLASSICSETUP_NETWORK_BACKEND src/network/network_manager_stub.c)
 set(CLASSICSETUP_GTK_ENABLED OFF)
 if(CLASSICSETUP_ENABLE_GTK)
     find_package(PkgConfig QUIET)
@@ -17,6 +18,8 @@ if(CLASSICSETUP_ENABLE_GTK)
     endif()
     if(GTK4_FOUND)
         set(CLASSICSETUP_GTK_FRONTEND src/gui/gtk_frontend.c)
+        set(CLASSICSETUP_NETWORK_BACKEND
+            src/network/network_manager_gdbus.c)
         set(CLASSICSETUP_GTK_ENABLED ON)
         message(STATUS "ClassicSetup GTK4 frontend: enabled")
     else()
@@ -44,6 +47,8 @@ add_executable(classicsetup
     src/gui/gui.c
     src/gui/session.c
     ${CLASSICSETUP_GTK_FRONTEND}
+    src/network/network.c
+    ${CLASSICSETUP_NETWORK_BACKEND}
     src/main.c
     src/state.c
     src/tui/after_format.c
@@ -116,6 +121,7 @@ if(BUILD_TESTING)
         tests/gui_test.c
         src/gui/gui.c
         src/gui/gtk_stub.c
+        src/network/network.c
     )
 
     set_target_properties(classicsetup_gui_test PROPERTIES
@@ -131,6 +137,25 @@ if(BUILD_TESTING)
         )
     endif()
     add_test(NAME gui_navigation COMMAND classicsetup_gui_test)
+
+    add_executable(classicsetup_network_test
+        tests/network_test.c
+        src/network/network.c
+    )
+
+    set_target_properties(classicsetup_network_test PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED YES
+        C_EXTENSIONS NO
+    )
+
+    target_include_directories(classicsetup_network_test PRIVATE include)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(classicsetup_network_test PRIVATE
+            -Wall -Wextra -Wpedantic
+        )
+    endif()
+    add_test(NAME network_model COMMAND classicsetup_network_test)
 
     add_executable(classicsetup_disk_test
         tests/disk_test.c

@@ -2,80 +2,103 @@
 
 ## Current milestone
 
-- M10.1 Recommended GTK GUI Foundation 완료.
-- Recommended 선택 시 별도 GUI 경계로 진입하고, Advanced 선택 시 기존 ncurses 흐름을 유지한다.
-- M7/M8 destructive safety와 Recommended의 `RAW_EMPTY + UEFI/GPT` 제한은 변경하지 않았다.
+- M10.2 Recommended Network Backend + GTK Network Page 완료.
+- Common TUI는 `Welcome -> License Agreement -> Setup Mode`를 유지한다.
+- Recommended는 ncurses 종료 후 GTK의 `Disk -> Network -> Windows Version -> Download -> Options -> Summary`를 사용한다.
+- Advanced ncurses 흐름과 M7/M8 destructive safety는 변경하지 않았다.
+- Recommended destructive 범위는 계속 `RAW_EMPTY + UEFI/GPT`이며 GUI는 executor를 호출하지 않는다.
 
 ## Changed files
 
-- GUI API/model: `include/classicsetup/gui.h`, `src/gui/gui.c`, `src/gui/session.c`.
-- GTK frontend/fallback: `src/gui/gtk_frontend.c`, `src/gui/gtk_stub.c`, `src/gui/classicsetup.css`.
-- App/state/policy connection: `src/app.c`, `src/state.c`, `include/classicsetup/recommended.h`, `src/core/recommended.c`.
-- Recommended fallback UI: `include/classicsetup/recommended_tui.h`, `src/tui/recommended.c`.
-- Build/tests: `CMakeLists.txt`, `tests/state_test.c`, `tests/gui_test.c`.
-- Documentation: `.ai/handoff.md`.
+- Network API/model: `include/classicsetup/network.h`, `src/network/network.c`.
+- NetworkManager backend: `src/network/network_manager_gdbus.c`, `src/network/network_manager_stub.c`.
+- GUI session/API: `include/classicsetup/gui.h`, `src/gui/gui.c`.
+- GTK page/style: `src/gui/gtk_frontend.c`, `src/gui/classicsetup.css`.
+- Build/tests: `CMakeLists.txt`, `tests/network_test.c`, `tests/gui_test.c`.
+- Snapshot: `.ai/handoff.md`.
 
 ## Implementation result
 
-### Current flow
+### Current flow and boundary
 
-- Common start: `Welcome -> License / Risk Agreement -> Setup Mode`.
-- Recommended: `Setup Mode -> RECOMMENDED_GUI_TRANSITION -> GTK GUI Disk -> Network -> Windows Version -> Download -> Options -> Summary`.
-- Advanced: `Setup Mode -> Keyboard -> Installation Mode -> Disk -> Partition -> Format -> M7/M8 apply`.
-- GUI Summary의 `Install (later)`는 placeholder로만 종료하며 partition/format/image executor를 호출하지 않는다.
+- Disk page의 Next는 기존 Recommended disk assessment를 통과한 선택이 필요하다.
+- Network page 진입 시 비동기 refresh가 시작되고 Internet reachable 전에는 Next가 비활성화된다.
+- Network 성공 후 기존 Windows Version placeholder로 이동한다.
+- Back으로 Network page에 재진입하면 snapshot을 다시 확인하며, GUI session reset은 stale network snapshot을 제거한다.
+- Network page와 backend는 partition/apply/format API를 호출하지 않는다.
 
-### GTK / TUI architecture
+### Network architecture
 
-- `classicsetup_gui_session`과 page transition 함수는 GTK 타입이 없는 frontend/model 경계다.
-- `src/core`에는 GTK include가 없고, GTK 위젯은 `src/gui/gtk_frontend.c`에만 존재한다.
-- App은 GUI 진입 전에 `classicsetup_tui_shutdown()`을 호출하고 GUI 반환 후 다시 초기화한다. GTK4가 없거나 초기화 오류면 ncurses fallback에서 Advanced 선택 또는 종료를 안내한다.
-- CMake `CLASSICSETUP_ENABLE_GTK`는 기본 ON이며 GTK4/pkg-config가 발견될 때만 GTK frontend와 CSS 경로를 연결한다. 미발견 또는 OFF이면 stub을 사용해 기존 빌드를 유지한다.
+- `classicsetup_network_snapshot`은 GTK 타입이 없는 Ethernet/Wi-Fi/connectivity snapshot이다.
+- `classicsetup_network_backend_ops`는 refresh/connect/destroy 비동기 backend 경계다.
+- `classicsetup_network_controller`는 `SCANNING`, `CONNECTING`, `CONNECTED`, `ERROR`, `UNAVAILABLE` 상태와 observer 통지를 관리한다.
+- GTK-enabled build는 GIO/GDBus NetworkManager backend를 사용한다.
+- GTK-disabled build는 network backend stub과 기존 GTK stub을 사용한다.
+- `src/core`와 Advanced TUI에는 GTK/GIO 의존성을 추가하지 않았다.
 
-### GUI pages
+### NetworkManager backend
 
-- Disk page는 `classicsetup_scan_disks()`, `classicsetup_assess_disk()`, `classicsetup_recommended_assessment_is_selectable()` 결과를 표시한다.
-- 각 항목에 model, capacity, classification/policy presentation, device path와 unavailable 상태를 표시하며 selectable disk만 선택 가능하다.
-- Network, Windows Version, Download, Installation Options, Summary는 placeholder page다. Windows 10/11 선택은 session에만 유지한다.
-- Back/Next는 명시적인 `classicsetup_gui_page_next/back()`으로 이동하며 Disk의 Back은 GUI를 닫고 Setup Mode로 복귀한다.
+- NetworkManager의 system bus `org.freedesktop.NetworkManager`를 사용한다.
+- `GetDevices`, device/AP properties, `RequestScan`, `GetAllAccessPoints`, `CheckConnectivity`를 worker에서 호출한다.
+- Ethernet availability/link와 Wi-Fi SSID/signal/security/active AP를 snapshot으로 변환한다.
+- 같은 SSID는 연결 AP 또는 가장 강한 AP 하나로 합친다; hidden SSID는 생략한다.
+- enterprise Wi-Fi는 표시하되 M10.2 연결 대상으로 허용하지 않는다.
+- Wi-Fi 연결은 `AddAndActivateConnection2`와 `persist=memory` profile을 사용한다.
+- shell, `system()`, `popen()`, `nmcli`를 사용하지 않는다.
+- NetworkManager/system bus가 없으면 사용자용 `UNAVAILABLE`/`ERROR` 상태로 종료한다.
 
-### Core reuse and policy
+### GTK async flow and UX
 
-- Recommended selectable 판정은 TUI와 GUI가 공통 `classicsetup_recommended_assessment_is_selectable()`을 호출한다. GUI에 별도 disk safety 판단을 복제하지 않았다.
-- `classicsetup_gui_session_init()`은 현재 firmware와 disk assessment snapshot을 준비할 뿐 plan/apply/format을 만들지 않는다.
+- `GTask` worker가 blocking system-bus I/O를 수행하고 completion은 GTK main context에서 전달된다.
+- refresh/connect 중 spinner와 상태 문구를 표시하고 버튼 중복 입력을 막는다.
+- Network page는 wired 상태, Wi-Fi 목록, Refresh, password entry, Connect를 제공한다.
+- secured Wi-Fi password entry는 숨김 표시이며 연결 요청 직후 UI에서 지운다.
+- backend operation buffer도 완료/취소 시 명시적으로 지우고 password를 snapshot/status/log에 저장하지 않는다.
+- connection profile은 installer process 동안만 유지되는 NetworkManager memory profile 정책이다.
+- NetworkManager connectivity `FULL`만 Recommended online flow의 Next를 허용한다.
+- local link/network만 존재하면 Internet unavailable 상태로 분리하고 Next를 막는다.
 
 ### Functions added/changed
 
-- `classicsetup_gui_session_reset()` / `classicsetup_gui_session_init()`: page, Windows version, disk assessment session을 초기화하고 기존 Recommended core로 디스크를 읽는다.
-- `classicsetup_gui_page_next()` / `classicsetup_gui_page_back()`: six GUI page의 경계 전이를 순수 함수로 처리한다.
-- `classicsetup_gui_select_disk()` / `classicsetup_gui_set_windows_version()`: selectable UEFI disk와 placeholder version만 session에 저장한다.
-- `classicsetup_gui_run()`: GTK 구현은 `GtkApplication` main loop를 실행하고, stub은 `UNAVAILABLE`을 반환한다.
-- `show_recommended_gui()`: ncurses shutdown -> session init -> GUI run -> ncurses reinit 및 app event 변환을 담당한다.
-- `classicsetup_recommended_assessment_is_selectable()`: firmware와 기존 assessment policy를 함께 검사하는 공통 helper다.
-- `classicsetup_show_recommended_gui_unavailable()`: GTK disabled/error 시 안전하게 Setup Mode로 돌아가는 fallback 화면이다.
+- `classicsetup_network_snapshot_reset()` (`src/network/network.c`): safe unavailable 기본 snapshot 생성.
+- `classicsetup_network_can_continue()` (`src/network/network.c`): `CONNECTED + INTERNET` 정책 판정.
+- `classicsetup_network_controller_refresh()` (`src/network/network.c`): scan 상태 전환 후 backend async refresh 요청.
+- `classicsetup_network_controller_connect_wifi()` (`src/network/network.c`): 입력 검증, connecting 상태, password 비보존 전달.
+- `classicsetup_network_manager_backend_create()` (`src/network/network_manager_gdbus.c`): GTask/GDBus backend 생성; disabled build는 stub 반환.
+- `collect_snapshot()` (`src/network/network_manager_gdbus.c`): system bus device/AP/connectivity 정보를 frontend-neutral snapshot으로 변환.
+- `connect_wifi()` (`src/network/network_manager_gdbus.c`): memory-only NetworkManager connection 생성 및 활성화.
+- `build_network_page()` (`src/gui/gtk_frontend.c`): wired/Wi-Fi/password/actions/status GTK widgets 구성.
+- `network_snapshot_changed()` (`src/gui/gtk_frontend.c`): async result를 GUI session에 복사하고 page/navigation 갱신.
+- `update_navigation()` (`src/gui/gtk_frontend.c`): Network page Next를 Internet reachable에 연결.
+- `classicsetup_gui_session_reset()` (`src/gui/gui.c`): network model도 초기 unavailable 상태로 reset.
 
 ## Build/test result
 
-- Debug CMake build 성공: C17, `-Wall -Wextra -Wpedantic`, warning 0.
-- GTK4 미설치 환경에서 default(자동 탐색) build는 `GTK4 not found`로 stub을 선택했고 성공했다.
-- `CLASSICSETUP_ENABLE_GTK=OFF` build 성공.
-- CTest 12/12 통과: 기존 회귀 + GUI page navigation, session reset, selectable disk fail-closed, Windows version state, GTK-disabled stub result 포함.
-- ASan/UBSan Debug( GTK OFF ) CTest 12/12 통과.
-- PTY에서 Recommended 선택 시 ncurses 종료/재초기화와 GTK-disabled fallback -> B로 Setup Mode 복귀를 확인했다. 실제 GTK 화면은 GTK4 개발 패키지가 없어 실행하지 못했다.
-- 실제 destructive disk operation과 partition/format executor 호출은 수행하지 않았다.
+- GTK4 4.22.4 / GIO 2.88.0 환경에서 GTK-enabled clean Debug build 성공.
+- `CLASSICSETUP_ENABLE_GTK=OFF` clean Debug/stub build 성공.
+- C17, `-Wall -Wextra -Wpedantic`, warning 0.
+- GTK-enabled CTest 13/13 통과; GTK-disabled CTest 13/13 통과.
+- ASan/UBSan GTK-disabled Debug CTest 13/13 통과.
+- 새 mock tests: unavailable, wired disconnected/connected, secured/open Wi-Fi metadata, scanning/connecting/connected/error, Internet Next policy, enterprise rejection, session reset, password 비노출.
+- 실제 Wi-Fi 연결, package 설치, destructive disk operation은 실행하지 않았다.
+- 추가 development dependency는 없었다; runtime에는 NetworkManager system service가 필요하다.
 
 ## Topics for ChatGPT to explain
 
-- GTK `GtkApplication`과 main loop, activate/close/button signal callback.
-- TUI shutdown과 GUI startup 경계 및 GUI 반환 후 terminal 재초기화.
-- Core/model/view 분리와 공통 Recommended assessment 재사용.
-- GUI page enum 기반 navigation과 callback spaghetti 방지.
-- CMake optional GTK4/pkg-config detection 및 stub fallback.
-- Recommended GUI가 아직 executor를 호출하지 않는 이유와 향후 async network/download 경계.
+- D-Bus와 NetworkManager가 system bus에서 service/object/interface를 노출하는 방식.
+- session bus와 system bus 차이 및 `dbus-launch` warning이 NetworkManager system service와 다른 이유.
+- GTK main loop, `GTask`, worker completion callback과 UI thread ownership.
+- blocking I/O가 GUI를 멈추는 이유와 main-context dispatch 경계.
+- backend/model/view 분리 및 향후 Advanced/debug frontend 재사용.
+- Wi-Fi `DISCONNECTED -> CONNECTING -> CONNECTED/ERROR` state machine.
+- link/network/Internet reachability를 분리하고 fail-closed Next를 적용한 이유.
+- password lifetime, memory-only NetworkManager profile, 민감정보 buffer 정리.
 
 ## Issues/cautions
 
-- 현재 환경에는 GTK4 개발 패키지가 없어 GTK-enabled compile/runtime은 검증하지 못했다. GTK 설치 후 `-DCLASSICSETUP_ENABLE_GTK=ON` 재검증이 필요하다.
-- GUI Disk page는 assessment snapshot을 보여주며 config/recommended apply plan에 아직 연결하지 않는다.
-- Network, Windows source/version validation, download, options, WIM/image apply, GTK 전체 설치 UX는 placeholder다.
-- GUI 창 닫기는 Setup Mode 복귀로 처리하며 별도 GUI Quit Confirmation/key accelerator는 후속 UX 범위다.
-- Existing/partitioned/encrypted disk 보존·erase 정책, BIOS/MBR actual apply, M7/M8 safety 구현은 그대로 제한된다.
+- captive portal, hidden SSID 입력, WPA Enterprise, static IP, VPN, proxy는 미지원이다.
+- NetworkManager가 없거나 system bus 접근이 불가능하면 Recommended online flow는 진행하지 못한다.
+- AP scan은 NetworkManager cache를 사용하므로 radio/driver 상태에 따라 결과 갱신이 지연될 수 있다.
+- memory-only connection은 process 이후 재사용을 보장하지 않으며 Back 동작은 이미 연결된 network를 강제로 disconnect하지 않는다.
+- final boot ISO에 NetworkManager와 system-bus 정책을 포함할지는 확정되지 않았다.
+- Windows source query/download, ISO/WIM 처리, partition/format GUI executor 연결은 아직 없다.

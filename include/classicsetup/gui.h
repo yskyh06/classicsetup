@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include "classicsetup/recommended.h"
+#include "classicsetup/network.h"
 
 enum {
     CLASSICSETUP_GUI_MAX_DISKS = 32
@@ -44,6 +45,7 @@ struct classicsetup_gui_session {
     bool has_selected_disk;
     enum classicsetup_gui_windows_version windows_version;
     bool options_placeholder;
+    struct classicsetup_network_snapshot network;
 };
 
 void classicsetup_gui_session_reset(

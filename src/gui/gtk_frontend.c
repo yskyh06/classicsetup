@@ -17,6 +17,18 @@ struct classicsetup_gui_runtime {
     GtkWidget *disk_status;
     GtkWidget *summary_disk;
     GtkWidget *summary_version;
+    GtkWidget *network_status;
+    GtkWidget *ethernet_status;
+    GtkWidget *wifi_list;
+    GtkWidget *password_label;
+    GtkWidget *password_entry;
+    GtkWidget *connect_button;
+    GtkWidget *refresh_button;
+    GtkWidget *network_spinner;
+    struct classicsetup_network_controller network_controller;
+    bool network_controller_ready;
+    bool has_selected_wifi;
+    size_t selected_wifi_index;
     int result;
 };
 
@@ -210,6 +222,250 @@ static GtkWidget *build_placeholder_page(
     return box;
 }
 
+static void clear_wifi_rows(GtkWidget *list)
+{
+    GtkWidget *child;
+
+    while ((child = gtk_widget_get_first_child(list)) != NULL) {
+        gtk_list_box_remove(GTK_LIST_BOX(list), child);
+    }
+}
+
+static void update_network_page(
+    struct classicsetup_gui_runtime *runtime)
+{
+    const struct classicsetup_network_snapshot *snapshot =
+        &runtime->session->network;
+    char line[256];
+    size_t index;
+    gboolean busy = snapshot->state == CLASSICSETUP_NETWORK_SCANNING ||
+                    snapshot->state == CLASSICSETUP_NETWORK_CONNECTING;
+
+    if (runtime->network_status == NULL) {
+        return;
+    }
+    gtk_label_set_text(GTK_LABEL(runtime->network_status), snapshot->status);
+    if (!snapshot->ethernet_available) {
+        gtk_label_set_text(
+            GTK_LABEL(runtime->ethernet_status),
+            "Wired connection: not detected");
+    } else if (snapshot->ethernet_connected) {
+        gtk_label_set_text(
+            GTK_LABEL(runtime->ethernet_status),
+            "Wired connection: connected");
+    } else {
+        gtk_label_set_text(
+            GTK_LABEL(runtime->ethernet_status),
+            "Wired connection: cable not connected");
+    }
+    clear_wifi_rows(runtime->wifi_list);
+    for (index = 0; index < snapshot->wifi_count; ++index) {
+        const struct classicsetup_wifi_network *network =
+            &snapshot->wifi[index];
+        GtkWidget *row = gtk_list_box_row_new();
+        GtkWidget *row_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+        GtkWidget *ssid_label;
+        GtkWidget *detail_label;
+
+        ssid_label = gtk_label_new(network->ssid);
+        gtk_label_set_xalign(GTK_LABEL(ssid_label), 0.0F);
+        gtk_widget_set_hexpand(ssid_label, TRUE);
+        (void)snprintf(
+            line,
+            sizeof(line),
+            "%d%%  %s%s",
+            network->signal_strength,
+            network->enterprise ? "Enterprise (unsupported)" :
+                (network->secured ? "Secured" : "Open"),
+            network->connected ? "  Connected" : "");
+        detail_label = gtk_label_new(line);
+        gtk_widget_add_css_class(detail_label, "classic-muted");
+        gtk_box_append(GTK_BOX(row_box), ssid_label);
+        gtk_box_append(GTK_BOX(row_box), detail_label);
+        gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), row_box);
+        gtk_widget_add_css_class(row, "classic-network-row");
+        g_object_set_data(
+            G_OBJECT(row),
+            "classicsetup-wifi-index",
+            GSIZE_TO_POINTER(index));
+        gtk_widget_set_sensitive(row, !network->enterprise && !busy);
+        gtk_list_box_append(GTK_LIST_BOX(runtime->wifi_list), row);
+    }
+    if (!snapshot->wifi_available && !busy) {
+        GtkWidget *row = gtk_list_box_row_new();
+        GtkWidget *label = gtk_label_new("No Wi-Fi device was detected.");
+
+        gtk_label_set_xalign(GTK_LABEL(label), 0.0F);
+        gtk_widget_add_css_class(label, "classic-muted");
+        gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), label);
+        gtk_widget_set_sensitive(row, FALSE);
+        gtk_list_box_append(GTK_LIST_BOX(runtime->wifi_list), row);
+    }
+    gtk_widget_set_sensitive(runtime->refresh_button, !busy);
+    gtk_widget_set_sensitive(
+        runtime->connect_button,
+        runtime->has_selected_wifi && !busy);
+    gtk_widget_set_sensitive(runtime->password_entry, !busy);
+    gtk_widget_set_visible(
+        runtime->password_label,
+        runtime->has_selected_wifi &&
+            snapshot->wifi[runtime->selected_wifi_index].secured);
+    gtk_widget_set_visible(
+        runtime->password_entry,
+        runtime->has_selected_wifi &&
+            snapshot->wifi[runtime->selected_wifi_index].secured);
+    if (busy) {
+        gtk_spinner_start(GTK_SPINNER(runtime->network_spinner));
+    } else {
+        gtk_spinner_stop(GTK_SPINNER(runtime->network_spinner));
+    }
+    update_navigation(runtime);
+}
+
+static void network_snapshot_changed(
+    const struct classicsetup_network_snapshot *snapshot,
+    void *user_data)
+{
+    struct classicsetup_gui_runtime *runtime = user_data;
+
+    runtime->session->network = *snapshot;
+    runtime->has_selected_wifi = false;
+    runtime->selected_wifi_index = 0;
+    update_network_page(runtime);
+}
+
+static void on_wifi_row_selected(
+    GtkListBox *list,
+    GtkListBoxRow *row,
+    gpointer user_data)
+{
+    struct classicsetup_gui_runtime *runtime = user_data;
+    size_t index;
+
+    (void)list;
+    if (row == NULL) {
+        runtime->has_selected_wifi = false;
+        gtk_widget_set_visible(runtime->password_label, FALSE);
+        gtk_widget_set_visible(runtime->password_entry, FALSE);
+        gtk_widget_set_sensitive(runtime->connect_button, FALSE);
+        return;
+    }
+    index = GPOINTER_TO_SIZE(
+        g_object_get_data(G_OBJECT(row), "classicsetup-wifi-index"));
+    if (index >= runtime->session->network.wifi_count ||
+        runtime->session->network.wifi[index].enterprise) {
+        return;
+    }
+    runtime->selected_wifi_index = index;
+    runtime->has_selected_wifi = true;
+    gtk_editable_set_text(GTK_EDITABLE(runtime->password_entry), "");
+    gtk_widget_set_visible(
+        runtime->password_label,
+        runtime->session->network.wifi[index].secured);
+    gtk_widget_set_visible(
+        runtime->password_entry,
+        runtime->session->network.wifi[index].secured);
+    gtk_widget_set_sensitive(runtime->connect_button, TRUE);
+}
+
+static void on_network_refresh_clicked(GtkButton *button, gpointer user_data)
+{
+    struct classicsetup_gui_runtime *runtime = user_data;
+
+    (void)button;
+    runtime->has_selected_wifi = false;
+    (void)classicsetup_network_controller_refresh(
+        &runtime->network_controller);
+}
+
+static void on_network_connect_clicked(GtkButton *button, gpointer user_data)
+{
+    struct classicsetup_gui_runtime *runtime = user_data;
+    const struct classicsetup_wifi_network *network;
+    const char *password;
+
+    (void)button;
+    if (!runtime->has_selected_wifi ||
+        runtime->selected_wifi_index >= runtime->session->network.wifi_count) {
+        return;
+    }
+    network = &runtime->session->network.wifi[runtime->selected_wifi_index];
+    password = gtk_editable_get_text(GTK_EDITABLE(runtime->password_entry));
+    if (classicsetup_network_controller_connect_wifi(
+            &runtime->network_controller,
+            network,
+            password) != 0) {
+        gtk_label_set_text(
+            GTK_LABEL(runtime->network_status),
+            "Could not start the connection attempt.");
+    }
+    gtk_editable_set_text(GTK_EDITABLE(runtime->password_entry), "");
+}
+
+static GtkWidget *build_network_page(
+    struct classicsetup_gui_runtime *runtime)
+{
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    GtkWidget *status_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+
+    gtk_widget_add_css_class(box, "classic-content");
+    add_classic_label(box, "Connect to the Internet", "classic-title", FALSE);
+    add_classic_label(
+        box,
+        "An Internet connection is required for the Recommended online-download workflow.",
+        "classic-muted",
+        TRUE);
+    runtime->ethernet_status = gtk_label_new("Wired connection: checking...");
+    gtk_label_set_xalign(GTK_LABEL(runtime->ethernet_status), 0.0F);
+    gtk_box_append(GTK_BOX(box), runtime->ethernet_status);
+    add_classic_label(box, "Wi-Fi", NULL, FALSE);
+    runtime->wifi_list = gtk_list_box_new();
+    gtk_list_box_set_selection_mode(
+        GTK_LIST_BOX(runtime->wifi_list),
+        GTK_SELECTION_SINGLE);
+    gtk_widget_set_vexpand(runtime->wifi_list, TRUE);
+    g_signal_connect(
+        runtime->wifi_list,
+        "row-selected",
+        G_CALLBACK(on_wifi_row_selected),
+        runtime);
+    gtk_box_append(GTK_BOX(box), runtime->wifi_list);
+    runtime->password_label = gtk_label_new("Network password:");
+    gtk_label_set_xalign(GTK_LABEL(runtime->password_label), 0.0F);
+    runtime->password_entry = gtk_password_entry_new();
+    gtk_password_entry_set_show_peek_icon(
+        GTK_PASSWORD_ENTRY(runtime->password_entry),
+        FALSE);
+    gtk_widget_set_visible(runtime->password_label, FALSE);
+    gtk_widget_set_visible(runtime->password_entry, FALSE);
+    gtk_box_append(GTK_BOX(box), runtime->password_label);
+    gtk_box_append(GTK_BOX(box), runtime->password_entry);
+    runtime->refresh_button = gtk_button_new_with_label("Refresh");
+    runtime->connect_button = gtk_button_new_with_label("Connect");
+    g_signal_connect(
+        runtime->refresh_button,
+        "clicked",
+        G_CALLBACK(on_network_refresh_clicked),
+        runtime);
+    g_signal_connect(
+        runtime->connect_button,
+        "clicked",
+        G_CALLBACK(on_network_connect_clicked),
+        runtime);
+    gtk_box_append(GTK_BOX(actions), runtime->refresh_button);
+    gtk_box_append(GTK_BOX(actions), runtime->connect_button);
+    gtk_box_append(GTK_BOX(box), actions);
+    runtime->network_spinner = gtk_spinner_new();
+    runtime->network_status = gtk_label_new("Network service is not available.");
+    gtk_label_set_xalign(GTK_LABEL(runtime->network_status), 0.0F);
+    gtk_label_set_wrap(GTK_LABEL(runtime->network_status), TRUE);
+    gtk_box_append(GTK_BOX(status_box), runtime->network_spinner);
+    gtk_box_append(GTK_BOX(status_box), runtime->network_status);
+    gtk_box_append(GTK_BOX(box), status_box);
+    return box;
+}
+
 static void on_version_toggled(
     GtkCheckButton *button,
     gpointer user_data)
@@ -309,7 +565,7 @@ static void update_summary(struct classicsetup_gui_runtime *runtime)
         (void)snprintf(
             line,
             sizeof(line),
-            "Target disk: %s (%s)",
+            "Target disk: %.100s (%.100s)",
             disk->model,
             disk->device_path);
         gtk_label_set_text(GTK_LABEL(runtime->summary_disk), line);
@@ -323,9 +579,15 @@ static void update_summary(struct classicsetup_gui_runtime *runtime)
 
 static void update_navigation(struct classicsetup_gui_runtime *runtime)
 {
-    gboolean can_next = runtime->session->page != CLASSICSETUP_GUI_PAGE_DISK ||
-                        runtime->session->has_selected_disk;
+    gboolean can_next = TRUE;
     gboolean summary = runtime->session->page == CLASSICSETUP_GUI_PAGE_SUMMARY;
+
+    if (runtime->session->page == CLASSICSETUP_GUI_PAGE_DISK) {
+        can_next = runtime->session->has_selected_disk;
+    } else if (runtime->session->page == CLASSICSETUP_GUI_PAGE_NETWORK) {
+        can_next = classicsetup_network_can_continue(
+            &runtime->session->network);
+    }
 
     gtk_widget_set_sensitive(runtime->back_button, TRUE);
     gtk_widget_set_sensitive(runtime->next_button, can_next);
@@ -349,6 +611,12 @@ static void set_page(
     gtk_stack_set_visible_child_name(
         GTK_STACK(runtime->stack),
         names[page]);
+    if (page == CLASSICSETUP_GUI_PAGE_NETWORK &&
+        runtime->network_controller_ready &&
+        !runtime->network_controller.busy) {
+        (void)classicsetup_network_controller_refresh(
+            &runtime->network_controller);
+    }
     update_navigation(runtime);
 }
 
@@ -474,9 +742,7 @@ static void activate(
         GTK_STACK_TRANSITION_TYPE_NONE);
     page = build_disk_page(runtime);
     gtk_stack_add_named(GTK_STACK(runtime->stack), page, "disk");
-    page = build_placeholder_page(
-        "Connect to the Network",
-        "Network setup will be implemented in the next milestone.");
+    page = build_network_page(runtime);
     gtk_stack_add_named(GTK_STACK(runtime->stack), page, "network");
     page = build_windows_version_page(runtime);
     gtk_stack_add_named(GTK_STACK(runtime->stack), page, "version");
@@ -513,6 +779,19 @@ static void activate(
     gtk_box_append(GTK_BOX(footer), runtime->next_button);
     gtk_box_append(GTK_BOX(root), footer);
     gtk_window_set_child(GTK_WINDOW(runtime->window), root);
+    {
+        struct classicsetup_network_backend backend = {0};
+
+        if (classicsetup_network_manager_backend_create(&backend) == 0) {
+            classicsetup_network_controller_init(
+                &runtime->network_controller,
+                backend,
+                network_snapshot_changed,
+                runtime);
+            runtime->network_controller_ready = true;
+        }
+    }
+    update_network_page(runtime);
     set_page(runtime, CLASSICSETUP_GUI_PAGE_DISK);
     gtk_window_present(GTK_WINDOW(runtime->window));
 }
@@ -546,6 +825,10 @@ int classicsetup_gui_run(
         G_APPLICATION(application),
         argc,
         argv);
+    if (runtime.network_controller_ready) {
+        classicsetup_network_controller_destroy(
+            &runtime.network_controller);
+    }
     g_object_unref(application);
     return runtime.result;
 }

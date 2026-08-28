@@ -38,6 +38,16 @@ window {
     background: #cbd9f2;
 }
 
+.classic-network-row {
+    background: #ffffff;
+    border-bottom: 1px solid #c0c8d6;
+    padding: 8px 10px;
+}
+
+.classic-network-row:selected {
+    background: #cbd9f2;
+}
+
 button {
     border-radius: 2px;
 }

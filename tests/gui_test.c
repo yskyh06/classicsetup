@@ -23,6 +23,8 @@ static void test_session_and_disk_selection(void)
     classicsetup_gui_session_reset(&session);
     assert(session.page == CLASSICSETUP_GUI_PAGE_DISK);
     assert(session.windows_version == CLASSICSETUP_GUI_WINDOWS_11);
+    assert(session.network.state == CLASSICSETUP_NETWORK_UNAVAILABLE);
+    assert(!classicsetup_network_can_continue(&session.network));
     session.firmware = CLASSICSETUP_FIRMWARE_UEFI;
     session.assessment_count = 2;
     session.assessments[0].selectable = 0;
@@ -39,6 +41,13 @@ static void test_session_and_disk_selection(void)
     assert(classicsetup_gui_set_windows_version(
                &session,
                (enum classicsetup_gui_windows_version)99) != 0);
+    session.network.state = CLASSICSETUP_NETWORK_CONNECTED;
+    session.network.connectivity =
+        CLASSICSETUP_NETWORK_CONNECTIVITY_INTERNET;
+    session.network.wifi_count = 1;
+    classicsetup_gui_session_reset(&session);
+    assert(session.network.state == CLASSICSETUP_NETWORK_UNAVAILABLE);
+    assert(session.network.wifi_count == 0);
 }
 
 static void test_selection_is_fail_closed_for_bios(void)
