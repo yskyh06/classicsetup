@@ -92,11 +92,16 @@ int classicsetup_gui_set_windows_version(
          version != CLASSICSETUP_GUI_WINDOWS_10)) {
         return -1;
     }
-    if (session->download.state != CLASSICSETUP_DOWNLOAD_NOT_STARTED) {
+    if (classicsetup_gui_source_change_requirement(session) !=
+        CLASSICSETUP_GUI_SOURCE_CHANGE_ALLOWED) {
         return -1;
     }
     session->windows_version = version;
     session->has_selected_release = false;
+    session->has_selected_release_name = false;
+    session->has_selected_language = false;
+    session->has_selected_architecture = false;
+    session->selected_release_name[0] = '\0';
     session->selected_release_index = 0;
     classicsetup_source_catalog_reset(&session->source_catalog);
     return 0;
@@ -109,12 +114,194 @@ int classicsetup_gui_select_release(
     if (session == NULL ||
         session->source_catalog.state != CLASSICSETUP_SOURCE_READY ||
         index >= session->source_catalog.release_count ||
-        session->download.state != CLASSICSETUP_DOWNLOAD_NOT_STARTED) {
+        classicsetup_gui_source_change_requirement(session) !=
+            CLASSICSETUP_GUI_SOURCE_CHANGE_ALLOWED) {
         return -1;
     }
     session->selected_release_index = index;
     session->has_selected_release = true;
+    (void)snprintf(
+        session->selected_release_name,
+        sizeof(session->selected_release_name),
+        "%s",
+        session->source_catalog.releases[index].release_name);
+    session->has_selected_release_name = true;
+    session->selected_language =
+        session->source_catalog.releases[index].language;
+    session->has_selected_language = true;
+    session->selected_architecture =
+        session->source_catalog.releases[index].architecture;
+    session->has_selected_architecture = true;
     return 0;
+}
+
+static bool candidate_matches_release(
+    const struct classicsetup_windows_release *candidate,
+    const char *release_name)
+{
+    return candidate != NULL && release_name != NULL &&
+           strcmp(candidate->release_name, release_name) == 0;
+}
+
+int classicsetup_gui_select_release_name(
+    struct classicsetup_gui_session *session,
+    const char *release_name)
+{
+    size_t index;
+    bool found = false;
+
+    if (session == NULL || release_name == NULL || release_name[0] == '\0' ||
+        session->source_catalog.state != CLASSICSETUP_SOURCE_READY ||
+        classicsetup_gui_source_change_requirement(session) !=
+            CLASSICSETUP_GUI_SOURCE_CHANGE_ALLOWED) {
+        return -1;
+    }
+    for (index = 0; index < session->source_catalog.release_count; ++index) {
+        if (candidate_matches_release(
+                &session->source_catalog.releases[index], release_name)) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        return -1;
+    }
+    (void)snprintf(
+        session->selected_release_name,
+        sizeof(session->selected_release_name), "%s", release_name);
+    session->has_selected_release_name = true;
+    session->has_selected_language = false;
+    session->has_selected_architecture = false;
+    session->has_selected_release = false;
+    session->selected_release_index = 0;
+    return 0;
+}
+
+int classicsetup_gui_select_language(
+    struct classicsetup_gui_session *session,
+    enum classicsetup_windows_language language)
+{
+    size_t index;
+    bool found = false;
+
+    if (session == NULL || !session->has_selected_release_name ||
+        classicsetup_gui_source_change_requirement(session) !=
+            CLASSICSETUP_GUI_SOURCE_CHANGE_ALLOWED) {
+        return -1;
+    }
+    for (index = 0; index < session->source_catalog.release_count; ++index) {
+        const struct classicsetup_windows_release *candidate =
+            &session->source_catalog.releases[index];
+
+        if (candidate_matches_release(
+                candidate, session->selected_release_name) &&
+            candidate->language == language) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        return -1;
+    }
+    session->selected_language = language;
+    session->has_selected_language = true;
+    session->has_selected_architecture = false;
+    session->has_selected_release = false;
+    session->selected_release_index = 0;
+    return 0;
+}
+
+int classicsetup_gui_select_architecture(
+    struct classicsetup_gui_session *session,
+    enum classicsetup_windows_architecture architecture)
+{
+    size_t index;
+
+    if (session == NULL || !session->has_selected_release_name ||
+        !session->has_selected_language ||
+        classicsetup_gui_source_change_requirement(session) !=
+            CLASSICSETUP_GUI_SOURCE_CHANGE_ALLOWED) {
+        return -1;
+    }
+    for (index = 0; index < session->source_catalog.release_count; ++index) {
+        const struct classicsetup_windows_release *candidate =
+            &session->source_catalog.releases[index];
+
+        if (candidate_matches_release(
+                candidate, session->selected_release_name) &&
+            candidate->language == session->selected_language &&
+            candidate->architecture == architecture) {
+            session->selected_architecture = architecture;
+            session->has_selected_architecture = true;
+            session->selected_release_index = index;
+            session->has_selected_release = true;
+            return 0;
+        }
+    }
+    session->has_selected_architecture = false;
+    session->has_selected_release = false;
+    return -1;
+}
+
+bool classicsetup_gui_source_selection_is_valid(
+    const struct classicsetup_gui_session *session)
+{
+    if (session == NULL || !session->has_selected_release_name ||
+        !session->has_selected_language ||
+        !session->has_selected_architecture ||
+        !session->has_selected_release ||
+        session->selected_release_index >=
+            session->source_catalog.release_count) {
+        return false;
+    }
+    return candidate_matches_release(
+               &session->source_catalog.releases[
+                   session->selected_release_index],
+               session->selected_release_name) &&
+           session->source_catalog.releases[
+               session->selected_release_index].language ==
+               session->selected_language &&
+           session->source_catalog.releases[
+               session->selected_release_index].architecture ==
+               session->selected_architecture;
+}
+
+enum classicsetup_gui_source_change_requirement
+classicsetup_gui_source_change_requirement(
+    const struct classicsetup_gui_session *session)
+{
+    if (session == NULL) {
+        return CLASSICSETUP_GUI_SOURCE_CHANGE_CANCEL_DOWNLOAD;
+    }
+    if (session->download.state == CLASSICSETUP_DOWNLOAD_PREPARING ||
+        session->download.state == CLASSICSETUP_DOWNLOAD_DOWNLOADING ||
+        session->download.state == CLASSICSETUP_DOWNLOAD_VERIFYING) {
+        return CLASSICSETUP_GUI_SOURCE_CHANGE_CANCEL_DOWNLOAD;
+    }
+    if (session->workspace.valid && session->workspace.verified_iso) {
+        return CLASSICSETUP_GUI_SOURCE_CHANGE_DISCARD_VERIFIED;
+    }
+    return CLASSICSETUP_GUI_SOURCE_CHANGE_ALLOWED;
+}
+
+void classicsetup_gui_discard_downloaded_source(
+    struct classicsetup_gui_session *session)
+{
+    size_t index;
+
+    if (session == NULL) {
+        return;
+    }
+    if (session->workspace.valid) {
+        classicsetup_workspace_cleanup_after_install(
+            &session->workspace, false);
+    }
+    classicsetup_download_status_reset(&session->download);
+    for (index = 0; index < session->source_catalog.release_count; ++index) {
+        memset(session->source_catalog.releases[index].download_uri, 0,
+               sizeof(session->source_catalog.releases[index].download_uri));
+        session->source_catalog.releases[index].resolved = false;
+    }
 }
 
 bool classicsetup_gui_summary_is_ready(
@@ -122,7 +309,7 @@ bool classicsetup_gui_summary_is_ready(
 {
     return session != NULL &&
            classicsetup_network_can_continue(&session->network) &&
-           session->has_selected_release &&
+           classicsetup_gui_source_selection_is_valid(session) &&
            session->options_placeholder &&
            classicsetup_download_is_ready(
                &session->download, &session->workspace);

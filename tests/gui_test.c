@@ -1,5 +1,7 @@
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "classicsetup/gui.h"
 
@@ -186,6 +188,90 @@ static void test_network_presentation_supports_multiple_ethernet(void)
     assert(presentation.ethernet[0].connected);
 }
 
+static void test_cascading_source_selection_and_lifecycle(void)
+{
+    struct classicsetup_gui_session session;
+    char verified_path[CLASSICSETUP_WORKSPACE_PATH_SIZE];
+    FILE *file;
+
+    classicsetup_gui_session_reset(&session);
+    session.source_catalog.state = CLASSICSETUP_SOURCE_READY;
+    session.source_catalog.release_count = 3;
+    session.source_catalog.releases[0].family = CLASSICSETUP_WINDOWS_11;
+    (void)strcpy(
+        session.source_catalog.releases[0].release_name,
+        "Windows 11 25H2");
+    (void)strcpy(
+        session.source_catalog.releases[0].language_name, "Korean");
+    session.source_catalog.releases[0].language =
+        CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN;
+    session.source_catalog.releases[0].architecture = CLASSICSETUP_ARCH_X64;
+    session.source_catalog.releases[1] = session.source_catalog.releases[0];
+    (void)strcpy(
+        session.source_catalog.releases[1].language_name, "English");
+    session.source_catalog.releases[1].language =
+        CLASSICSETUP_WINDOWS_LANGUAGE_ENGLISH;
+    session.source_catalog.releases[2] = session.source_catalog.releases[1];
+    (void)strcpy(
+        session.source_catalog.releases[2].release_name,
+        "Windows 11 24H2");
+
+    assert(classicsetup_gui_select_release_name(
+               &session, "Windows 11 25H2") == 0);
+    assert(session.has_selected_release_name);
+    assert(!session.has_selected_language);
+    assert(classicsetup_gui_select_language(
+               &session,
+               CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN) == 0);
+    assert(session.has_selected_language);
+    assert(!session.has_selected_architecture);
+    assert(classicsetup_gui_select_architecture(
+               &session, CLASSICSETUP_ARCH_ARM64) != 0);
+    assert(!classicsetup_gui_source_selection_is_valid(&session));
+    assert(classicsetup_gui_select_architecture(
+               &session, CLASSICSETUP_ARCH_X64) == 0);
+    assert(classicsetup_gui_source_selection_is_valid(&session));
+    session.page = CLASSICSETUP_GUI_PAGE_DOWNLOAD;
+    session.page = classicsetup_gui_page_back(session.page);
+    assert(session.page == CLASSICSETUP_GUI_PAGE_WINDOWS_VERSION);
+    assert(classicsetup_gui_source_selection_is_valid(&session));
+    assert(classicsetup_gui_source_change_requirement(&session) ==
+           CLASSICSETUP_GUI_SOURCE_CHANGE_ALLOWED);
+    assert(classicsetup_gui_select_language(
+               &session,
+               CLASSICSETUP_WINDOWS_LANGUAGE_ENGLISH) == 0);
+    assert(!session.has_selected_architecture);
+    assert(classicsetup_gui_select_architecture(
+               &session, CLASSICSETUP_ARCH_X64) == 0);
+    assert(classicsetup_gui_select_release_name(
+               &session, "Windows 11 24H2") == 0);
+    assert(!session.has_selected_language);
+    assert(!session.has_selected_architecture);
+    assert(!session.has_selected_release);
+
+    session.download.state = CLASSICSETUP_DOWNLOAD_FAILED;
+    assert(classicsetup_gui_source_change_requirement(&session) ==
+           CLASSICSETUP_GUI_SOURCE_CHANGE_ALLOWED);
+    session.download.state = CLASSICSETUP_DOWNLOAD_DOWNLOADING;
+    assert(classicsetup_gui_source_change_requirement(&session) ==
+           CLASSICSETUP_GUI_SOURCE_CHANGE_CANCEL_DOWNLOAD);
+    session.download.state = CLASSICSETUP_DOWNLOAD_NOT_STARTED;
+    assert(classicsetup_workspace_create(&session.workspace) == 0);
+    (void)snprintf(verified_path, sizeof(verified_path), "%s",
+                   session.workspace.iso_final_path);
+    file = fopen(session.workspace.iso_final_path, "wb");
+    assert(file != NULL);
+    assert(fclose(file) == 0);
+    session.workspace.verified_iso = true;
+    session.download.state = CLASSICSETUP_DOWNLOAD_COMPLETE;
+    assert(classicsetup_gui_source_change_requirement(&session) ==
+           CLASSICSETUP_GUI_SOURCE_CHANGE_DISCARD_VERIFIED);
+    classicsetup_gui_discard_downloaded_source(&session);
+    assert(!session.workspace.valid);
+    assert(access(verified_path, F_OK) != 0);
+    assert(session.download.state == CLASSICSETUP_DOWNLOAD_NOT_STARTED);
+}
+
 int main(void)
 {
     test_page_navigation();
@@ -194,6 +280,7 @@ int main(void)
     test_advanced_entry_preserves_planning_snapshot();
     test_source_selection_and_summary_gate();
     test_network_presentation_supports_multiple_ethernet();
+    test_cascading_source_selection_and_lifecycle();
     test_gtk_disabled_result();
     return 0;
 }

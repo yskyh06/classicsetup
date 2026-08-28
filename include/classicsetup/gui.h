@@ -58,6 +58,12 @@ enum classicsetup_gui_run_result {
     CLASSICSETUP_GUI_ERROR
 };
 
+enum classicsetup_gui_source_change_requirement {
+    CLASSICSETUP_GUI_SOURCE_CHANGE_ALLOWED,
+    CLASSICSETUP_GUI_SOURCE_CHANGE_CANCEL_DOWNLOAD,
+    CLASSICSETUP_GUI_SOURCE_CHANGE_DISCARD_VERIFIED
+};
+
 struct classicsetup_gui_session {
     enum classicsetup_gui_entry_mode entry_mode;
     enum classicsetup_gui_page page;
@@ -70,6 +76,12 @@ struct classicsetup_gui_session {
     bool has_selected_disk;
     enum classicsetup_gui_windows_version windows_version;
     struct classicsetup_source_catalog source_catalog;
+    char selected_release_name[CLASSICSETUP_SOURCE_NAME_SIZE];
+    bool has_selected_release_name;
+    enum classicsetup_windows_language selected_language;
+    bool has_selected_language;
+    enum classicsetup_windows_architecture selected_architecture;
+    bool has_selected_architecture;
     size_t selected_release_index;
     bool has_selected_release;
     struct classicsetup_download_status download;
@@ -117,6 +129,28 @@ int classicsetup_gui_set_windows_version(
 int classicsetup_gui_select_release(
     struct classicsetup_gui_session *session,
     size_t index);
+
+int classicsetup_gui_select_release_name(
+    struct classicsetup_gui_session *session,
+    const char *release_name);
+
+int classicsetup_gui_select_language(
+    struct classicsetup_gui_session *session,
+    enum classicsetup_windows_language language);
+
+int classicsetup_gui_select_architecture(
+    struct classicsetup_gui_session *session,
+    enum classicsetup_windows_architecture architecture);
+
+bool classicsetup_gui_source_selection_is_valid(
+    const struct classicsetup_gui_session *session);
+
+enum classicsetup_gui_source_change_requirement
+classicsetup_gui_source_change_requirement(
+    const struct classicsetup_gui_session *session);
+
+void classicsetup_gui_discard_downloaded_source(
+    struct classicsetup_gui_session *session);
 
 bool classicsetup_gui_summary_is_ready(
     const struct classicsetup_gui_session *session);

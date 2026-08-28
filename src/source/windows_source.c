@@ -78,6 +78,23 @@ static int object_string(const char *begin, const char *end,
     return copy_json_string(value, end, target, target_size);
 }
 
+static bool contains_case_insensitive(const char *text, const char *needle)
+{
+    size_t needle_length;
+
+    if (text == NULL || needle == NULL || needle[0] == '\0') {
+        return false;
+    }
+    needle_length = strlen(needle);
+    while (*text != '\0') {
+        if (strncasecmp(text, needle, needle_length) == 0) {
+            return true;
+        }
+        ++text;
+    }
+    return false;
+}
+
 static int landing_edition_id(const char *html, char *id, size_t id_size)
 {
     const char *select = strstr(html, "id=\"product-edition\"");
@@ -103,14 +120,15 @@ static int landing_edition_id(const char *html, char *id, size_t id_size)
 }
 
 static int landing_hash(const char *html, const char *language,
+                        const char *architecture_name,
                         char hash[CLASSICSETUP_SOURCE_HASH_SIZE])
 {
     char marker[128];
     const char *entry;
     size_t index;
 
-    if (snprintf(marker, sizeof(marker), "<td>%s 64-bit</td><td>",
-                 language) <= 0 ||
+    if (snprintf(marker, sizeof(marker), "<td>%s %s</td><td>",
+                 language, architecture_name) <= 0 ||
         (entry = strstr(html, marker)) == NULL) {
         return -1;
     }
@@ -123,6 +141,49 @@ static int landing_hash(const char *html, const char *language,
     }
     hash[64] = '\0';
     return 0;
+}
+
+const char *classicsetup_windows_architecture_label(
+    enum classicsetup_windows_architecture architecture)
+{
+    switch (architecture) {
+    case CLASSICSETUP_ARCH_X64:
+        return "x64";
+    case CLASSICSETUP_ARCH_X86:
+        return "x86 (32-bit)";
+    case CLASSICSETUP_ARCH_ARM64:
+        return "ARM64";
+    }
+    return "Unknown";
+}
+
+const char *classicsetup_windows_architecture_token(
+    enum classicsetup_windows_architecture architecture)
+{
+    switch (architecture) {
+    case CLASSICSETUP_ARCH_X64:
+        return "x64";
+    case CLASSICSETUP_ARCH_X86:
+        return "x86";
+    case CLASSICSETUP_ARCH_ARM64:
+        return "arm64";
+    }
+    return "";
+}
+
+bool classicsetup_windows_architecture_is_native(
+    enum classicsetup_windows_architecture architecture)
+{
+#if defined(__aarch64__)
+    return architecture == CLASSICSETUP_ARCH_ARM64;
+#elif defined(__x86_64__) || defined(_M_X64)
+    return architecture == CLASSICSETUP_ARCH_X64;
+#elif defined(__i386__) || defined(_M_IX86)
+    return architecture == CLASSICSETUP_ARCH_X86;
+#else
+    (void)architecture;
+    return false;
+#endif
 }
 
 void classicsetup_source_catalog_reset(
@@ -205,6 +266,7 @@ int classicsetup_windows_source_parse_catalog(
         const char *end = strchr(cursor, '}');
         char language[CLASSICSETUP_SOURCE_NAME_SIZE];
         struct classicsetup_windows_release release = {0};
+        char x86_hash[CLASSICSETUP_SOURCE_HASH_SIZE];
 
         if (end == NULL || object_string(cursor, end, "\"Language\":",
                                          language, sizeof(language)) != 0) {
@@ -221,8 +283,11 @@ int classicsetup_windows_source_parse_catalog(
                                : CLASSICSETUP_WINDOWS_LANGUAGE_ENGLISH;
         (void)snprintf(release.language_name,
                        sizeof(release.language_name), "%s", language);
-        (void)snprintf(release.architecture,
-                       sizeof(release.architecture), "%s", "x86_64");
+        release.architecture = CLASSICSETUP_ARCH_X64;
+        (void)snprintf(release.architecture_token,
+                       sizeof(release.architecture_token), "%s",
+                       classicsetup_windows_architecture_token(
+                           release.architecture));
         (void)snprintf(release.product_edition_id,
                        sizeof(release.product_edition_id), "%s", edition_id);
         if (object_string(cursor, end, "\"Id\":", release.sku_id,
@@ -233,9 +298,25 @@ int classicsetup_windows_source_parse_catalog(
             return -1;
         }
         release.official_hash_available =
-            landing_hash(landing_html, language,
+            landing_hash(landing_html, language, "64-bit",
                          release.expected_sha256) == 0;
         catalog->releases[catalog->release_count++] = release;
+        if (family == CLASSICSETUP_WINDOWS_10 &&
+            catalog->release_count < CLASSICSETUP_SOURCE_MAX_RELEASES &&
+            landing_hash(
+                landing_html, language, "32-bit", x86_hash) == 0) {
+            release.architecture = CLASSICSETUP_ARCH_X86;
+            (void)snprintf(
+                release.architecture_token,
+                sizeof(release.architecture_token), "%s",
+                classicsetup_windows_architecture_token(
+                    release.architecture));
+            (void)snprintf(
+                release.expected_sha256,
+                sizeof(release.expected_sha256), "%s", x86_hash);
+            release.official_hash_available = true;
+            catalog->releases[catalog->release_count++] = release;
+        }
         cursor = end + 1;
     }
     if (catalog->release_count == 0) {
@@ -267,9 +348,25 @@ int classicsetup_windows_source_parse_download(
         if (end == NULL) {
             return -1;
         }
+        bool architecture_matches = false;
+
         if (object_string(cursor, end, "\"DownloadType\":", type,
-                          sizeof(type)) == 0 &&
-            (strstr(type, "64") != NULL || strstr(type, "x64") != NULL) &&
+                          sizeof(type)) == 0) {
+            if (release->architecture == CLASSICSETUP_ARCH_ARM64) {
+                architecture_matches =
+                    contains_case_insensitive(type, "arm64");
+            } else if (release->architecture == CLASSICSETUP_ARCH_X86) {
+                architecture_matches =
+                    (contains_case_insensitive(type, "32") ||
+                     contains_case_insensitive(type, "x86")) &&
+                    !contains_case_insensitive(type, "x64");
+            } else if (release->architecture == CLASSICSETUP_ARCH_X64) {
+                architecture_matches =
+                    contains_case_insensitive(type, "64") &&
+                    !contains_case_insensitive(type, "arm64");
+            }
+        }
+        if (architecture_matches &&
             object_string(cursor, end, "\"Uri\":", uri,
                           sizeof(uri)) == 0 &&
             classicsetup_windows_source_uri_is_official(uri)) {

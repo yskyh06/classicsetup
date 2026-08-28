@@ -179,15 +179,14 @@ static enum classicsetup_event show_common_gui(
         config->selected_windows_release_index <
             config->windows_source_catalog.release_count) {
         session.source_catalog = config->windows_source_catalog;
-        session.selected_release_index =
-            config->selected_windows_release_index;
-        session.has_selected_release = true;
         session.windows_version =
             session.source_catalog.releases[
-                session.selected_release_index].family ==
+                config->selected_windows_release_index].family ==
                     CLASSICSETUP_WINDOWS_10
                 ? CLASSICSETUP_GUI_WINDOWS_10
                 : CLASSICSETUP_GUI_WINDOWS_11;
+        (void)classicsetup_gui_select_release(
+            &session, config->selected_windows_release_index);
         session.download = config->windows_download;
         session.workspace = config->windows_source_workspace;
     }

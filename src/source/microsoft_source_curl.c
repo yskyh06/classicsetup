@@ -201,6 +201,9 @@ int classicsetup_microsoft_source_resolve(
     struct response_buffer links = {0};
     char session[37];
     char uri[1024];
+    struct classicsetup_source_catalog current_catalog;
+    const struct classicsetup_windows_release *current = NULL;
+    size_t index;
     CURL *curl;
     int written;
     int result = -1;
@@ -219,13 +222,32 @@ int classicsetup_microsoft_source_resolve(
                                &landing, &skus) != 0) {
         goto done;
     }
+    if (classicsetup_windows_source_parse_catalog(
+            release->family, landing.data, skus.data,
+            &current_catalog) != 0) {
+        goto done;
+    }
+    for (index = 0; index < current_catalog.release_count; ++index) {
+        const struct classicsetup_windows_release *candidate =
+            &current_catalog.releases[index];
+
+        if (candidate->language == release->language &&
+            candidate->architecture == release->architecture &&
+            strcmp(candidate->release_name, release->release_name) == 0) {
+            current = candidate;
+            break;
+        }
+    }
+    if (current == NULL) {
+        goto done;
+    }
     written = snprintf(
         uri, sizeof(uri),
         "https://www.microsoft.com/software-download-connector/api/"
         "GetProductDownloadLinksBySku?profile=606624d44113&"
         "ProductEditionId=%s&SKU=%s&friendlyFileName=undefined&"
         "Locale=en-US&sessionID=%s",
-        release->product_edition_id, release->sku_id, session);
+        current->product_edition_id, current->sku_id, session);
     if (written > 0 && (size_t)written < sizeof(uri) &&
         fetch(curl, uri, landing_uri(release->family), &links) == 0 &&
         classicsetup_windows_source_parse_download(

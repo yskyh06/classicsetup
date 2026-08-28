@@ -21,6 +21,10 @@ struct classicsetup_gui_runtime {
     GtkWidget *disk_status;
     GtkWidget *summary_disk;
     GtkWidget *summary_version;
+    GtkWidget *summary_release;
+    GtkWidget *summary_language;
+    GtkWidget *summary_architecture;
+    GtkWidget *summary_storage;
     GtkWidget *summary_source;
     GtkWidget *summary_verification;
     GtkWidget *network_status;
@@ -37,6 +41,21 @@ struct classicsetup_gui_runtime {
     GtkWidget *windows10_button;
     GtkWidget *release_dropdown;
     GtkStringList *release_model;
+    GtkWidget *language_dropdown;
+    GtkStringList *language_model;
+    GtkWidget *architecture_dropdown;
+    GtkStringList *architecture_model;
+    GtkWidget *change_source_button;
+    char release_choices[CLASSICSETUP_SOURCE_MAX_RELEASES]
+                        [CLASSICSETUP_SOURCE_NAME_SIZE];
+    size_t release_choice_count;
+    enum classicsetup_windows_language
+        language_choices[CLASSICSETUP_SOURCE_MAX_RELEASES];
+    size_t language_choice_count;
+    enum classicsetup_windows_architecture architecture_choices[3];
+    size_t architecture_choice_count;
+    bool updating_source_controls;
+    bool source_change_pending;
     GtkWidget *download_status;
     GtkWidget *download_detail;
     GtkWidget *download_progress;
@@ -212,7 +231,7 @@ static gboolean page_is_complete(
         return classicsetup_network_has_connection(
             &runtime->session->network);
     case CLASSICSETUP_GUI_PAGE_WINDOWS_VERSION:
-        return runtime->session->has_selected_release;
+        return classicsetup_gui_source_selection_is_valid(runtime->session);
     case CLASSICSETUP_GUI_PAGE_DOWNLOAD:
         return classicsetup_download_is_ready(
             &runtime->session->download, &runtime->session->workspace);
@@ -351,30 +370,210 @@ static void source_discovery_worker(
     g_task_return_pointer(task, catalog, g_free);
 }
 
+static void clear_string_model(GtkStringList *model)
+{
+    gtk_string_list_splice(
+        model, 0, g_list_model_get_n_items(G_LIST_MODEL(model)), NULL);
+}
+
+static const char *language_label(enum classicsetup_windows_language language)
+{
+    return language == CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN
+               ? "Korean"
+               : "English";
+}
+
+static bool has_release_choice(
+    const struct classicsetup_gui_runtime *runtime,
+    const char *name)
+{
+    size_t index;
+
+    for (index = 0; index < runtime->release_choice_count; ++index) {
+        if (strcmp(runtime->release_choices[index], name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool has_language_choice(
+    const struct classicsetup_gui_runtime *runtime,
+    enum classicsetup_windows_language language)
+{
+    size_t index;
+
+    for (index = 0; index < runtime->language_choice_count; ++index) {
+        if (runtime->language_choices[index] == language) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool has_architecture_choice(
+    const struct classicsetup_gui_runtime *runtime,
+    enum classicsetup_windows_architecture architecture)
+{
+    size_t index;
+
+    for (index = 0; index < runtime->architecture_choice_count; ++index) {
+        if (runtime->architecture_choices[index] == architecture) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void update_source_controls(
     struct classicsetup_gui_runtime *runtime)
 {
     const struct classicsetup_source_catalog *catalog =
         &runtime->session->source_catalog;
+    enum classicsetup_gui_source_change_requirement requirement =
+        classicsetup_gui_source_change_requirement(runtime->session);
+    gboolean editable = requirement == CLASSICSETUP_GUI_SOURCE_CHANGE_ALLOWED &&
+                        !runtime->source_task_active &&
+                        !runtime->download_task_active;
+    guint selected_release = GTK_INVALID_LIST_POSITION;
+    guint selected_language = GTK_INVALID_LIST_POSITION;
+    guint selected_architecture = GTK_INVALID_LIST_POSITION;
     size_t index;
 
-    if (runtime->source_status == NULL || runtime->release_model == NULL) {
+    if (runtime->source_status == NULL || runtime->release_model == NULL ||
+        runtime->language_model == NULL ||
+        runtime->architecture_model == NULL) {
         return;
     }
-    gtk_string_list_splice(
-        runtime->release_model,
-        0,
-        g_list_model_get_n_items(G_LIST_MODEL(runtime->release_model)),
-        NULL);
-    for (index = 0; index < catalog->release_count; ++index) {
-        char line[256];
-        const struct classicsetup_windows_release *release =
-            &catalog->releases[index];
+    runtime->updating_source_controls = true;
+    runtime->release_choice_count = 0;
+    runtime->language_choice_count = 0;
+    runtime->architecture_choice_count = 0;
+    clear_string_model(runtime->release_model);
+    clear_string_model(runtime->language_model);
+    clear_string_model(runtime->architecture_model);
 
-        (void)snprintf(line, sizeof(line), "%s — %s — x64",
-                       release->release_name, release->language_name);
-        gtk_string_list_append(runtime->release_model, line);
+    if (catalog->state == CLASSICSETUP_SOURCE_READY) {
+        for (index = 0; index < catalog->release_count; ++index) {
+            const struct classicsetup_windows_release *candidate =
+                &catalog->releases[index];
+
+            if (!has_release_choice(runtime, candidate->release_name)) {
+                (void)snprintf(
+                    runtime->release_choices[runtime->release_choice_count],
+                    CLASSICSETUP_SOURCE_NAME_SIZE, "%s",
+                    candidate->release_name);
+                gtk_string_list_append(
+                    runtime->release_model, candidate->release_name);
+                ++runtime->release_choice_count;
+            }
+        }
+        if (!runtime->session->has_selected_release_name && editable &&
+            runtime->release_choice_count > 0) {
+            (void)classicsetup_gui_select_release_name(
+                runtime->session, runtime->release_choices[0]);
+        }
+        for (index = 0; index < runtime->release_choice_count; ++index) {
+            if (runtime->session->has_selected_release_name &&
+                strcmp(runtime->release_choices[index],
+                       runtime->session->selected_release_name) == 0) {
+                selected_release = (guint)index;
+                break;
+            }
+        }
+        if (runtime->session->has_selected_release_name) {
+            for (index = 0; index < catalog->release_count; ++index) {
+                const struct classicsetup_windows_release *candidate =
+                    &catalog->releases[index];
+
+                if (strcmp(candidate->release_name,
+                           runtime->session->selected_release_name) == 0 &&
+                    !has_language_choice(runtime, candidate->language)) {
+                    runtime->language_choices[
+                        runtime->language_choice_count++] =
+                        candidate->language;
+                    gtk_string_list_append(
+                        runtime->language_model,
+                        language_label(candidate->language));
+                }
+            }
+        }
+        if (!runtime->session->has_selected_language && editable &&
+            runtime->language_choice_count > 0) {
+            enum classicsetup_windows_language preferred =
+                CLASSICSETUP_WINDOWS_LANGUAGE_ENGLISH;
+
+            if (has_language_choice(
+                    runtime, CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN)) {
+                preferred = CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN;
+            } else {
+                preferred = runtime->language_choices[0];
+            }
+            (void)classicsetup_gui_select_language(
+                runtime->session, preferred);
+        }
+        for (index = 0; index < runtime->language_choice_count; ++index) {
+            if (runtime->session->has_selected_language &&
+                runtime->language_choices[index] ==
+                    runtime->session->selected_language) {
+                selected_language = (guint)index;
+                break;
+            }
+        }
+        if (runtime->session->has_selected_release_name &&
+            runtime->session->has_selected_language) {
+            for (index = 0; index < catalog->release_count; ++index) {
+                const struct classicsetup_windows_release *candidate =
+                    &catalog->releases[index];
+
+                if (strcmp(candidate->release_name,
+                           runtime->session->selected_release_name) == 0 &&
+                    candidate->language == runtime->session->selected_language &&
+                    !has_architecture_choice(
+                        runtime, candidate->architecture)) {
+                    runtime->architecture_choices[
+                        runtime->architecture_choice_count++] =
+                        candidate->architecture;
+                    gtk_string_list_append(
+                        runtime->architecture_model,
+                        classicsetup_windows_architecture_label(
+                            candidate->architecture));
+                }
+            }
+        }
+        if (!runtime->session->has_selected_architecture && editable &&
+            runtime->architecture_choice_count > 0) {
+            enum classicsetup_windows_architecture preferred =
+                runtime->architecture_choices[0];
+
+            for (index = 0;
+                 index < runtime->architecture_choice_count; ++index) {
+                if (classicsetup_windows_architecture_is_native(
+                        runtime->architecture_choices[index])) {
+                    preferred = runtime->architecture_choices[index];
+                    break;
+                }
+            }
+            (void)classicsetup_gui_select_architecture(
+                runtime->session, preferred);
+        }
+        for (index = 0; index < runtime->architecture_choice_count; ++index) {
+            if (runtime->session->has_selected_architecture &&
+                runtime->architecture_choices[index] ==
+                    runtime->session->selected_architecture) {
+                selected_architecture = (guint)index;
+                break;
+            }
+        }
     }
+    gtk_drop_down_set_selected(
+        GTK_DROP_DOWN(runtime->release_dropdown), selected_release);
+    gtk_drop_down_set_selected(
+        GTK_DROP_DOWN(runtime->language_dropdown), selected_language);
+    gtk_drop_down_set_selected(
+        GTK_DROP_DOWN(runtime->architecture_dropdown), selected_architecture);
+    runtime->updating_source_controls = false;
+
     if (catalog->state == CLASSICSETUP_SOURCE_DISCOVERING) {
         gtk_label_set_text(GTK_LABEL(runtime->source_status),
                            "Loading official Microsoft releases...");
@@ -383,22 +582,25 @@ static void update_source_controls(
     } else if (catalog->state == CLASSICSETUP_SOURCE_READY) {
         gtk_label_set_text(
             GTK_LABEL(runtime->source_status),
-            "Choose the Windows image language. Editions are selected later from the ISO.");
+            "Only combinations returned by Microsoft's official source are shown. Editions are selected later from the ISO.");
     } else {
         gtk_label_set_text(GTK_LABEL(runtime->source_status),
                            "Release discovery has not started.");
     }
+    gtk_widget_set_sensitive(runtime->windows11_button, editable);
+    gtk_widget_set_sensitive(runtime->windows10_button, editable);
     gtk_widget_set_sensitive(
         runtime->release_dropdown,
-        catalog->state == CLASSICSETUP_SOURCE_READY &&
-            runtime->session->download.state ==
-                CLASSICSETUP_DOWNLOAD_NOT_STARTED);
-    if (catalog->state == CLASSICSETUP_SOURCE_READY &&
-        catalog->release_count > 0 &&
-        !runtime->session->has_selected_release) {
-        gtk_drop_down_set_selected(GTK_DROP_DOWN(runtime->release_dropdown), 0);
-        (void)classicsetup_gui_select_release(runtime->session, 0);
-    }
+        editable && runtime->release_choice_count > 0);
+    gtk_widget_set_sensitive(
+        runtime->language_dropdown,
+        editable && runtime->language_choice_count > 0);
+    gtk_widget_set_sensitive(
+        runtime->architecture_dropdown,
+        editable && runtime->architecture_choice_count > 0);
+    gtk_widget_set_visible(
+        runtime->change_source_button,
+        requirement != CLASSICSETUP_GUI_SOURCE_CHANGE_ALLOWED);
     update_navigation(runtime);
 }
 
@@ -438,6 +640,10 @@ static void start_source_discovery(
         return;
     }
     runtime->session->has_selected_release = false;
+    runtime->session->has_selected_release_name = false;
+    runtime->session->has_selected_language = false;
+    runtime->session->has_selected_architecture = false;
+    runtime->session->selected_release_name[0] = '\0';
     classicsetup_source_catalog_reset(&runtime->session->source_catalog);
     runtime->session->source_catalog.state =
         CLASSICSETUP_SOURCE_DISCOVERING;
@@ -541,6 +747,11 @@ static void download_finished(
     if (error != NULL) {
         g_error_free(error);
     }
+    if (runtime->source_change_pending) {
+        runtime->source_change_pending = false;
+        classicsetup_gui_discard_downloaded_source(runtime->session);
+        update_source_controls(runtime);
+    }
     update_download_page(runtime);
     finish_pending_exit(runtime);
 }
@@ -550,7 +761,8 @@ static void start_download(struct classicsetup_gui_runtime *runtime)
     GTask *task;
 
     if (runtime->download_task_active || runtime->source_task_active ||
-        !runtime->session->has_selected_release) {
+        !classicsetup_gui_source_selection_is_valid(runtime->session) ||
+        !classicsetup_network_can_continue(&runtime->session->network)) {
         return;
     }
     if (runtime->session->workspace.valid &&
@@ -1016,10 +1228,120 @@ static void on_release_selected(
     guint selected = gtk_drop_down_get_selected(GTK_DROP_DOWN(object));
 
     (void)parameter;
-    if (selected != GTK_INVALID_LIST_POSITION) {
-        (void)classicsetup_gui_select_release(runtime->session, selected);
+    if (!runtime->updating_source_controls &&
+        selected < runtime->release_choice_count &&
+        classicsetup_gui_select_release_name(
+            runtime->session,
+            runtime->release_choices[selected]) == 0) {
+        update_source_controls(runtime);
     }
     update_navigation(runtime);
+}
+
+static void on_language_selected(
+    GObject *object, GParamSpec *parameter, gpointer user_data)
+{
+    struct classicsetup_gui_runtime *runtime = user_data;
+    guint selected = gtk_drop_down_get_selected(GTK_DROP_DOWN(object));
+
+    (void)parameter;
+    if (!runtime->updating_source_controls &&
+        selected < runtime->language_choice_count &&
+        classicsetup_gui_select_language(
+            runtime->session,
+            runtime->language_choices[selected]) == 0) {
+        update_source_controls(runtime);
+    }
+    update_navigation(runtime);
+}
+
+static void on_architecture_selected(
+    GObject *object, GParamSpec *parameter, gpointer user_data)
+{
+    struct classicsetup_gui_runtime *runtime = user_data;
+    guint selected = gtk_drop_down_get_selected(GTK_DROP_DOWN(object));
+
+    (void)parameter;
+    if (!runtime->updating_source_controls &&
+        selected < runtime->architecture_choice_count) {
+        (void)classicsetup_gui_select_architecture(
+            runtime->session,
+            runtime->architecture_choices[selected]);
+    }
+    update_navigation(runtime);
+}
+
+static void source_change_confirmed(
+    GObject *source_object,
+    GAsyncResult *result,
+    gpointer user_data)
+{
+    struct classicsetup_gui_runtime *runtime = user_data;
+    GError *error = NULL;
+    int choice = gtk_alert_dialog_choose_finish(
+        GTK_ALERT_DIALOG(source_object), result, &error);
+
+    if (error != NULL) {
+        g_error_free(error);
+        return;
+    }
+    if (choice != 0) {
+        return;
+    }
+    if (runtime->download_task_active) {
+        runtime->source_change_pending = true;
+        atomic_store(&runtime->download_cancel_requested, true);
+        gtk_label_set_text(
+            GTK_LABEL(runtime->source_status),
+            "Cancelling the current download before changing the source...");
+    } else {
+        classicsetup_gui_discard_downloaded_source(runtime->session);
+        update_source_controls(runtime);
+        update_download_page(runtime);
+    }
+}
+
+static void on_change_source_clicked(GtkButton *button, gpointer user_data)
+{
+    struct classicsetup_gui_runtime *runtime = user_data;
+    enum classicsetup_gui_source_change_requirement requirement =
+        classicsetup_gui_source_change_requirement(runtime->session);
+    GtkAlertDialog *dialog;
+    const char *cancel_buttons[] = {
+        "Cancel Download and Change", "Keep Current Download", NULL
+    };
+    const char *discard_buttons[] = {
+        "Discard and Change", "Keep Current Image", NULL
+    };
+
+    (void)button;
+    if (requirement == CLASSICSETUP_GUI_SOURCE_CHANGE_ALLOWED) {
+        return;
+    }
+    dialog = gtk_alert_dialog_new(
+        "%s",
+        requirement == CLASSICSETUP_GUI_SOURCE_CHANGE_CANCEL_DOWNLOAD
+            ? "Changing the Windows source will cancel the current download."
+            : "The selected Windows image has already been downloaded.");
+    gtk_alert_dialog_set_detail(
+        dialog,
+        requirement == CLASSICSETUP_GUI_SOURCE_CHANGE_CANCEL_DOWNLOAD
+            ? "The partial download will be removed after the worker stops."
+            : "Changing the source will remove the verified image and require a new download.");
+    gtk_alert_dialog_set_buttons(
+        dialog,
+        requirement == CLASSICSETUP_GUI_SOURCE_CHANGE_CANCEL_DOWNLOAD
+            ? cancel_buttons
+            : discard_buttons);
+    gtk_alert_dialog_set_default_button(dialog, 1);
+    gtk_alert_dialog_set_cancel_button(dialog, 1);
+    gtk_alert_dialog_choose(
+        dialog,
+        GTK_WINDOW(runtime->window),
+        NULL,
+        source_change_confirmed,
+        runtime);
+    g_object_unref(dialog);
 }
 
 static GtkWidget *build_windows_version_page(
@@ -1034,6 +1356,8 @@ static GtkWidget *build_windows_version_page(
     runtime->windows11_button = windows11;
     runtime->windows10_button = windows10;
 
+    add_classic_label(
+        box, "Windows family", "classic-section-title", FALSE);
     gtk_check_button_set_group(GTK_CHECK_BUTTON(windows10),
                                GTK_CHECK_BUTTON(windows11));
     gtk_check_button_set_active(
@@ -1062,11 +1386,7 @@ static GtkWidget *build_windows_version_page(
         runtime);
     gtk_box_append(GTK_BOX(box), windows11);
     gtk_box_append(GTK_BOX(box), windows10);
-    runtime->source_status = gtk_label_new(
-        "Release discovery has not started.");
-    gtk_label_set_xalign(GTK_LABEL(runtime->source_status), 0.0F);
-    gtk_label_set_wrap(GTK_LABEL(runtime->source_status), TRUE);
-    gtk_box_append(GTK_BOX(box), runtime->source_status);
+    add_classic_label(box, "Release", "classic-section-title", FALSE);
     runtime->release_model = gtk_string_list_new(NULL);
     runtime->release_dropdown = gtk_drop_down_new(
         G_LIST_MODEL(runtime->release_model), NULL);
@@ -1074,6 +1394,34 @@ static GtkWidget *build_windows_version_page(
     g_signal_connect(runtime->release_dropdown, "notify::selected",
                      G_CALLBACK(on_release_selected), runtime);
     gtk_box_append(GTK_BOX(box), runtime->release_dropdown);
+    add_classic_label(
+        box, "Installation language", "classic-section-title", FALSE);
+    runtime->language_model = gtk_string_list_new(NULL);
+    runtime->language_dropdown = gtk_drop_down_new(
+        G_LIST_MODEL(runtime->language_model), NULL);
+    gtk_widget_set_sensitive(runtime->language_dropdown, FALSE);
+    g_signal_connect(runtime->language_dropdown, "notify::selected",
+                     G_CALLBACK(on_language_selected), runtime);
+    gtk_box_append(GTK_BOX(box), runtime->language_dropdown);
+    add_classic_label(box, "Architecture", "classic-section-title", FALSE);
+    runtime->architecture_model = gtk_string_list_new(NULL);
+    runtime->architecture_dropdown = gtk_drop_down_new(
+        G_LIST_MODEL(runtime->architecture_model), NULL);
+    gtk_widget_set_sensitive(runtime->architecture_dropdown, FALSE);
+    g_signal_connect(runtime->architecture_dropdown, "notify::selected",
+                     G_CALLBACK(on_architecture_selected), runtime);
+    gtk_box_append(GTK_BOX(box), runtime->architecture_dropdown);
+    runtime->source_status = gtk_label_new(
+        "Release discovery has not started.");
+    gtk_label_set_xalign(GTK_LABEL(runtime->source_status), 0.0F);
+    gtk_label_set_wrap(GTK_LABEL(runtime->source_status), TRUE);
+    gtk_box_append(GTK_BOX(box), runtime->source_status);
+    runtime->change_source_button = gtk_button_new_with_label(
+        "Change Windows Source...");
+    gtk_widget_set_visible(runtime->change_source_button, FALSE);
+    g_signal_connect(runtime->change_source_button, "clicked",
+                     G_CALLBACK(on_change_source_clicked), runtime);
+    gtk_box_append(GTK_BOX(box), runtime->change_source_button);
     return box;
 }
 
@@ -1111,7 +1459,8 @@ static void update_download_page(struct classicsetup_gui_runtime *runtime)
 
         (void)snprintf(detail, sizeof(detail), "%s\n%s  |  %s",
                        release->release_name, release->language_name,
-                       release->architecture);
+                       classicsetup_windows_architecture_label(
+                           release->architecture));
         gtk_label_set_text(GTK_LABEL(runtime->download_release), detail);
     }
     gtk_label_set_text(
@@ -1136,24 +1485,18 @@ static void update_download_page(struct classicsetup_gui_runtime *runtime)
             ? status->progress_fraction : 0.0);
     gtk_widget_set_sensitive(
         runtime->download_start_button,
-        runtime->session->has_selected_release && !active &&
+        classicsetup_gui_source_selection_is_valid(runtime->session) &&
+        classicsetup_network_can_continue(&runtime->session->network) &&
+        !active &&
         status->state != CLASSICSETUP_DOWNLOAD_COMPLETE);
+    gtk_button_set_label(
+        GTK_BUTTON(runtime->download_start_button),
+        status->state == CLASSICSETUP_DOWNLOAD_FAILED ||
+                status->state == CLASSICSETUP_DOWNLOAD_CANCELLED
+            ? "Retry"
+            : "Download");
     gtk_widget_set_sensitive(runtime->download_cancel_button, active);
-    if (runtime->windows11_button != NULL) {
-        gtk_widget_set_sensitive(runtime->windows11_button,
-                                 !active && status->state ==
-                                     CLASSICSETUP_DOWNLOAD_NOT_STARTED);
-        gtk_widget_set_sensitive(runtime->windows10_button,
-                                 !active && status->state ==
-                                     CLASSICSETUP_DOWNLOAD_NOT_STARTED);
-    }
-    if (runtime->release_dropdown != NULL) {
-        gtk_widget_set_sensitive(
-            runtime->release_dropdown,
-            !active && status->state == CLASSICSETUP_DOWNLOAD_NOT_STARTED &&
-                runtime->session->source_catalog.state ==
-                    CLASSICSETUP_SOURCE_READY);
-    }
+    update_source_controls(runtime);
     update_navigation(runtime);
 }
 
@@ -1162,7 +1505,7 @@ static GtkWidget *build_download_page(
 {
     GtkWidget *box = build_placeholder_page(
         "Download Windows",
-        "The selected multi-edition x64 ISO will be downloaded from Microsoft and verified before use.");
+        "The selected multi-edition ISO will be downloaded from Microsoft and verified before use.");
     GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
 
     runtime->download_release = gtk_label_new("Windows source not selected");
@@ -1247,6 +1590,12 @@ static GtkWidget *build_summary_page(
 
     runtime->summary_disk = gtk_label_new("Target disk: not selected");
     runtime->summary_version = gtk_label_new("Windows version: not selected");
+    runtime->summary_release = gtk_label_new("Release: not selected");
+    runtime->summary_language = gtk_label_new("Language: not selected");
+    runtime->summary_architecture = gtk_label_new(
+        "Architecture: not selected");
+    runtime->summary_storage = gtk_label_new(
+        "Storage plan: not yet applied");
     runtime->summary_source = gtk_label_new("Windows source: not ready");
     runtime->summary_verification = gtk_label_new(
         "Download verification: not complete");
@@ -1256,6 +1605,10 @@ static GtkWidget *build_summary_page(
     runtime->summary_notice = gtk_label_new("");
     gtk_label_set_xalign(GTK_LABEL(runtime->summary_disk), 0.0F);
     gtk_label_set_xalign(GTK_LABEL(runtime->summary_version), 0.0F);
+    gtk_label_set_xalign(GTK_LABEL(runtime->summary_release), 0.0F);
+    gtk_label_set_xalign(GTK_LABEL(runtime->summary_language), 0.0F);
+    gtk_label_set_xalign(GTK_LABEL(runtime->summary_architecture), 0.0F);
+    gtk_label_set_xalign(GTK_LABEL(runtime->summary_storage), 0.0F);
     gtk_label_set_xalign(GTK_LABEL(runtime->summary_source), 0.0F);
     gtk_label_set_xalign(GTK_LABEL(runtime->summary_verification), 0.0F);
     gtk_label_set_xalign(GTK_LABEL(runtime->summary_network), 0.0F);
@@ -1264,6 +1617,10 @@ static GtkWidget *build_summary_page(
     gtk_label_set_wrap(GTK_LABEL(runtime->summary_disk), TRUE);
     gtk_label_set_wrap(GTK_LABEL(runtime->summary_network), TRUE);
     gtk_label_set_wrap(GTK_LABEL(runtime->summary_version), TRUE);
+    gtk_label_set_wrap(GTK_LABEL(runtime->summary_release), TRUE);
+    gtk_label_set_wrap(GTK_LABEL(runtime->summary_language), TRUE);
+    gtk_label_set_wrap(GTK_LABEL(runtime->summary_architecture), TRUE);
+    gtk_label_set_wrap(GTK_LABEL(runtime->summary_storage), TRUE);
     gtk_label_set_wrap(GTK_LABEL(runtime->summary_source), TRUE);
     gtk_label_set_wrap(GTK_LABEL(runtime->summary_verification), TRUE);
     gtk_label_set_wrap(GTK_LABEL(runtime->summary_options), TRUE);
@@ -1271,6 +1628,11 @@ static GtkWidget *build_summary_page(
     gtk_widget_add_css_class(runtime->summary_disk, "classic-summary-row");
     gtk_widget_add_css_class(runtime->summary_network, "classic-summary-row");
     gtk_widget_add_css_class(runtime->summary_version, "classic-summary-row");
+    gtk_widget_add_css_class(runtime->summary_release, "classic-summary-row");
+    gtk_widget_add_css_class(runtime->summary_language, "classic-summary-row");
+    gtk_widget_add_css_class(
+        runtime->summary_architecture, "classic-summary-row");
+    gtk_widget_add_css_class(runtime->summary_storage, "classic-summary-row");
     gtk_widget_add_css_class(runtime->summary_source, "classic-summary-row");
     gtk_widget_add_css_class(runtime->summary_verification, "classic-summary-row");
     gtk_widget_add_css_class(runtime->summary_options, "classic-summary-row");
@@ -1280,6 +1642,10 @@ static GtkWidget *build_summary_page(
     gtk_box_append(GTK_BOX(box), runtime->summary_disk);
     gtk_box_append(GTK_BOX(box), runtime->summary_network);
     gtk_box_append(GTK_BOX(box), runtime->summary_version);
+    gtk_box_append(GTK_BOX(box), runtime->summary_release);
+    gtk_box_append(GTK_BOX(box), runtime->summary_language);
+    gtk_box_append(GTK_BOX(box), runtime->summary_architecture);
+    gtk_box_append(GTK_BOX(box), runtime->summary_storage);
     gtk_box_append(GTK_BOX(box), runtime->summary_source);
     gtk_box_append(GTK_BOX(box), runtime->summary_verification);
     gtk_box_append(GTK_BOX(box), runtime->summary_options);
@@ -1336,19 +1702,42 @@ static void update_summary(struct classicsetup_gui_runtime *runtime)
             &runtime->session->source_catalog.releases[
                 runtime->session->selected_release_index];
 
-        (void)snprintf(line, sizeof(line), "Windows source: %.140s / %.60s",
-                       release->release_name, release->language_name);
+        (void)snprintf(line, sizeof(line), "Release: %.180s",
+                       release->release_name);
+        gtk_label_set_text(GTK_LABEL(runtime->summary_release), line);
+        (void)snprintf(line, sizeof(line), "Language: %.180s",
+                       release->language_name);
+        gtk_label_set_text(GTK_LABEL(runtime->summary_language), line);
+        (void)snprintf(
+            line, sizeof(line), "Architecture: %s",
+            classicsetup_windows_architecture_label(
+                release->architecture));
+        gtk_label_set_text(GTK_LABEL(runtime->summary_architecture), line);
+        (void)snprintf(line, sizeof(line), "%s",
+                       "Source: Official Microsoft download");
     } else {
+        gtk_label_set_text(
+            GTK_LABEL(runtime->summary_release), "Release: not selected");
+        gtk_label_set_text(
+            GTK_LABEL(runtime->summary_language), "Language: not selected");
+        gtk_label_set_text(
+            GTK_LABEL(runtime->summary_architecture),
+            "Architecture: not selected");
         (void)snprintf(line, sizeof(line), "%s",
                        "Windows source: not selected");
     }
     gtk_label_set_text(GTK_LABEL(runtime->summary_source), line);
     gtk_label_set_text(
         GTK_LABEL(runtime->summary_verification),
-        classicsetup_download_is_ready(
+        runtime->session->has_selected_release &&
+            classicsetup_download_is_ready(
             &runtime->session->download, &runtime->session->workspace)
-            ? "Download verification: complete"
-            : "Download verification: not complete");
+            ? (runtime->session->source_catalog.releases[
+                   runtime->session->selected_release_index]
+                       .official_hash_available
+                   ? "Download: verified using official SHA-256"
+                   : "Download: basic ISO checks passed; official hash was unavailable")
+            : "Download: not verified");
 }
 
 static void update_navigation(struct classicsetup_gui_runtime *runtime)
@@ -1363,7 +1752,8 @@ static void update_navigation(struct classicsetup_gui_runtime *runtime)
             &runtime->session->network);
     } else if (runtime->session->page ==
                CLASSICSETUP_GUI_PAGE_WINDOWS_VERSION) {
-        can_next = runtime->session->has_selected_release;
+        can_next = classicsetup_gui_source_selection_is_valid(
+            runtime->session);
     } else if (runtime->session->page == CLASSICSETUP_GUI_PAGE_SUMMARY) {
         can_next = classicsetup_gui_summary_is_ready(runtime->session);
     }
@@ -1400,6 +1790,8 @@ static void set_page(
     if (page == CLASSICSETUP_GUI_PAGE_WINDOWS_VERSION &&
         runtime->session->source_catalog.state == CLASSICSETUP_SOURCE_IDLE) {
         start_source_discovery(runtime);
+    } else if (page == CLASSICSETUP_GUI_PAGE_WINDOWS_VERSION) {
+        update_source_controls(runtime);
     }
     if (page == CLASSICSETUP_GUI_PAGE_DOWNLOAD) {
         update_download_page(runtime);

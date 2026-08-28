@@ -288,8 +288,14 @@ int classicsetup_download_windows_iso(
     }
     if (curl_result != CURLE_OK || response_code < 200 || response_code >= 300 ||
         !classicsetup_windows_source_uri_is_official(effective_uri)) {
-        fail_status(status, CLASSICSETUP_DOWNLOAD_ERROR_HTTP,
-                    "Could not download Windows from Microsoft.");
+        fail_status(
+            status,
+            CLASSICSETUP_DOWNLOAD_ERROR_HTTP,
+            curl_result == CURLE_SSL_CONNECT_ERROR ||
+                    curl_result == CURLE_PEER_FAILED_VERIFICATION ||
+                    curl_result == CURLE_SSL_CACERT_BADFILE
+                ? "Secure connection to Microsoft could not be established."
+                : "ClassicSetup could not obtain an official Windows download.");
         goto done;
     }
     status->state = CLASSICSETUP_DOWNLOAD_VERIFYING;
@@ -313,8 +319,11 @@ int classicsetup_download_windows_iso(
     status->state = CLASSICSETUP_DOWNLOAD_COMPLETE;
     status->error = CLASSICSETUP_DOWNLOAD_ERROR_NONE;
     status->progress_fraction = 1.0;
-    (void)snprintf(status->message, sizeof(status->message), "%s",
-                   "Windows source downloaded and verified.");
+    (void)snprintf(
+        status->message, sizeof(status->message), "%s",
+        release->official_hash_available
+            ? "Download completed and verified using an official SHA-256 hash."
+            : "Download completed. Official hash was unavailable; basic source checks passed.");
     result = 0;
 done:
     if (context.file != NULL) {

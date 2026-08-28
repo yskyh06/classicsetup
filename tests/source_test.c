@@ -15,6 +15,10 @@ static const char LANDING[] =
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
     "</td></tr><tr><td>English 64-bit</td><td>"
     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+    "</td></tr><tr><td>Korean 32-bit</td><td>"
+    "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+    "</td></tr><tr><td>English 32-bit</td><td>"
+    "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
     "</td></tr>";
 
 static const char SKUS[] =
@@ -29,6 +33,7 @@ static const char SKUS[] =
 static void test_source_mapping_and_policy(void)
 {
     struct classicsetup_source_catalog catalog;
+    struct classicsetup_source_catalog windows10_catalog;
     char sanitized[256];
 
     assert(classicsetup_windows_source_parse_catalog(
@@ -40,6 +45,23 @@ static void test_source_mapping_and_policy(void)
     assert(strcmp(catalog.releases[0].product_edition_id, "3321") == 0);
     assert(strcmp(catalog.releases[0].sku_id, "20") == 0);
     assert(catalog.releases[0].official_hash_available);
+    assert(catalog.releases[0].architecture == CLASSICSETUP_ARCH_X64);
+    assert(strcmp(catalog.releases[0].architecture_token, "x64") == 0);
+    assert(strcmp(classicsetup_windows_architecture_label(
+                      CLASSICSETUP_ARCH_X86),
+                  "x86 (32-bit)") == 0);
+    assert(strcmp(classicsetup_windows_architecture_token(
+                      CLASSICSETUP_ARCH_ARM64),
+                  "arm64") == 0);
+    assert(classicsetup_windows_source_parse_catalog(
+               CLASSICSETUP_WINDOWS_10,
+               LANDING, SKUS, &windows10_catalog) == 0);
+    assert(windows10_catalog.release_count == 4);
+    assert(windows10_catalog.releases[0].architecture ==
+           CLASSICSETUP_ARCH_X64);
+    assert(windows10_catalog.releases[1].architecture ==
+           CLASSICSETUP_ARCH_X86);
+    assert(windows10_catalog.releases[1].official_hash_available);
     assert(classicsetup_windows_source_parse_download(
                "{\"ProductDownloadOptions\":[{\"DownloadType\":"
                "\"64-bit\",\"Uri\":\"https://software.download.prss."
@@ -58,6 +80,32 @@ static void test_source_mapping_and_policy(void)
     assert(classicsetup_windows_source_parse_download(
                "{\"ProductDownloadOptions\":[{\"DownloadType\":"
                "\"64-bit\",\"Uri\":\"https://mirror.invalid/a.iso\"}]}",
+               &catalog.releases[1]) != 0);
+    catalog.releases[1].architecture = CLASSICSETUP_ARCH_X86;
+    assert(classicsetup_windows_source_parse_download(
+               "{\"ProductDownloadOptions\":["
+               "{\"DownloadType\":\"ARM64\",\"Uri\":"
+               "\"https://software.download.prss.microsoft.com/arm.iso\"},"
+               "{\"DownloadType\":\"32-bit\",\"Uri\":"
+               "\"https://software.download.prss.microsoft.com/x86.iso\"}]}",
+               &catalog.releases[1]) == 0);
+    assert(strstr(catalog.releases[1].download_uri, "x86.iso") != NULL);
+    catalog.releases[1].resolved = false;
+    catalog.releases[1].download_uri[0] = '\0';
+    catalog.releases[1].architecture = CLASSICSETUP_ARCH_ARM64;
+    assert(classicsetup_windows_source_parse_download(
+               "{\"ProductDownloadOptions\":["
+               "{\"DownloadType\":\"ARM64\",\"Uri\":"
+               "\"https://software.download.prss.microsoft.com/arm.iso\"}]}",
+               &catalog.releases[1]) == 0);
+    assert(strstr(catalog.releases[1].download_uri, "arm.iso") != NULL);
+    catalog.releases[1].resolved = false;
+    catalog.releases[1].download_uri[0] = '\0';
+    catalog.releases[1].architecture = CLASSICSETUP_ARCH_X86;
+    assert(classicsetup_windows_source_parse_download(
+               "{\"ProductDownloadOptions\":[{\"DownloadType\":"
+               "\"ARM64\",\"Uri\":\"https://software.download.prss."
+               "microsoft.com/arm.iso\"}]}",
                &catalog.releases[1]) != 0);
     assert(classicsetup_windows_source_parse_catalog(
                CLASSICSETUP_WINDOWS_11, LANDING,
