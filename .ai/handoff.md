@@ -2,87 +2,68 @@
 
 ## Current milestone
 
-- M11 Windows Source Discovery + Async Download + Verification + Temporary Workspace/Cleanup 완료.
-- 공통 GTK 흐름은 `Network -> Windows Version/source discovery -> Download -> Options -> Summary`이다.
-- Recommended는 GTK Disk부터, Advanced는 보존된 storage plan 뒤 GTK Network부터 같은 흐름을 사용한다.
-- 실제 ISO 다운로드 경로를 구현했지만 Codex 환경에서는 외부 source discovery나 대용량 다운로드를 실행하지 않았다.
-- Final Install, partition/format execution, ISO mount, WIM/ESD parsing/apply, boot configuration은 연결하지 않았다.
-- M7/M8 destructive safety, Advanced storage plan, Recommended disk policy는 변경하지 않았다.
+- M11 GTK Wizard Visual/UX Refinement 완료.
+- Recommended는 GTK Disk부터, Advanced는 TUI storage planning 뒤 GTK Network부터 공통 wizard shell을 사용한다.
+- 공통 GTK 흐름은 `Network -> Windows Version -> Download -> Installation Options -> Summary`이다.
+- 이번 변경은 GTK presentation 전용이다. M7/M8 safety, disk policy, NetworkManager, Microsoft source, download/verification/workspace 동작은 변경하지 않았다.
+- Final Install executor와 Windows image apply는 아직 연결하지 않았다.
 
 ## Changed files
 
-- Public model/API: `include/classicsetup/windows_source.h`, `include/classicsetup/download.h`, `include/classicsetup/workspace.h`.
-- Installation/GUI ownership: `include/classicsetup/config.h`, `include/classicsetup/gui.h`, `src/app.c`, `src/gui/gui.c`.
-- GTK frontend: `src/gui/gtk_frontend.c`.
-- Source backend: `src/source/windows_source.c`, `src/source/microsoft_source_curl.c`, `src/source/microsoft_source_stub.c`.
-- Download/workspace: `src/source/download_model.c`, `src/source/download_curl.c`, `src/source/download_stub.c`, `src/source/workspace.c`.
-- Build/tests: `CMakeLists.txt`, `tests/gui_test.c`, `tests/source_test.c`.
-- Snapshot: `.ai/handoff.md`.
+- `src/gui/gtk_frontend.c`: wizard shell, sidebar progress, responsive page containers, page presentation, Summary placeholder UX.
+- `src/gui/classicsetup.css`: XP-era inspired colors, typography, lists, status blocks, navigation, progress styling.
+- `.ai/handoff.md`: current GUI snapshot.
 
 ## Implementation result
 
-- `classicsetup_windows_release/catalog`은 family, discovered release, Korean/English language, x86_64 architecture, Microsoft product/SKU metadata, optional official SHA-256, ephemeral download URI를 분리한다.
-- Windows Version page는 선택한 Windows 11/10 family에 대해 worker thread에서 official Microsoft landing/connector discovery를 수행한다.
-- GUI는 임의 release URL을 하드코딩하지 않고 discovery 결과만 표시하며 Microsoft HTTPS host가 아닌 URI는 fail-closed 거부한다.
-- 전체 signed URI는 출력하지 않는다. sanitizer는 query/fragment를 제거하며 worker 종료 시 session에 복사되기 전에 resolved URI buffer를 지운다.
-- libcurl backend는 HTTPS-only redirects, peer/hostname verification, HTTP failure handling, progress callback, cancellation을 사용한다. shell 실행은 없다.
-- source discovery와 download/verification은 `GTask` worker에서 실행되고 GTK widget 갱신은 main-context callback에서만 수행된다.
-- Download page는 상태, bytes/total, rate, progress, Download/Cancel을 표시한다. 다른 page로 이동해도 transfer는 계속된다.
-- GUI 종료 중 worker가 있으면 cancellation을 요청하고 completion까지 기다린 뒤 main loop를 종료해 dangling worker를 남기지 않는다.
-- 상태 모델은 `NOT_STARTED -> PREPARING -> DOWNLOADING -> VERIFYING -> COMPLETE`; cancel/failure는 별도 terminal state다.
-- Summary Ready gate는 Internet reachable, source selected, options valid, download COMPLETE, verified workspace를 모두 요구한다.
-- verified source/catalog/download/workspace snapshot은 GUI 종료 시 installation config로 인계되어 frontend session과 파일 ownership을 분리한다.
-- workspace는 `mkdtemp(/tmp/classicsetup-XXXXXX)`와 mode 0700을 사용하며 known paths만 관리한다.
-- 다운로드는 `windows.iso.part`에 mode 0600으로 쓰고 flush/fsync 후 size, ISO `CD001`, 사용 가능한 official SHA-256을 검증한다.
-- 검증 성공 때만 같은 filesystem의 atomic `rename()`으로 `windows.iso`가 된다. verify 실패 파일은 final source가 되지 않는다.
-- 시작 전 expected size 또는 보수적 8 GiB fallback과 512 MiB overhead 기준으로 `statvfs()` free space를 검사한다.
-
-| Artifact | Success | Failure | Cancel | After install API |
-|---|---|---|---|---|
-| `.part` | 삭제/atomic rename | 삭제 | 삭제 | 삭제 |
-| verified ISO | image apply까지 유지 | 생성 안 함 | 기존 ISO 보존 | 기본 삭제, `keep_iso`면 유지 |
-| metadata temp | 삭제 | 삭제 | 삭제 | 삭제 |
-| debug artifact | 기본 생성 안 함/삭제 | 삭제 | 삭제 | 삭제 |
-
-- `classicsetup_microsoft_source_discover/resolve()`은 official metadata/ephemeral link를 가져오며 curl 또는 unavailable stub을 사용한다.
-- `classicsetup_windows_source_parse_catalog/download()`은 GTK 없는 deterministic parser/policy boundary다.
-- `classicsetup_download_windows_iso()`는 transfer, cancellation, verification, promotion을 소유하고 progress snapshot을 callback으로 제공한다.
-- `classicsetup_verify_source_file()`은 size/ISO marker/OpenSSL EVP SHA-256을 read-only 검증한다.
-- `classicsetup_workspace_*()`은 unique path, capacity, promotion, 성공/실패/취소/post-install cleanup을 단일 소유한다.
-- `start_source_discovery()/start_download()`과 completion callbacks는 worker lifetime과 GTK main-thread dispatch를 연결한다.
-- `classicsetup_gui_summary_is_ready()`는 widget과 무관한 source readiness policy다.
-- CMake option `CLASSICSETUP_ENABLE_DOWNLOAD`은 libcurl+OpenSSL을 optional 탐지하고 없거나 OFF이면 fail-graceful stubs를 빌드한다.
+- 모든 GTK page는 하나의 shell 안에서 `GtkStack` content만 교체한다.
+- shell은 blue ClassicSetup/Windows Setup header, left progress sidebar, scrollable light content panel, fixed bottom navigation으로 구성된다.
+- 기본 창은 1000x680, minimum 760x520이며 body/content는 확장된다. 각 page는 vertical `GtkScrolledWindow`로 감싸 작은 창에서 clipping 대신 scroll한다.
+- 공통 `build_page_base()`가 wrapped title/subtitle/separator rhythm을 제공한다.
+- 공통 `make_scrollable()`이 page content의 responsive boundary를 제공한다.
+- 공통 `build_status_block()`이 storage transition 안내와 warning/status presentation을 제공한다.
+- wrapped label은 word/character fallback wrapping과 horizontal expansion을 사용한다.
+- sidebar는 Recommended에서 Disk부터, Advanced에서 Network부터 표시한다.
+- sidebar 단계는 current `›`, completed `✓`, pending `•` 및 CSS state class로 갱신된다.
+- 완료 판단은 기존 model만 읽는다: selected disk, Internet readiness, selected source, verified download, visited/default options.
+- Advanced sidebar는 `Storage configuration is ready. No disk changes have been applied yet.` 안내를 지속 표시한다.
+- Network page는 Wired panel, Wi-Fi list frame, Refresh/Connect, password, spinner/status를 구조화했다.
+- Wi-Fi 장치가 없으면 기존 backend snapshot을 사용해 `No Wi-Fi device was detected.`를 표시한다.
+- Windows Version page는 family radio와 discovered release/language dropdown을 기존 source model로 표시한다.
+- Download page는 선택 release, language, architecture, state, progress, bytes/total, transfer rate, Download/Cancel을 표시한다.
+- page 이동은 기존 download worker를 cancel하지 않는다.
+- Installation Options는 실제 구현을 가장하지 않고 향후 Locale, Account, Privacy, compatibility, online-account, cleanup category를 placeholder row로 구분한다.
+- Summary는 target/planned disk, network, Windows family/source, verification, options를 별도 wrapped row로 표시한다.
+- Summary의 Install 버튼은 readiness gate를 유지하지만 executor를 호출하거나 GUI를 종료하지 않는다. 대신 미연결 안내 warning을 표시해 UI가 계속 responsive하다.
+- XP-era 느낌은 classic blue sidebar/header, orange separator, square controls, bordered lists, gray navigation bar로 표현하며 Microsoft asset은 사용하지 않는다.
 
 ## Build/test result
 
-- GTK ON + download ON clean Debug configure/build 성공; GTK4, libcurl, OpenSSL 감지, warning 0.
-- GTK OFF + download OFF clean Debug configure/build 성공; GUI/source/download stub 경로, warning 0.
-- GTK ON + download OFF configure/build 성공; GTK frontend가 unavailable download backend를 정상 사용한다.
+- GTK ON + download ON Debug configure/build 성공; C17, `-Wall -Wextra -Wpedantic`, warning 0.
+- GTK OFF + download OFF Debug configure/build 성공; stub frontend, warning 0.
 - GTK ON/OFF CTest 각각 15/15 통과.
-- ASan/UBSan GTK OFF + download ON CTest 15/15 통과 (`detect_leaks=0`; 실행 환경 제약으로 LSan 비활성).
-- parser/official-host rejection/URI redaction, unique 0700 workspace, capacity, ISO/size/hash verification, `.part` promotion/cleanup, summary gate, unavailable backend를 fixture/mock 수준에서 검증했다.
-- 외부 Microsoft endpoint, 실제 ISO, disk executor, mkfs, Wi-Fi 변경은 테스트에서 호출하지 않았다.
+- 기존 Network/GUI page state navigation, download/source model, workspace, M7/M8 regression tests가 모두 통과했다.
+- 실제 TUI -> GTK 진입 smoke 수행: GTK window 생성 및 CSS load, CSS parser warning 없음.
+- smoke 환경에서 EGL/Mesa software-renderer warning이 있었으며 기능/backend 오류는 관찰되지 않았다.
+- 외부 source discovery, ISO download, network connection 변경, destructive disk operation은 수행하지 않았다.
 
 ## Topics for ChatGPT to explain
 
-- async file download와 GTK main loop, GTask worker/main-context callback의 역할.
-- libcurl easy transfer를 worker에 격리한 구조와 향후 multi/resume 확장점.
-- HTTP redirect와 TLS peer/hostname verification의 기본 보안 경계.
-- `.part`와 verified final ISO를 나누고 atomic rename을 사용하는 이유.
-- OpenSSL EVP SHA-256, official hash availability, ISO basic sanity의 검증 강도 차이.
-- `statvfs()` free-space check와 향후 extraction overhead 계산.
-- `mkdtemp()`/0700/known-path cleanup이 symlink/path race를 줄이는 방식.
-- GUI, installation config, downloader, verifier, workspace manager의 ownership/lifetime.
-- cancellation, worker join, progress throttling, cache/temp/debug artifact lifecycle.
+- 하나의 wizard shell과 `GtkStack` page content를 분리하는 이유.
+- sidebar progress를 backend 복제 없이 session/model state에서 파생하는 방식.
+- current/completed/pending을 CSS class와 indicator로 표현하는 구조.
+- `GtkScrolledWindow`, expand, minimum size를 조합한 responsive GTK layout.
+- 공통 page title/status/navigation component가 UX 일관성을 만드는 방식.
+- GTK CSS가 backend/state machine과 독립적인 presentation layer인 이유.
+- async download 중 page navigation과 worker lifetime이 독립적인 이유.
+- Summary placeholder가 destructive transaction boundary를 보존하는 방식.
 
 ## Issues/cautions
 
-- Microsoft consumer download connector는 안정된 public API가 아니며 profile/schema/anti-abuse 정책이 바뀔 수 있다. 현재 resolver는 browser-attestation/Sentinel 거부 시 fail-closed한다.
-- Windows 11 landing/catalog 구조를 기준으로 구현했다. Windows 10 official source 제공/markup 차이는 실제 integration에서 추가 검증이 필요하다.
-- Korean/English x64만 노출하며 ARM64와 edition 선택은 미지원이다. Edition은 후속 WIM/ESD metadata 검사 단계에서 결정한다.
-- official SHA-256을 landing metadata에서 얻지 못하면 HTTPS+size(있을 때)+ISO marker만 검사하고 hash verified라고 표시하지 않는다.
-- crash resume와 persistent cache recovery는 미구현이다. Cancel은 partial을 삭제하고 ordinary page navigation은 active download를 유지한다.
-- 실제 Microsoft integration 수동 확인: Network reachable -> Version discovery -> language 선택 -> Download -> progress/cancel/retry -> verified Summary -> workspace 확인.
-- Ubuntu 개발 패키지는 `libgtk-4-dev`, `libcurl4-openssl-dev`, `libssl-dev`, `pkg-config`가 필요하다.
-- verified ISO의 최종 삭제 시점은 future image apply 성공 후 `classicsetup_workspace_cleanup_after_install()` 호출이다.
-- WIM apply와 최종 disk transaction은 미연결이며 GUI Summary는 destructive executor를 호출하지 않는다.
+- pixel-perfect Windows XP 복제는 아니며 ClassicSetup 고유 wizard style foundation이다.
+- 실제 GTK rendering은 desktop theme/font/GPU backend에 따라 일부 차이가 난다.
+- 현재 environment smoke에서 EGL/Mesa warning이 발생해 GPU rendering 품질은 별도 VMware desktop 확인이 필요하다.
+- Installation Options 기능은 placeholder이며 unattend/debloat/account/privacy backend가 없다.
+- Final Install 버튼은 안내만 표시하며 partition/format/image/boot executor를 호출하지 않는다.
+- source discovery는 official Microsoft flow 변화에 fail-closed하며 actual ISO integration test는 사용자가 명시적으로 수행해야 한다.
+- Windows image apply, WIM/ESD inspection, edition selection, boot configuration은 후속 작업이다.

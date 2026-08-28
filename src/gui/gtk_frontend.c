@@ -16,10 +16,13 @@ struct classicsetup_gui_runtime {
     GtkWidget *stack;
     GtkWidget *back_button;
     GtkWidget *next_button;
+    GtkWidget *step_rows[CLASSICSETUP_GUI_PAGE_COUNT];
+    GtkWidget *step_indicators[CLASSICSETUP_GUI_PAGE_COUNT];
     GtkWidget *disk_status;
     GtkWidget *summary_disk;
     GtkWidget *summary_version;
     GtkWidget *summary_source;
+    GtkWidget *summary_verification;
     GtkWidget *network_status;
     GtkWidget *ethernet_status;
     GtkWidget *wifi_list;
@@ -38,6 +41,10 @@ struct classicsetup_gui_runtime {
     GtkWidget *download_progress;
     GtkWidget *download_start_button;
     GtkWidget *download_cancel_button;
+    GtkWidget *download_release;
+    GtkWidget *summary_network;
+    GtkWidget *summary_options;
+    GtkWidget *summary_notice;
     bool source_task_active;
     bool download_task_active;
     bool exit_pending;
@@ -71,10 +78,176 @@ static void add_classic_label(
 
     gtk_label_set_xalign(GTK_LABEL(label), 0.0F);
     gtk_label_set_wrap(GTK_LABEL(label), wrap);
+    if (wrap) {
+        gtk_label_set_wrap_mode(GTK_LABEL(label), PANGO_WRAP_WORD_CHAR);
+        gtk_widget_set_hexpand(label, TRUE);
+    }
     if (css_class != NULL) {
         gtk_widget_add_css_class(label, css_class);
     }
     gtk_box_append(GTK_BOX(box), label);
+}
+
+static GtkWidget *build_page_base(
+    const char *title,
+    const char *description)
+{
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+    GtkWidget *separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+
+    gtk_widget_add_css_class(box, "classic-content");
+    add_classic_label(box, title, "classic-title", TRUE);
+    add_classic_label(box, description, "classic-subtitle", TRUE);
+    gtk_box_append(GTK_BOX(box), separator);
+    return box;
+}
+
+static GtkWidget *build_status_block(
+    const char *text,
+    const char *css_class)
+{
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+
+    gtk_widget_add_css_class(box, "classic-status");
+    if (css_class != NULL) {
+        gtk_widget_add_css_class(box, css_class);
+    }
+    add_classic_label(box, text, NULL, TRUE);
+    return box;
+}
+
+static GtkWidget *make_scrollable(GtkWidget *content)
+{
+    GtkWidget *scroll = gtk_scrolled_window_new();
+
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), content);
+    gtk_widget_set_hexpand(scroll, TRUE);
+    gtk_widget_set_vexpand(scroll, TRUE);
+    return scroll;
+}
+
+static const char *page_step_name(enum classicsetup_gui_page page)
+{
+    static const char *names[CLASSICSETUP_GUI_PAGE_COUNT] = {
+        "Select installation disk",
+        "Connect to the Internet",
+        "Select Windows version",
+        "Download Windows",
+        "Installation options",
+        "Ready to continue"
+    };
+
+    return page >= CLASSICSETUP_GUI_PAGE_DISK &&
+                   page < CLASSICSETUP_GUI_PAGE_COUNT
+               ? names[page]
+               : "Windows Setup";
+}
+
+static GtkWidget *build_sidebar_step(
+    struct classicsetup_gui_runtime *runtime,
+    enum classicsetup_gui_page page)
+{
+    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 9);
+    GtkWidget *indicator = gtk_label_new("•");
+    GtkWidget *label = gtk_label_new(page_step_name(page));
+
+    gtk_widget_add_css_class(row, "classic-step");
+    gtk_widget_add_css_class(indicator, "classic-step-indicator");
+    gtk_label_set_xalign(GTK_LABEL(label), 0.0F);
+    gtk_label_set_wrap(GTK_LABEL(label), TRUE);
+    gtk_label_set_wrap_mode(GTK_LABEL(label), PANGO_WRAP_WORD_CHAR);
+    gtk_widget_set_hexpand(label, TRUE);
+    gtk_box_append(GTK_BOX(row), indicator);
+    gtk_box_append(GTK_BOX(row), label);
+    runtime->step_rows[page] = row;
+    runtime->step_indicators[page] = indicator;
+    return row;
+}
+
+static GtkWidget *build_sidebar(struct classicsetup_gui_runtime *runtime)
+{
+    GtkWidget *sidebar = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    enum classicsetup_gui_page first =
+        runtime->session->entry_mode == CLASSICSETUP_GUI_ENTRY_RECOMMENDED
+            ? CLASSICSETUP_GUI_PAGE_DISK
+            : CLASSICSETUP_GUI_PAGE_NETWORK;
+    enum classicsetup_gui_page page;
+
+    gtk_widget_add_css_class(sidebar, "classic-sidebar");
+    gtk_widget_set_size_request(sidebar, 245, -1);
+    add_classic_label(sidebar, "Windows Setup", "classic-sidebar-title", FALSE);
+    if (runtime->session->entry_mode ==
+        CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN) {
+        gtk_box_append(
+            GTK_BOX(sidebar),
+            build_status_block(
+                "Storage configuration is ready. No disk changes have been applied yet.",
+                "classic-sidebar-note"));
+    } else {
+        add_classic_label(
+            sidebar,
+            "Recommended installation",
+            "classic-sidebar-subtitle",
+            TRUE);
+    }
+    add_classic_label(sidebar, "Setup progress", "classic-step-heading", FALSE);
+    for (page = first; page < CLASSICSETUP_GUI_PAGE_COUNT; ++page) {
+        gtk_box_append(GTK_BOX(sidebar), build_sidebar_step(runtime, page));
+    }
+    return sidebar;
+}
+
+static gboolean page_is_complete(
+    const struct classicsetup_gui_runtime *runtime,
+    enum classicsetup_gui_page page)
+{
+    switch (page) {
+    case CLASSICSETUP_GUI_PAGE_DISK:
+        return runtime->session->has_selected_disk;
+    case CLASSICSETUP_GUI_PAGE_NETWORK:
+        return classicsetup_network_can_continue(&runtime->session->network);
+    case CLASSICSETUP_GUI_PAGE_WINDOWS_VERSION:
+        return runtime->session->has_selected_release;
+    case CLASSICSETUP_GUI_PAGE_DOWNLOAD:
+        return classicsetup_download_is_ready(
+            &runtime->session->download, &runtime->session->workspace);
+    case CLASSICSETUP_GUI_PAGE_OPTIONS:
+        return runtime->session->options_placeholder &&
+               runtime->session->page > CLASSICSETUP_GUI_PAGE_OPTIONS;
+    case CLASSICSETUP_GUI_PAGE_SUMMARY:
+    case CLASSICSETUP_GUI_PAGE_COUNT:
+        return false;
+    }
+    return false;
+}
+
+static void update_sidebar_progress(
+    struct classicsetup_gui_runtime *runtime)
+{
+    enum classicsetup_gui_page page;
+
+    for (page = CLASSICSETUP_GUI_PAGE_DISK;
+         page < CLASSICSETUP_GUI_PAGE_COUNT; ++page) {
+        GtkWidget *row = runtime->step_rows[page];
+        GtkWidget *indicator = runtime->step_indicators[page];
+
+        if (row == NULL || indicator == NULL) {
+            continue;
+        }
+        gtk_widget_remove_css_class(row, "current");
+        gtk_widget_remove_css_class(row, "complete");
+        if (page == runtime->session->page) {
+            gtk_widget_add_css_class(row, "current");
+            gtk_label_set_text(GTK_LABEL(indicator), "›");
+        } else if (page_is_complete(runtime, page)) {
+            gtk_widget_add_css_class(row, "complete");
+            gtk_label_set_text(GTK_LABEL(indicator), "✓");
+        } else {
+            gtk_label_set_text(GTK_LABEL(indicator), "•");
+        }
+    }
 }
 
 static void format_size(
@@ -414,21 +587,13 @@ static void on_disk_row_selected(
 static GtkWidget *build_disk_page(
     struct classicsetup_gui_runtime *runtime)
 {
-    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    GtkWidget *box = build_page_base(
+        "Select a disk for Windows",
+        "Choose the disk that ClassicSetup should prepare. Only targets approved by the existing safety policy are available.");
     GtkWidget *list = gtk_list_box_new();
     size_t index;
 
-    gtk_widget_add_css_class(box, "classic-content");
-    add_classic_label(
-        box,
-        "Select a disk for Windows",
-        "classic-title",
-        FALSE);
-    add_classic_label(
-        box,
-        "Recommended installation only uses disks that the core safety policy marks as available.",
-        "classic-muted",
-        TRUE);
+    gtk_widget_add_css_class(list, "classic-list");
     gtk_list_box_set_selection_mode(
         GTK_LIST_BOX(list),
         GTK_SELECTION_SINGLE);
@@ -514,12 +679,7 @@ static GtkWidget *build_placeholder_page(
     const char *title,
     const char *description)
 {
-    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
-
-    gtk_widget_add_css_class(box, "classic-content");
-    add_classic_label(box, title, "classic-title", FALSE);
-    add_classic_label(box, description, "classic-muted", TRUE);
-    return box;
+    return build_page_base(title, description);
 }
 
 static void clear_wifi_rows(GtkWidget *list)
@@ -705,22 +865,22 @@ static void on_network_connect_clicked(GtkButton *button, gpointer user_data)
 static GtkWidget *build_network_page(
     struct classicsetup_gui_runtime *runtime)
 {
-    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    GtkWidget *box = build_page_base(
+        "Connect to the Internet",
+        "Connect ClassicSetup to the Internet so it can discover and download an official Windows source.");
     GtkWidget *status_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *wired_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
 
-    gtk_widget_add_css_class(box, "classic-content");
-    add_classic_label(box, "Connect to the Internet", "classic-title", FALSE);
-    add_classic_label(
-        box,
-        "An Internet connection is required for the online Windows setup workflow.",
-        "classic-muted",
-        TRUE);
+    gtk_widget_add_css_class(wired_panel, "classic-group");
+    add_classic_label(wired_panel, "Wired connection", "classic-section-title", FALSE);
     runtime->ethernet_status = gtk_label_new("Wired connection: checking...");
     gtk_label_set_xalign(GTK_LABEL(runtime->ethernet_status), 0.0F);
-    gtk_box_append(GTK_BOX(box), runtime->ethernet_status);
-    add_classic_label(box, "Wi-Fi", NULL, FALSE);
+    gtk_box_append(GTK_BOX(wired_panel), runtime->ethernet_status);
+    gtk_box_append(GTK_BOX(box), wired_panel);
+    add_classic_label(box, "Wi-Fi networks", "classic-section-title", FALSE);
     runtime->wifi_list = gtk_list_box_new();
+    gtk_widget_add_css_class(runtime->wifi_list, "classic-list");
     gtk_list_box_set_selection_mode(
         GTK_LIST_BOX(runtime->wifi_list),
         GTK_SELECTION_SINGLE);
@@ -762,6 +922,7 @@ static GtkWidget *build_network_page(
     gtk_label_set_wrap(GTK_LABEL(runtime->network_status), TRUE);
     gtk_box_append(GTK_BOX(status_box), runtime->network_spinner);
     gtk_box_append(GTK_BOX(status_box), runtime->network_status);
+    gtk_widget_add_css_class(status_box, "classic-status");
     gtk_box_append(GTK_BOX(box), status_box);
     return box;
 }
@@ -879,6 +1040,17 @@ static void update_download_page(struct classicsetup_gui_runtime *runtime)
     if (runtime->download_status == NULL) {
         return;
     }
+    if (runtime->download_release != NULL &&
+        runtime->session->has_selected_release) {
+        const struct classicsetup_windows_release *release =
+            &runtime->session->source_catalog.releases[
+                runtime->session->selected_release_index];
+
+        (void)snprintf(detail, sizeof(detail), "%s\n%s  |  %s",
+                       release->release_name, release->language_name,
+                       release->architecture);
+        gtk_label_set_text(GTK_LABEL(runtime->download_release), detail);
+    }
     gtk_label_set_text(
         GTK_LABEL(runtime->download_status),
         status->message[0] != '\0' ? status->message
@@ -930,6 +1102,10 @@ static GtkWidget *build_download_page(
         "The selected multi-edition x64 ISO will be downloaded from Microsoft and verified before use.");
     GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
 
+    runtime->download_release = gtk_label_new("Windows source not selected");
+    gtk_label_set_xalign(GTK_LABEL(runtime->download_release), 0.0F);
+    gtk_label_set_wrap(GTK_LABEL(runtime->download_release), TRUE);
+    gtk_widget_add_css_class(runtime->download_release, "classic-source-summary");
     runtime->download_status = gtk_label_new(
         "Ready to download the selected Windows image.");
     gtk_label_set_xalign(GTK_LABEL(runtime->download_status), 0.0F);
@@ -948,6 +1124,7 @@ static GtkWidget *build_download_page(
                      G_CALLBACK(on_download_cancel_clicked), runtime);
     gtk_box_append(GTK_BOX(actions), runtime->download_start_button);
     gtk_box_append(GTK_BOX(actions), runtime->download_cancel_button);
+    gtk_box_append(GTK_BOX(box), runtime->download_release);
     gtk_box_append(GTK_BOX(box), runtime->download_status);
     gtk_box_append(GTK_BOX(box), runtime->download_progress);
     gtk_box_append(GTK_BOX(box), runtime->download_detail);
@@ -967,10 +1144,34 @@ static GtkWidget *build_options_page(
         "Locale, account, privacy, compatibility, and cleanup options are placeholders only.");
     GtkWidget *check = gtk_check_button_new_with_label(
         "Use recommended settings (placeholder)");
+    static const char *categories[] = {
+        "Locale and region",
+        "Account setup",
+        "Privacy preferences",
+        "Windows 11 compatibility",
+        "Online account options",
+        "Debloat and cleanup"
+    };
+    size_t index;
 
     gtk_check_button_set_active(GTK_CHECK_BUTTON(check), TRUE);
     runtime->session->options_placeholder = true;
     gtk_box_append(GTK_BOX(box), check);
+    add_classic_label(
+        box, "Planned option categories", "classic-section-title", FALSE);
+    for (index = 0; index < G_N_ELEMENTS(categories); ++index) {
+        GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+        GtkWidget *name = gtk_label_new(categories[index]);
+        GtkWidget *state = gtk_label_new("Not configured in this milestone");
+
+        gtk_widget_add_css_class(row, "classic-option-row");
+        gtk_label_set_xalign(GTK_LABEL(name), 0.0F);
+        gtk_widget_set_hexpand(name, TRUE);
+        gtk_widget_add_css_class(state, "classic-muted");
+        gtk_box_append(GTK_BOX(row), name);
+        gtk_box_append(GTK_BOX(row), state);
+        gtk_box_append(GTK_BOX(box), row);
+    }
     return box;
 }
 
@@ -984,12 +1185,42 @@ static GtkWidget *build_summary_page(
     runtime->summary_disk = gtk_label_new("Target disk: not selected");
     runtime->summary_version = gtk_label_new("Windows version: not selected");
     runtime->summary_source = gtk_label_new("Windows source: not ready");
+    runtime->summary_verification = gtk_label_new(
+        "Download verification: not complete");
+    runtime->summary_network = gtk_label_new("Network: not ready");
+    runtime->summary_options = gtk_label_new(
+        "Installation options: recommended placeholder settings");
+    runtime->summary_notice = gtk_label_new("");
     gtk_label_set_xalign(GTK_LABEL(runtime->summary_disk), 0.0F);
     gtk_label_set_xalign(GTK_LABEL(runtime->summary_version), 0.0F);
     gtk_label_set_xalign(GTK_LABEL(runtime->summary_source), 0.0F);
+    gtk_label_set_xalign(GTK_LABEL(runtime->summary_verification), 0.0F);
+    gtk_label_set_xalign(GTK_LABEL(runtime->summary_network), 0.0F);
+    gtk_label_set_xalign(GTK_LABEL(runtime->summary_options), 0.0F);
+    gtk_label_set_xalign(GTK_LABEL(runtime->summary_notice), 0.0F);
+    gtk_label_set_wrap(GTK_LABEL(runtime->summary_disk), TRUE);
+    gtk_label_set_wrap(GTK_LABEL(runtime->summary_network), TRUE);
+    gtk_label_set_wrap(GTK_LABEL(runtime->summary_version), TRUE);
+    gtk_label_set_wrap(GTK_LABEL(runtime->summary_source), TRUE);
+    gtk_label_set_wrap(GTK_LABEL(runtime->summary_verification), TRUE);
+    gtk_label_set_wrap(GTK_LABEL(runtime->summary_options), TRUE);
+    gtk_label_set_wrap(GTK_LABEL(runtime->summary_notice), TRUE);
+    gtk_widget_add_css_class(runtime->summary_disk, "classic-summary-row");
+    gtk_widget_add_css_class(runtime->summary_network, "classic-summary-row");
+    gtk_widget_add_css_class(runtime->summary_version, "classic-summary-row");
+    gtk_widget_add_css_class(runtime->summary_source, "classic-summary-row");
+    gtk_widget_add_css_class(runtime->summary_verification, "classic-summary-row");
+    gtk_widget_add_css_class(runtime->summary_options, "classic-summary-row");
+    gtk_widget_add_css_class(runtime->summary_notice, "classic-status");
+    gtk_widget_add_css_class(runtime->summary_notice, "classic-warning");
+    gtk_widget_set_visible(runtime->summary_notice, FALSE);
     gtk_box_append(GTK_BOX(box), runtime->summary_disk);
+    gtk_box_append(GTK_BOX(box), runtime->summary_network);
     gtk_box_append(GTK_BOX(box), runtime->summary_version);
     gtk_box_append(GTK_BOX(box), runtime->summary_source);
+    gtk_box_append(GTK_BOX(box), runtime->summary_verification);
+    gtk_box_append(GTK_BOX(box), runtime->summary_options);
+    gtk_box_append(GTK_BOX(box), runtime->summary_notice);
     add_classic_label(
         box,
         "Storage and image installation remain deferred until a later milestone.",
@@ -1032,6 +1263,11 @@ static void update_summary(struct classicsetup_gui_runtime *runtime)
         runtime->session->windows_version == CLASSICSETUP_GUI_WINDOWS_10
             ? "Windows family: Windows 10"
             : "Windows family: Windows 11");
+    gtk_label_set_text(
+        GTK_LABEL(runtime->summary_network),
+        classicsetup_network_can_continue(&runtime->session->network)
+            ? "Network: connected to the Internet"
+            : "Network: Internet connection required");
     if (runtime->session->has_selected_release) {
         const struct classicsetup_windows_release *release =
             &runtime->session->source_catalog.releases[
@@ -1043,12 +1279,13 @@ static void update_summary(struct classicsetup_gui_runtime *runtime)
         (void)snprintf(line, sizeof(line), "%s",
                        "Windows source: not selected");
     }
-    if (runtime->session->download.state == CLASSICSETUP_DOWNLOAD_COMPLETE &&
-        runtime->session->workspace.verified_iso) {
-        (void)snprintf(line, sizeof(line), "%s",
-                       "Windows source: downloaded and verified");
-    }
     gtk_label_set_text(GTK_LABEL(runtime->summary_source), line);
+    gtk_label_set_text(
+        GTK_LABEL(runtime->summary_verification),
+        classicsetup_download_is_ready(
+            &runtime->session->download, &runtime->session->workspace)
+            ? "Download verification: complete"
+            : "Download verification: not complete");
 }
 
 static void update_navigation(struct classicsetup_gui_runtime *runtime)
@@ -1072,7 +1309,8 @@ static void update_navigation(struct classicsetup_gui_runtime *runtime)
     gtk_widget_set_sensitive(runtime->next_button, can_next);
     gtk_button_set_label(
         GTK_BUTTON(runtime->next_button),
-        summary ? "Install (later)" : "Next");
+        summary ? "Install" : "Next");
+    update_sidebar_progress(runtime);
     if (summary) {
         update_summary(runtime);
     }
@@ -1140,7 +1378,10 @@ static void on_next_clicked(
     }
     if (runtime->session->page == CLASSICSETUP_GUI_PAGE_SUMMARY) {
         if (classicsetup_gui_summary_is_ready(runtime->session)) {
-            request_gui_exit(runtime, CLASSICSETUP_GUI_FINISHED);
+            gtk_label_set_text(
+                GTK_LABEL(runtime->summary_notice),
+                "The Windows installation engine is not connected yet. No disk or filesystem changes were made.");
+            gtk_widget_set_visible(runtime->summary_notice, TRUE);
         }
         return;
     }
@@ -1191,6 +1432,8 @@ static void activate(
     GtkWidget *body;
     GtkWidget *sidebar;
     GtkWidget *footer;
+    GtkWidget *footer_spacer;
+    GtkWidget *header_text;
     GtkWidget *page;
 
     load_css();
@@ -1202,7 +1445,8 @@ static void activate(
                 CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN
             ? "ClassicSetup - Windows setup"
             : "ClassicSetup - Recommended installation");
-    gtk_window_set_default_size(GTK_WINDOW(runtime->window), 820, 540);
+    gtk_window_set_default_size(GTK_WINDOW(runtime->window), 1000, 680);
+    gtk_widget_set_size_request(runtime->window, 760, 520);
     g_signal_connect(
         runtime->window,
         "close-request",
@@ -1210,30 +1454,21 @@ static void activate(
         runtime);
 
     root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_widget_add_css_class(header, "classic-header");
-    add_classic_label(header, "ClassicSetup", NULL, FALSE);
+    header_text = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+    add_classic_label(header_text, "ClassicSetup", "classic-brand", FALSE);
+    add_classic_label(
+        header_text,
+        "Windows Setup",
+        "classic-header-subtitle",
+        FALSE);
+    gtk_box_append(GTK_BOX(header), header_text);
     gtk_box_append(GTK_BOX(root), header);
 
     body = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    sidebar = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    gtk_widget_add_css_class(sidebar, "classic-sidebar");
-    if (runtime->session->entry_mode ==
-        CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN) {
-        add_classic_label(sidebar, "Windows Setup", "classic-title", FALSE);
-        add_classic_label(
-            sidebar,
-            "The advanced storage plan is ready. No disk changes have been applied yet.",
-            "classic-muted",
-            TRUE);
-    } else {
-        add_classic_label(sidebar, "Recommended", "classic-title", FALSE);
-        add_classic_label(
-            sidebar,
-            "Safe automatic settings for a supported empty disk.",
-            "classic-muted",
-            TRUE);
-    }
+    gtk_widget_set_vexpand(body, TRUE);
+    sidebar = build_sidebar(runtime);
     gtk_box_append(GTK_BOX(body), sidebar);
 
     runtime->stack = gtk_stack_new();
@@ -1241,27 +1476,34 @@ static void activate(
         GTK_STACK(runtime->stack),
         GTK_STACK_TRANSITION_TYPE_NONE);
     page = build_disk_page(runtime);
-    gtk_stack_add_named(GTK_STACK(runtime->stack), page, "disk");
+    gtk_stack_add_named(
+        GTK_STACK(runtime->stack), make_scrollable(page), "disk");
     page = build_network_page(runtime);
-    gtk_stack_add_named(GTK_STACK(runtime->stack), page, "network");
+    gtk_stack_add_named(
+        GTK_STACK(runtime->stack), make_scrollable(page), "network");
     page = build_windows_version_page(runtime);
-    gtk_stack_add_named(GTK_STACK(runtime->stack), page, "version");
+    gtk_stack_add_named(
+        GTK_STACK(runtime->stack), make_scrollable(page), "version");
     page = build_download_page(runtime);
-    gtk_stack_add_named(GTK_STACK(runtime->stack), page, "download");
+    gtk_stack_add_named(
+        GTK_STACK(runtime->stack), make_scrollable(page), "download");
     page = build_options_page(runtime);
-    gtk_stack_add_named(GTK_STACK(runtime->stack), page, "options");
+    gtk_stack_add_named(
+        GTK_STACK(runtime->stack), make_scrollable(page), "options");
     page = build_summary_page(runtime);
-    gtk_stack_add_named(GTK_STACK(runtime->stack), page, "summary");
+    gtk_stack_add_named(
+        GTK_STACK(runtime->stack), make_scrollable(page), "summary");
     gtk_widget_set_hexpand(runtime->stack, TRUE);
     gtk_widget_set_vexpand(runtime->stack, TRUE);
     gtk_box_append(GTK_BOX(body), runtime->stack);
     gtk_box_append(GTK_BOX(root), body);
 
     footer = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_widget_add_css_class(footer, "classic-sidebar");
+    gtk_widget_add_css_class(footer, "classic-navigation");
     runtime->back_button = gtk_button_new_with_label("Back");
     runtime->next_button = gtk_button_new_with_label("Next");
-    gtk_widget_set_hexpand(runtime->back_button, TRUE);
+    footer_spacer = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_hexpand(footer_spacer, TRUE);
     gtk_widget_set_halign(runtime->next_button, GTK_ALIGN_END);
     g_signal_connect(
         runtime->back_button,
@@ -1274,6 +1516,7 @@ static void activate(
         G_CALLBACK(on_next_clicked),
         runtime);
     gtk_box_append(GTK_BOX(footer), runtime->back_button);
+    gtk_box_append(GTK_BOX(footer), footer_spacer);
     gtk_box_append(GTK_BOX(footer), runtime->next_button);
     gtk_box_append(GTK_BOX(root), footer);
     gtk_window_set_child(GTK_WINDOW(runtime->window), root);
