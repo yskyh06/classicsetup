@@ -199,21 +199,29 @@ classicsetup_show_windows_source_placeholder(void)
 enum classicsetup_simple_screen_result
 classicsetup_show_recommended_gui_unavailable(void)
 {
+    return classicsetup_show_gui_unavailable(0);
+}
+
+enum classicsetup_simple_screen_result
+classicsetup_show_gui_unavailable(int after_advanced)
+{
     for (;;) {
         int key;
 
         classicsetup_tui_begin_screen(
-            "ClassicSetup - Recommended Installation");
+            "ClassicSetup - Windows Setup");
         classicsetup_tui_draw_wrapped_text(
             4,
             4,
             classicsetup_tui_canvas_width() - 8,
-            "The Recommended GTK frontend is not available in this build.");
+            "The GTK Windows setup frontend is not available in this build.");
         classicsetup_tui_draw_wrapped_text(
             7,
             4,
             classicsetup_tui_canvas_width() - 8,
-            "Return to Setup Mode and choose Advanced installation, or install GTK4 and rebuild ClassicSetup.");
+            after_advanced
+                ? "Your completed storage preparation is preserved. Return to the format result screen or quit Setup."
+                : "Return to Setup Mode and choose Advanced installation, or install GTK4 and rebuild ClassicSetup.");
         classicsetup_tui_draw_footer("B=Back    Q=Quit");
         refresh();
         key = getch();

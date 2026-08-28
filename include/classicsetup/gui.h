@@ -21,6 +21,16 @@ enum classicsetup_gui_page {
     CLASSICSETUP_GUI_PAGE_COUNT
 };
 
+enum classicsetup_gui_entry_mode {
+    CLASSICSETUP_GUI_ENTRY_RECOMMENDED,
+    CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED
+};
+
+enum classicsetup_gui_back_action {
+    CLASSICSETUP_GUI_BACK_TO_PAGE,
+    CLASSICSETUP_GUI_BACK_TO_TUI
+};
+
 enum classicsetup_gui_windows_version {
     CLASSICSETUP_GUI_WINDOWS_11,
     CLASSICSETUP_GUI_WINDOWS_10
@@ -35,6 +45,7 @@ enum classicsetup_gui_run_result {
 };
 
 struct classicsetup_gui_session {
+    enum classicsetup_gui_entry_mode entry_mode;
     enum classicsetup_gui_page page;
     struct classicsetup_disk_assessment
         assessments[CLASSICSETUP_GUI_MAX_DISKS];
@@ -46,16 +57,28 @@ struct classicsetup_gui_session {
     enum classicsetup_gui_windows_version windows_version;
     bool options_placeholder;
     struct classicsetup_network_snapshot network;
+    bool advanced_storage_prepared;
+    bool has_prepared_disk;
+    struct classicsetup_disk_info prepared_disk;
 };
 
 void classicsetup_gui_session_reset(
     struct classicsetup_gui_session *session);
+
+void classicsetup_gui_session_reset_for_entry(
+    struct classicsetup_gui_session *session,
+    enum classicsetup_gui_entry_mode entry_mode);
 
 enum classicsetup_gui_page classicsetup_gui_page_next(
     enum classicsetup_gui_page page);
 
 enum classicsetup_gui_page classicsetup_gui_page_back(
     enum classicsetup_gui_page page);
+
+enum classicsetup_gui_back_action classicsetup_gui_page_back_for_entry(
+    enum classicsetup_gui_entry_mode entry_mode,
+    enum classicsetup_gui_page page,
+    enum classicsetup_gui_page *destination);
 
 int classicsetup_gui_select_disk(
     struct classicsetup_gui_session *session,
@@ -67,6 +90,12 @@ int classicsetup_gui_set_windows_version(
 
 int classicsetup_gui_session_init(
     struct classicsetup_gui_session *session);
+
+int classicsetup_gui_session_init_after_advanced(
+    struct classicsetup_gui_session *session,
+    const struct classicsetup_disk_info *prepared_disk,
+    bool partition_apply_succeeded,
+    bool format_apply_verified);
 
 int classicsetup_gui_run(
     struct classicsetup_gui_session *session);

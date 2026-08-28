@@ -33,17 +33,19 @@ enum classicsetup_state classicsetup_next_state_for_setup_mode(
         if (event == CLASSICSETUP_EVENT_CONTINUE) {
             return setup_mode == CLASSICSETUP_SETUP_ADVANCED
                        ? CLASSICSETUP_STATE_KEYBOARD
-                       : CLASSICSETUP_STATE_RECOMMENDED_GUI_TRANSITION;
+                       : CLASSICSETUP_STATE_GUI_TRANSITION;
         }
         return CLASSICSETUP_STATE_SETUP_MODE;
-    case CLASSICSETUP_STATE_RECOMMENDED_GUI_TRANSITION:
+    case CLASSICSETUP_STATE_GUI_TRANSITION:
         if (event == CLASSICSETUP_EVENT_CONTINUE) {
             return CLASSICSETUP_STATE_NEXT_STAGE;
         }
         if (event == CLASSICSETUP_EVENT_BACK) {
-            return CLASSICSETUP_STATE_SETUP_MODE;
+            return setup_mode == CLASSICSETUP_SETUP_ADVANCED
+                       ? CLASSICSETUP_STATE_FORMAT_APPLY_RESULT
+                       : CLASSICSETUP_STATE_SETUP_MODE;
         }
-        return CLASSICSETUP_STATE_RECOMMENDED_GUI_TRANSITION;
+        return CLASSICSETUP_STATE_GUI_TRANSITION;
     case CLASSICSETUP_STATE_KEYBOARD:
         if (event == CLASSICSETUP_EVENT_CONTINUE) {
             return setup_mode == CLASSICSETUP_SETUP_ADVANCED
@@ -184,7 +186,7 @@ enum classicsetup_state classicsetup_next_state_for_setup_mode(
         return CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION;
     case CLASSICSETUP_STATE_FORMAT_APPLY_RESULT:
         if (event == CLASSICSETUP_EVENT_CONTINUE) {
-            return CLASSICSETUP_STATE_AFTER_FORMAT;
+            return CLASSICSETUP_STATE_GUI_TRANSITION;
         }
         if (event == CLASSICSETUP_EVENT_BACK) {
             return CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW;
@@ -223,7 +225,7 @@ enum classicsetup_state classicsetup_resolve_quit_request(
     case CLASSICSETUP_STATE_WELCOME:
     case CLASSICSETUP_STATE_LICENSE_AGREEMENT:
     case CLASSICSETUP_STATE_SETUP_MODE:
-    case CLASSICSETUP_STATE_RECOMMENDED_GUI_TRANSITION:
+    case CLASSICSETUP_STATE_GUI_TRANSITION:
     case CLASSICSETUP_STATE_KEYBOARD:
     case CLASSICSETUP_STATE_RECOMMENDED_DISK:
     case CLASSICSETUP_STATE_NETWORK:

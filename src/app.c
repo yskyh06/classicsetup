@@ -149,13 +149,26 @@ static enum classicsetup_event simple_result_to_event(
     return CLASSICSETUP_EVENT_QUIT_REQUEST;
 }
 
-static enum classicsetup_event show_recommended_gui(void)
+static enum classicsetup_event show_common_gui(
+    const struct classicsetup_config *config,
+    enum classicsetup_gui_entry_mode entry_mode)
 {
     struct classicsetup_gui_session session;
     int result;
 
     classicsetup_tui_shutdown();
-    if (classicsetup_gui_session_init(&session) != 0) {
+    if (entry_mode == CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED) {
+        result = classicsetup_gui_session_init_after_advanced(
+            &session,
+            &config->selected_disk,
+            config->apply_result.code ==
+                CLASSICSETUP_APPLY_RESULT_SUCCESS,
+            config->format_result.code ==
+                CLASSICSETUP_FORMAT_RESULT_SUCCESS);
+    } else {
+        result = classicsetup_gui_session_init(&session);
+    }
+    if (result != 0) {
         result = CLASSICSETUP_GUI_ERROR;
     } else {
         result = classicsetup_gui_run(&session);
@@ -172,7 +185,8 @@ static enum classicsetup_event show_recommended_gui(void)
     if (result == CLASSICSETUP_GUI_UNAVAILABLE ||
         result == CLASSICSETUP_GUI_ERROR) {
         return simple_result_to_event(
-            classicsetup_show_recommended_gui_unavailable());
+            classicsetup_show_gui_unavailable(
+                entry_mode == CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED));
     }
     return CLASSICSETUP_EVENT_QUIT_REQUEST;
 }
@@ -558,7 +572,9 @@ static enum classicsetup_event show_format_apply_result(
             &config->format_apply_plan,
             &config->format_result);
 
-    if (result == CLASSICSETUP_FORMAT_APPLY_RESULT_SCREEN_CONTINUE) {
+    if (result == CLASSICSETUP_FORMAT_APPLY_RESULT_SCREEN_CONTINUE &&
+        config->apply_result.code == CLASSICSETUP_APPLY_RESULT_SUCCESS &&
+        config->format_result.code == CLASSICSETUP_FORMAT_RESULT_SUCCESS) {
         return CLASSICSETUP_EVENT_CONTINUE;
     }
     if (result == CLASSICSETUP_FORMAT_APPLY_RESULT_SCREEN_BACK) {
@@ -623,8 +639,12 @@ int classicsetup_run(void)
             event = show_license_agreement();
         } else if (state == CLASSICSETUP_STATE_SETUP_MODE) {
             event = show_setup_mode(&config);
-        } else if (state == CLASSICSETUP_STATE_RECOMMENDED_GUI_TRANSITION) {
-            event = show_recommended_gui();
+        } else if (state == CLASSICSETUP_STATE_GUI_TRANSITION) {
+            event = show_common_gui(
+                &config,
+                config.setup_mode == CLASSICSETUP_SETUP_ADVANCED
+                    ? CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED
+                    : CLASSICSETUP_GUI_ENTRY_RECOMMENDED);
         } else if (state == CLASSICSETUP_STATE_KEYBOARD) {
             event = show_keyboard(&config);
         } else if (state == CLASSICSETUP_STATE_RECOMMENDED_DISK) {

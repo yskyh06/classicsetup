@@ -41,6 +41,9 @@ enum classicsetup_simple_screen_result
 classicsetup_show_recommended_gui_unavailable(void);
 
 enum classicsetup_simple_screen_result
+classicsetup_show_gui_unavailable(int after_advanced);
+
+enum classicsetup_simple_screen_result
 classicsetup_show_network_placeholder(void);
 
 enum classicsetup_simple_screen_result

@@ -413,7 +413,7 @@ static GtkWidget *build_network_page(
     add_classic_label(box, "Connect to the Internet", "classic-title", FALSE);
     add_classic_label(
         box,
-        "An Internet connection is required for the Recommended online-download workflow.",
+        "An Internet connection is required for the online Windows setup workflow.",
         "classic-muted",
         TRUE);
     runtime->ethernet_status = gtk_label_new("Wired connection: checking...");
@@ -548,7 +548,7 @@ static GtkWidget *build_summary_page(
     gtk_box_append(GTK_BOX(box), runtime->summary_version);
     add_classic_label(
         box,
-        "No partition, format, download, or install executor is called from this GUI foundation.",
+        "This GUI does not start additional partition, format, download, or install operations yet.",
         "classic-muted",
         TRUE);
     return box;
@@ -558,7 +558,20 @@ static void update_summary(struct classicsetup_gui_runtime *runtime)
 {
     char line[256];
 
-    if (runtime->session->has_selected_disk) {
+    if (runtime->session->entry_mode ==
+            CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED &&
+        runtime->session->has_prepared_disk) {
+        const struct classicsetup_disk_info *disk =
+            &runtime->session->prepared_disk;
+
+        (void)snprintf(
+            line,
+            sizeof(line),
+            "Prepared target disk: %.100s (%.100s)",
+            disk->model,
+            disk->device_path);
+        gtk_label_set_text(GTK_LABEL(runtime->summary_disk), line);
+    } else if (runtime->session->has_selected_disk) {
         const struct classicsetup_disk_info *disk =
             &runtime->session->assessments[
                 runtime->session->selected_disk_index].disk;
@@ -625,16 +638,18 @@ static void on_back_clicked(
     gpointer user_data)
 {
     struct classicsetup_gui_runtime *runtime = user_data;
+    enum classicsetup_gui_page destination;
 
     (void)button;
-    if (runtime->session->page == CLASSICSETUP_GUI_PAGE_DISK) {
+    if (classicsetup_gui_page_back_for_entry(
+            runtime->session->entry_mode,
+            runtime->session->page,
+            &destination) == CLASSICSETUP_GUI_BACK_TO_TUI) {
         runtime->result = CLASSICSETUP_GUI_BACK;
         g_application_quit(G_APPLICATION(runtime->application));
         return;
     }
-    set_page(
-        runtime,
-        classicsetup_gui_page_back(runtime->session->page));
+    set_page(runtime, destination);
 }
 
 static void on_next_clicked(
@@ -711,7 +726,10 @@ static void activate(
     runtime->window = gtk_application_window_new(application);
     gtk_window_set_title(
         GTK_WINDOW(runtime->window),
-        "ClassicSetup - Recommended installation");
+        runtime->session->entry_mode ==
+                CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED
+            ? "ClassicSetup - Windows setup"
+            : "ClassicSetup - Recommended installation");
     gtk_window_set_default_size(GTK_WINDOW(runtime->window), 820, 540);
     g_signal_connect(
         runtime->window,
@@ -728,12 +746,22 @@ static void activate(
     body = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     sidebar = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_widget_add_css_class(sidebar, "classic-sidebar");
-    add_classic_label(sidebar, "Recommended", "classic-title", FALSE);
-    add_classic_label(
-        sidebar,
-        "Safe automatic settings for a supported empty disk.",
-        "classic-muted",
-        TRUE);
+    if (runtime->session->entry_mode ==
+        CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED) {
+        add_classic_label(sidebar, "Windows Setup", "classic-title", FALSE);
+        add_classic_label(
+            sidebar,
+            "Storage preparation is complete. Continue with the shared setup flow.",
+            "classic-muted",
+            TRUE);
+    } else {
+        add_classic_label(sidebar, "Recommended", "classic-title", FALSE);
+        add_classic_label(
+            sidebar,
+            "Safe automatic settings for a supported empty disk.",
+            "classic-muted",
+            TRUE);
+    }
     gtk_box_append(GTK_BOX(body), sidebar);
 
     runtime->stack = gtk_stack_new();
@@ -792,7 +820,7 @@ static void activate(
         }
     }
     update_network_page(runtime);
-    set_page(runtime, CLASSICSETUP_GUI_PAGE_DISK);
+    set_page(runtime, runtime->session->page);
     gtk_window_present(GTK_WINDOW(runtime->window));
 }
 
@@ -811,7 +839,7 @@ int classicsetup_gui_run(
         return CLASSICSETUP_GUI_ERROR;
     }
     application = gtk_application_new(
-        "org.classicsetup.Recommended",
+        "org.classicsetup.Setup",
         G_APPLICATION_DEFAULT_FLAGS);
     if (application == NULL) {
         return CLASSICSETUP_GUI_ERROR;
