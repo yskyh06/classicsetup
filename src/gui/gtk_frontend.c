@@ -24,7 +24,8 @@ struct classicsetup_gui_runtime {
     GtkWidget *summary_source;
     GtkWidget *summary_verification;
     GtkWidget *network_status;
-    GtkWidget *ethernet_status;
+    GtkWidget *internet_status;
+    GtkWidget *ethernet_list;
     GtkWidget *wifi_list;
     GtkWidget *password_label;
     GtkWidget *password_entry;
@@ -95,7 +96,7 @@ static GtkWidget *build_page_base(
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
     GtkWidget *separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
 
-    gtk_widget_add_css_class(box, "classic-content");
+    gtk_widget_add_css_class(box, "classicsetup-dialog-content");
     add_classic_label(box, title, "classic-title", TRUE);
     add_classic_label(box, description, "classic-subtitle", TRUE);
     gtk_box_append(GTK_BOX(box), separator);
@@ -131,7 +132,7 @@ static GtkWidget *make_scrollable(GtkWidget *content)
 static const char *page_step_name(enum classicsetup_gui_page page)
 {
     static const char *names[CLASSICSETUP_GUI_PAGE_COUNT] = {
-        "Select installation disk",
+        "Disk preparation",
         "Connect to the Internet",
         "Select Windows version",
         "Download Windows",
@@ -153,8 +154,9 @@ static GtkWidget *build_sidebar_step(
     GtkWidget *indicator = gtk_label_new("•");
     GtkWidget *label = gtk_label_new(page_step_name(page));
 
-    gtk_widget_add_css_class(row, "classic-step");
-    gtk_widget_add_css_class(indicator, "classic-step-indicator");
+    gtk_widget_add_css_class(row, "classicsetup-progress-step");
+    gtk_widget_add_css_class(row, "classicsetup-progress-step-pending");
+    gtk_widget_add_css_class(indicator, "classicsetup-progress-indicator");
     gtk_label_set_xalign(GTK_LABEL(label), 0.0F);
     gtk_label_set_wrap(GTK_LABEL(label), TRUE);
     gtk_label_set_wrap_mode(GTK_LABEL(label), PANGO_WRAP_WORD_CHAR);
@@ -169,14 +171,10 @@ static GtkWidget *build_sidebar_step(
 static GtkWidget *build_sidebar(struct classicsetup_gui_runtime *runtime)
 {
     GtkWidget *sidebar = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    enum classicsetup_gui_page first =
-        runtime->session->entry_mode == CLASSICSETUP_GUI_ENTRY_RECOMMENDED
-            ? CLASSICSETUP_GUI_PAGE_DISK
-            : CLASSICSETUP_GUI_PAGE_NETWORK;
     enum classicsetup_gui_page page;
 
-    gtk_widget_add_css_class(sidebar, "classic-sidebar");
-    gtk_widget_set_size_request(sidebar, 245, -1);
+    gtk_widget_add_css_class(sidebar, "classicsetup-progress-pane");
+    gtk_widget_set_size_request(sidebar, 230, -1);
     add_classic_label(sidebar, "Windows Setup", "classic-sidebar-title", FALSE);
     if (runtime->session->entry_mode ==
         CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN) {
@@ -193,7 +191,8 @@ static GtkWidget *build_sidebar(struct classicsetup_gui_runtime *runtime)
             TRUE);
     }
     add_classic_label(sidebar, "Setup progress", "classic-step-heading", FALSE);
-    for (page = first; page < CLASSICSETUP_GUI_PAGE_COUNT; ++page) {
+    for (page = CLASSICSETUP_GUI_PAGE_DISK;
+         page < CLASSICSETUP_GUI_PAGE_COUNT; ++page) {
         gtk_box_append(GTK_BOX(sidebar), build_sidebar_step(runtime, page));
     }
     return sidebar;
@@ -205,9 +204,13 @@ static gboolean page_is_complete(
 {
     switch (page) {
     case CLASSICSETUP_GUI_PAGE_DISK:
-        return runtime->session->has_selected_disk;
+        return runtime->session->entry_mode ==
+                       CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN
+                   ? runtime->session->advanced_plan_prepared
+                   : runtime->session->has_selected_disk;
     case CLASSICSETUP_GUI_PAGE_NETWORK:
-        return classicsetup_network_can_continue(&runtime->session->network);
+        return classicsetup_network_has_connection(
+            &runtime->session->network);
     case CLASSICSETUP_GUI_PAGE_WINDOWS_VERSION:
         return runtime->session->has_selected_release;
     case CLASSICSETUP_GUI_PAGE_DOWNLOAD:
@@ -236,16 +239,24 @@ static void update_sidebar_progress(
         if (row == NULL || indicator == NULL) {
             continue;
         }
-        gtk_widget_remove_css_class(row, "current");
-        gtk_widget_remove_css_class(row, "complete");
+        gtk_widget_remove_css_class(
+            row, "classicsetup-progress-step-current");
+        gtk_widget_remove_css_class(
+            row, "classicsetup-progress-step-done");
+        gtk_widget_remove_css_class(
+            row, "classicsetup-progress-step-pending");
         if (page == runtime->session->page) {
-            gtk_widget_add_css_class(row, "current");
-            gtk_label_set_text(GTK_LABEL(indicator), "›");
+            gtk_widget_add_css_class(
+                row, "classicsetup-progress-step-current");
+            gtk_label_set_text(GTK_LABEL(indicator), "●");
         } else if (page_is_complete(runtime, page)) {
-            gtk_widget_add_css_class(row, "complete");
+            gtk_widget_add_css_class(
+                row, "classicsetup-progress-step-done");
             gtk_label_set_text(GTK_LABEL(indicator), "✓");
         } else {
-            gtk_label_set_text(GTK_LABEL(indicator), "•");
+            gtk_widget_add_css_class(
+                row, "classicsetup-progress-step-pending");
+            gtk_label_set_text(GTK_LABEL(indicator), "○");
         }
     }
 }
@@ -682,7 +693,7 @@ static GtkWidget *build_placeholder_page(
     return build_page_base(title, description);
 }
 
-static void clear_wifi_rows(GtkWidget *list)
+static void clear_list_rows(GtkWidget *list)
 {
     GtkWidget *child;
 
@@ -696,6 +707,7 @@ static void update_network_page(
 {
     const struct classicsetup_network_snapshot *snapshot =
         &runtime->session->network;
+    struct classicsetup_gui_network_presentation presentation;
     char line[256];
     size_t index;
     gboolean busy = snapshot->state == CLASSICSETUP_NETWORK_SCANNING ||
@@ -704,21 +716,59 @@ static void update_network_page(
     if (runtime->network_status == NULL) {
         return;
     }
-    gtk_label_set_text(GTK_LABEL(runtime->network_status), snapshot->status);
-    if (!snapshot->ethernet_available) {
+    if (classicsetup_network_has_connection(snapshot)) {
         gtk_label_set_text(
-            GTK_LABEL(runtime->ethernet_status),
-            "Wired connection: not detected");
-    } else if (snapshot->ethernet_connected) {
+            GTK_LABEL(runtime->network_status),
+            "Network connection is ready.");
         gtk_label_set_text(
-            GTK_LABEL(runtime->ethernet_status),
-            "Wired connection: connected");
+            GTK_LABEL(runtime->internet_status),
+            classicsetup_network_can_continue(snapshot)
+                ? "Internet access is verified."
+                : "Internet access has not been verified yet. It will be checked again before downloading Windows.");
     } else {
         gtk_label_set_text(
-            GTK_LABEL(runtime->ethernet_status),
-            "Wired connection: cable not connected");
+            GTK_LABEL(runtime->network_status), snapshot->status);
+        gtk_label_set_text(
+            GTK_LABEL(runtime->internet_status),
+            "Connect a wired or wireless network to continue.");
     }
-    clear_wifi_rows(runtime->wifi_list);
+    classicsetup_gui_network_presentation_from_snapshot(
+        &presentation, snapshot);
+    clear_list_rows(runtime->ethernet_list);
+    for (index = 0; index < presentation.ethernet_count; ++index) {
+        GtkWidget *row = gtk_list_box_row_new();
+        GtkWidget *row_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+
+        add_classic_label(
+            row_box,
+            presentation.ethernet[index].display_name,
+            NULL,
+            TRUE);
+        add_classic_label(
+            row_box,
+            presentation.ethernet[index].connected
+                ? "Connected"
+                : "Cable not connected",
+            "classic-muted",
+            TRUE);
+        gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), row_box);
+        gtk_widget_add_css_class(row, "classicsetup-network-row");
+        gtk_widget_set_sensitive(row, FALSE);
+        gtk_list_box_append(GTK_LIST_BOX(runtime->ethernet_list), row);
+    }
+    if (presentation.ethernet_count == 0) {
+        GtkWidget *row = gtk_list_box_row_new();
+        GtkWidget *label = gtk_label_new(
+            "No wired network adapter was detected.");
+
+        gtk_label_set_xalign(GTK_LABEL(label), 0.0F);
+        gtk_label_set_wrap(GTK_LABEL(label), TRUE);
+        gtk_widget_add_css_class(label, "classic-muted");
+        gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), label);
+        gtk_widget_set_sensitive(row, FALSE);
+        gtk_list_box_append(GTK_LIST_BOX(runtime->ethernet_list), row);
+    }
+    clear_list_rows(runtime->wifi_list);
     for (index = 0; index < snapshot->wifi_count; ++index) {
         const struct classicsetup_wifi_network *network =
             &snapshot->wifi[index];
@@ -743,7 +793,7 @@ static void update_network_page(
         gtk_box_append(GTK_BOX(row_box), ssid_label);
         gtk_box_append(GTK_BOX(row_box), detail_label);
         gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), row_box);
-        gtk_widget_add_css_class(row, "classic-network-row");
+        gtk_widget_add_css_class(row, "classicsetup-network-row");
         g_object_set_data(
             G_OBJECT(row),
             "classicsetup-wifi-index",
@@ -753,7 +803,8 @@ static void update_network_page(
     }
     if (!snapshot->wifi_available && !busy) {
         GtkWidget *row = gtk_list_box_row_new();
-        GtkWidget *label = gtk_label_new("No Wi-Fi device was detected.");
+        GtkWidget *label = gtk_label_new(
+            "No wireless adapter was detected.");
 
         gtk_label_set_xalign(GTK_LABEL(label), 0.0F);
         gtk_widget_add_css_class(label, "classic-muted");
@@ -866,21 +917,25 @@ static GtkWidget *build_network_page(
     struct classicsetup_gui_runtime *runtime)
 {
     GtkWidget *box = build_page_base(
-        "Connect to the Internet",
-        "Connect ClassicSetup to the Internet so it can discover and download an official Windows source.");
+        "Connect to a network",
+        "Choose a wired or wireless connection. Internet access is checked separately before Windows is downloaded.");
     GtkWidget *status_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *status_text = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
     GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    GtkWidget *wired_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
 
-    gtk_widget_add_css_class(wired_panel, "classic-group");
-    add_classic_label(wired_panel, "Wired connection", "classic-section-title", FALSE);
-    runtime->ethernet_status = gtk_label_new("Wired connection: checking...");
-    gtk_label_set_xalign(GTK_LABEL(runtime->ethernet_status), 0.0F);
-    gtk_box_append(GTK_BOX(wired_panel), runtime->ethernet_status);
-    gtk_box_append(GTK_BOX(box), wired_panel);
-    add_classic_label(box, "Wi-Fi networks", "classic-section-title", FALSE);
+    add_classic_label(
+        box, "Wired connections", "classic-section-title", FALSE);
+    runtime->ethernet_list = gtk_list_box_new();
+    gtk_widget_add_css_class(
+        runtime->ethernet_list, "classicsetup-network-list");
+    gtk_list_box_set_selection_mode(
+        GTK_LIST_BOX(runtime->ethernet_list), GTK_SELECTION_NONE);
+    gtk_box_append(GTK_BOX(box), runtime->ethernet_list);
+    add_classic_label(
+        box, "Wireless networks", "classic-section-title", FALSE);
     runtime->wifi_list = gtk_list_box_new();
-    gtk_widget_add_css_class(runtime->wifi_list, "classic-list");
+    gtk_widget_add_css_class(
+        runtime->wifi_list, "classicsetup-network-list");
     gtk_list_box_set_selection_mode(
         GTK_LIST_BOX(runtime->wifi_list),
         GTK_SELECTION_SINGLE);
@@ -918,11 +973,19 @@ static GtkWidget *build_network_page(
     gtk_box_append(GTK_BOX(box), actions);
     runtime->network_spinner = gtk_spinner_new();
     runtime->network_status = gtk_label_new("Network service is not available.");
+    runtime->internet_status = gtk_label_new(
+        "Connect a wired or wireless network to continue.");
     gtk_label_set_xalign(GTK_LABEL(runtime->network_status), 0.0F);
+    gtk_label_set_xalign(GTK_LABEL(runtime->internet_status), 0.0F);
     gtk_label_set_wrap(GTK_LABEL(runtime->network_status), TRUE);
+    gtk_label_set_wrap(GTK_LABEL(runtime->internet_status), TRUE);
+    gtk_widget_add_css_class(runtime->internet_status, "classic-muted");
     gtk_box_append(GTK_BOX(status_box), runtime->network_spinner);
-    gtk_box_append(GTK_BOX(status_box), runtime->network_status);
-    gtk_widget_add_css_class(status_box, "classic-status");
+    gtk_box_append(GTK_BOX(status_text), runtime->network_status);
+    gtk_box_append(GTK_BOX(status_text), runtime->internet_status);
+    gtk_widget_set_hexpand(status_text, TRUE);
+    gtk_box_append(GTK_BOX(status_box), status_text);
+    gtk_widget_add_css_class(status_box, "classicsetup-status-box");
     gtk_box_append(GTK_BOX(box), status_box);
     return box;
 }
@@ -1296,7 +1359,7 @@ static void update_navigation(struct classicsetup_gui_runtime *runtime)
     if (runtime->session->page == CLASSICSETUP_GUI_PAGE_DISK) {
         can_next = runtime->session->has_selected_disk;
     } else if (runtime->session->page == CLASSICSETUP_GUI_PAGE_NETWORK) {
-        can_next = classicsetup_network_can_continue(
+        can_next = classicsetup_network_has_connection(
             &runtime->session->network);
     } else if (runtime->session->page ==
                CLASSICSETUP_GUI_PAGE_WINDOWS_VERSION) {
@@ -1431,6 +1494,9 @@ static void activate(
     GtkWidget *header;
     GtkWidget *body;
     GtkWidget *sidebar;
+    GtkWidget *dialog_stage;
+    GtkWidget *dialog;
+    GtkWidget *dialog_header;
     GtkWidget *footer;
     GtkWidget *footer_spacer;
     GtkWidget *header_text;
@@ -1445,8 +1511,8 @@ static void activate(
                 CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN
             ? "ClassicSetup - Windows setup"
             : "ClassicSetup - Recommended installation");
-    gtk_window_set_default_size(GTK_WINDOW(runtime->window), 1000, 680);
-    gtk_widget_set_size_request(runtime->window, 760, 520);
+    gtk_window_set_default_size(GTK_WINDOW(runtime->window), 1180, 760);
+    gtk_widget_set_size_request(runtime->window, 940, 620);
     g_signal_connect(
         runtime->window,
         "close-request",
@@ -1454,8 +1520,9 @@ static void activate(
         runtime);
 
     root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(root, "classicsetup-background");
     header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-    gtk_widget_add_css_class(header, "classic-header");
+    gtk_widget_add_css_class(header, "classicsetup-background-header");
     header_text = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
     add_classic_label(header_text, "ClassicSetup", "classic-brand", FALSE);
     add_classic_label(
@@ -1470,6 +1537,25 @@ static void activate(
     gtk_widget_set_vexpand(body, TRUE);
     sidebar = build_sidebar(runtime);
     gtk_box_append(GTK_BOX(body), sidebar);
+
+    dialog_stage = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(dialog_stage, "classicsetup-dialog-stage");
+    gtk_widget_set_hexpand(dialog_stage, TRUE);
+    gtk_widget_set_vexpand(dialog_stage, TRUE);
+    dialog = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(dialog, "classicsetup-dialog");
+    gtk_widget_set_size_request(dialog, 660, 520);
+    gtk_widget_set_halign(dialog, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(dialog, GTK_ALIGN_CENTER);
+    dialog_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_add_css_class(
+        dialog_header, "classicsetup-dialog-header");
+    add_classic_label(
+        dialog_header,
+        "ClassicSetup Windows Setup",
+        "classicsetup-dialog-caption",
+        FALSE);
+    gtk_box_append(GTK_BOX(dialog), dialog_header);
 
     runtime->stack = gtk_stack_new();
     gtk_stack_set_transition_type(
@@ -1495,11 +1581,10 @@ static void activate(
         GTK_STACK(runtime->stack), make_scrollable(page), "summary");
     gtk_widget_set_hexpand(runtime->stack, TRUE);
     gtk_widget_set_vexpand(runtime->stack, TRUE);
-    gtk_box_append(GTK_BOX(body), runtime->stack);
-    gtk_box_append(GTK_BOX(root), body);
+    gtk_box_append(GTK_BOX(dialog), runtime->stack);
 
     footer = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_widget_add_css_class(footer, "classic-navigation");
+    gtk_widget_add_css_class(footer, "classicsetup-dialog-footer");
     runtime->back_button = gtk_button_new_with_label("Back");
     runtime->next_button = gtk_button_new_with_label("Next");
     footer_spacer = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
@@ -1518,7 +1603,10 @@ static void activate(
     gtk_box_append(GTK_BOX(footer), runtime->back_button);
     gtk_box_append(GTK_BOX(footer), footer_spacer);
     gtk_box_append(GTK_BOX(footer), runtime->next_button);
-    gtk_box_append(GTK_BOX(root), footer);
+    gtk_box_append(GTK_BOX(dialog), footer);
+    gtk_box_append(GTK_BOX(dialog_stage), dialog);
+    gtk_box_append(GTK_BOX(body), dialog_stage);
+    gtk_box_append(GTK_BOX(root), body);
     gtk_window_set_child(GTK_WINDOW(runtime->window), root);
     {
         struct classicsetup_network_backend backend = {0};

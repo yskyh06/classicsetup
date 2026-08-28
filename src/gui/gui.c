@@ -1,5 +1,6 @@
 #include "classicsetup/gui.h"
 
+#include <stdio.h>
 #include <string.h>
 
 void classicsetup_gui_session_reset(
@@ -125,6 +126,51 @@ bool classicsetup_gui_summary_is_ready(
            session->options_placeholder &&
            classicsetup_download_is_ready(
                &session->download, &session->workspace);
+}
+
+void classicsetup_gui_network_presentation_reset(
+    struct classicsetup_gui_network_presentation *presentation)
+{
+    if (presentation != NULL) {
+        memset(presentation, 0, sizeof(*presentation));
+    }
+}
+
+int classicsetup_gui_network_presentation_add_ethernet(
+    struct classicsetup_gui_network_presentation *presentation,
+    const char *display_name,
+    bool connected)
+{
+    struct classicsetup_gui_ethernet_entry *entry;
+
+    if (presentation == NULL || display_name == NULL ||
+        display_name[0] == '\0' ||
+        presentation->ethernet_count >= CLASSICSETUP_GUI_MAX_ETHERNET) {
+        return -1;
+    }
+    entry = &presentation->ethernet[presentation->ethernet_count++];
+    (void)snprintf(
+        entry->display_name,
+        sizeof(entry->display_name),
+        "%s",
+        display_name);
+    entry->connected = connected;
+    return 0;
+}
+
+void classicsetup_gui_network_presentation_from_snapshot(
+    struct classicsetup_gui_network_presentation *presentation,
+    const struct classicsetup_network_snapshot *snapshot)
+{
+    classicsetup_gui_network_presentation_reset(presentation);
+    if (presentation == NULL || snapshot == NULL ||
+        !snapshot->ethernet_available) {
+        return;
+    }
+    (void)classicsetup_gui_network_presentation_add_ethernet(
+        presentation,
+        "Local Area Connection",
+        snapshot->ethernet_connected);
 }
 
 int classicsetup_gui_session_init_advanced_plan(

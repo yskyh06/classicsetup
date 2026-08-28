@@ -1,15 +1,18 @@
 window {
-    background: #d7d7d7;
     color: #111111;
     font-family: Sans;
     font-size: 10pt;
 }
 
-.classic-header {
-    background: #174a91;
-    border-bottom: 3px solid #e6a128;
+.classicsetup-background {
+    background: linear-gradient(110deg, #0b3e9a, #3269c8 58%, #7598e8);
+}
+
+.classicsetup-background-header {
+    background: #073b91;
+    border-bottom: 2px solid #d89b26;
     color: #ffffff;
-    padding: 11px 18px 10px 18px;
+    padding: 9px 18px 8px 18px;
 }
 
 .classic-brand {
@@ -23,90 +26,117 @@ window {
     font-size: 10px;
 }
 
-.classic-sidebar {
-    background: #255da7;
-    border-right: 1px solid #173f78;
+.classicsetup-progress-pane {
+    background: rgba(17, 70, 166, 0.88);
+    border-right: 1px solid #5f8fdf;
     color: #ffffff;
-    padding: 22px 16px;
+    padding: 24px 16px;
 }
 
 .classic-sidebar-title {
     color: #ffffff;
-    font-size: 17px;
+    font-size: 18px;
     font-weight: bold;
 }
 
+.classic-sidebar-subtitle,
+.classic-step-heading {
+    color: #dce8fb;
+}
+
 .classic-sidebar-subtitle {
-    color: #dbe9fb;
     margin-bottom: 10px;
 }
 
 .classic-step-heading {
-    color: #dbe9fb;
     font-size: 10px;
     font-weight: bold;
     margin-top: 8px;
-    margin-bottom: 3px;
+    margin-bottom: 4px;
 }
 
-.classic-step {
-    color: #d4e2f5;
-    padding: 7px 8px;
+.classicsetup-progress-step {
     border: 1px solid transparent;
+    color: #d9e5f8;
+    padding: 7px 8px;
 }
 
-.classic-step.current {
-    background: #f5f7fb;
-    border-color: #ffffff;
-    color: #123b76;
+.classicsetup-progress-step-current {
+    color: #ffd06a;
     font-weight: bold;
 }
 
-.classic-step.complete {
+.classicsetup-progress-step-done {
     color: #ffffff;
 }
 
-.classic-step-indicator {
-    color: #becde2;
+.classicsetup-progress-step-pending {
+    color: #cbd9ee;
+}
+
+.classicsetup-progress-indicator {
+    color: #cbd9ee;
     font-weight: bold;
 }
 
-.classic-step.current .classic-step-indicator {
-    color: #123b76;
+.classicsetup-progress-step-current .classicsetup-progress-indicator {
+    color: #ffbf43;
 }
 
-.classic-step.complete .classic-step-indicator {
-    color: #9ce07f;
+.classicsetup-progress-step-done .classicsetup-progress-indicator {
+    color: #79df70;
 }
 
 .classic-sidebar-note {
-    background: #174a91;
-    border-color: #6f9bd1;
+    background: #124799;
+    border-color: #7ba2df;
     color: #ffffff;
     margin-top: 4px;
     margin-bottom: 8px;
 }
 
-.classic-content {
-    background: #fbfbfb;
-    padding: 28px 34px 34px 34px;
+.classicsetup-dialog-stage {
+    padding: 28px 34px;
+}
+
+.classicsetup-dialog {
+    background: #d8d5cf;
+    border: 1px solid #384d70;
+    box-shadow: 0 5px 12px rgba(0, 0, 0, 0.38);
+}
+
+.classicsetup-dialog-header {
+    background: #2c5fa9;
+    border-bottom: 1px solid #ffffff;
+    color: #ffffff;
+    padding: 5px 9px;
+}
+
+.classicsetup-dialog-caption {
+    color: #ffffff;
+    font-weight: bold;
+}
+
+.classicsetup-dialog-content {
+    background: #f6f6f4;
+    padding: 20px 24px 22px 24px;
 }
 
 .classic-title {
-    color: #174a91;
-    font-size: 22px;
+    color: #123f83;
+    font-size: 20px;
     font-weight: bold;
 }
 
 .classic-subtitle {
-    color: #3d4b5f;
-    margin-bottom: 4px;
+    color: #35445a;
+    margin-bottom: 2px;
 }
 
 .classic-section-title {
-    color: #174a91;
+    color: #123f83;
     font-weight: bold;
-    margin-top: 5px;
+    margin-top: 3px;
 }
 
 .classic-muted {
@@ -115,61 +145,58 @@ window {
 
 .classic-group,
 .classic-source-summary {
-    background: #eef3fa;
-    border: 1px solid #a8b8cf;
-    padding: 11px 13px;
-}
-
-.classic-list {
-    background: #ffffff;
-    border: 1px solid #8799b2;
-}
-
-.classic-disk-row {
-    background: #ffffff;
-    border-bottom: 1px solid #c6cfdb;
+    background: #eef2f7;
+    border: 1px solid #9daabd;
     padding: 10px 12px;
 }
 
-.classic-disk-row:selected,
-.classic-network-row:selected {
-    background: #c9dcf5;
-    color: #0b2f64;
+.classic-list,
+.classicsetup-network-list {
+    background: #ffffff;
+    border: 1px solid #7f8da2;
 }
 
-.classic-network-row {
+.classic-disk-row,
+.classicsetup-network-row {
     background: #ffffff;
-    border-bottom: 1px solid #c6cfdb;
-    padding: 9px 11px;
+    border-bottom: 1px solid #c6cdd7;
+    padding: 8px 10px;
+}
+
+.classic-disk-row:selected,
+.classicsetup-network-row:selected {
+    background: #c6d9f3;
+    color: #0b2f64;
 }
 
 .classic-option-row,
 .classic-summary-row {
     background: #ffffff;
-    border: 1px solid #c2cad5;
-    padding: 10px 12px;
-}
-
-.classic-status {
-    background: #edf3fb;
-    border: 1px solid #9aacc5;
+    border: 1px solid #bcc4cf;
     padding: 9px 11px;
 }
 
-.classic-warning {
-    background: #fff4cf;
-    border-color: #c89b35;
-    color: #5b4300;
+.classic-status,
+.classicsetup-status-box {
+    background: #edf3fb;
+    border: 1px solid #91a4bf;
+    padding: 8px 10px;
 }
 
-.classic-navigation {
-    background: #d9d9d9;
-    border-top: 1px solid #929292;
-    padding: 10px 14px;
+.classic-warning {
+    background: #fff1c5;
+    border-color: #c58d20;
+    color: #594000;
+}
+
+.classicsetup-dialog-footer {
+    background: #d8d5cf;
+    border-top: 1px solid #8d8d8d;
+    padding: 9px 12px;
 }
 
 button {
-    border-radius: 1px;
+    border-radius: 0;
     min-width: 82px;
     min-height: 26px;
     padding: 4px 12px;
@@ -178,7 +205,7 @@ button {
 entry,
 dropdown,
 progressbar trough {
-    border-radius: 1px;
+    border-radius: 0;
 }
 
 progressbar trough {

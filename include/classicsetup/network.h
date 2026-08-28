@@ -90,6 +90,9 @@ void classicsetup_network_snapshot_reset(
 bool classicsetup_network_can_continue(
     const struct classicsetup_network_snapshot *snapshot);
 
+bool classicsetup_network_has_connection(
+    const struct classicsetup_network_snapshot *snapshot);
+
 void classicsetup_network_controller_init(
     struct classicsetup_network_controller *controller,
     struct classicsetup_network_backend backend,

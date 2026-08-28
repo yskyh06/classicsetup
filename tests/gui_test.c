@@ -160,6 +160,32 @@ static void test_gtk_disabled_result(void)
     assert(classicsetup_gui_run(&session) == CLASSICSETUP_GUI_UNAVAILABLE);
 }
 
+static void test_network_presentation_supports_multiple_ethernet(void)
+{
+    struct classicsetup_gui_network_presentation presentation;
+    struct classicsetup_network_snapshot snapshot;
+
+    classicsetup_gui_network_presentation_reset(&presentation);
+    assert(classicsetup_gui_network_presentation_add_ethernet(
+               &presentation, "Ethernet 1", true) == 0);
+    assert(classicsetup_gui_network_presentation_add_ethernet(
+               &presentation, "USB Ethernet", false) == 0);
+    assert(presentation.ethernet_count == 2);
+    assert(presentation.ethernet[0].connected);
+    assert(!presentation.ethernet[1].connected);
+
+    classicsetup_network_snapshot_reset(&snapshot);
+    snapshot.ethernet_available = true;
+    snapshot.ethernet_connected = true;
+    classicsetup_gui_network_presentation_from_snapshot(
+        &presentation, &snapshot);
+    assert(presentation.ethernet_count == 1);
+    assert(strcmp(
+               presentation.ethernet[0].display_name,
+               "Local Area Connection") == 0);
+    assert(presentation.ethernet[0].connected);
+}
+
 int main(void)
 {
     test_page_navigation();
@@ -167,6 +193,7 @@ int main(void)
     test_selection_is_fail_closed_for_bios();
     test_advanced_entry_preserves_planning_snapshot();
     test_source_selection_and_summary_gate();
+    test_network_presentation_supports_multiple_ethernet();
     test_gtk_disabled_result();
     return 0;
 }

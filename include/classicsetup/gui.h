@@ -9,7 +9,20 @@
 #include "classicsetup/network.h"
 
 enum {
-    CLASSICSETUP_GUI_MAX_DISKS = 32
+    CLASSICSETUP_GUI_MAX_DISKS = 32,
+    CLASSICSETUP_GUI_MAX_ETHERNET = 8,
+    CLASSICSETUP_GUI_CONNECTION_NAME_SIZE = 96
+};
+
+struct classicsetup_gui_ethernet_entry {
+    char display_name[CLASSICSETUP_GUI_CONNECTION_NAME_SIZE];
+    bool connected;
+};
+
+struct classicsetup_gui_network_presentation {
+    struct classicsetup_gui_ethernet_entry
+        ethernet[CLASSICSETUP_GUI_MAX_ETHERNET];
+    size_t ethernet_count;
 };
 
 enum classicsetup_gui_page {
@@ -107,6 +120,18 @@ int classicsetup_gui_select_release(
 
 bool classicsetup_gui_summary_is_ready(
     const struct classicsetup_gui_session *session);
+
+void classicsetup_gui_network_presentation_reset(
+    struct classicsetup_gui_network_presentation *presentation);
+
+int classicsetup_gui_network_presentation_add_ethernet(
+    struct classicsetup_gui_network_presentation *presentation,
+    const char *display_name,
+    bool connected);
+
+void classicsetup_gui_network_presentation_from_snapshot(
+    struct classicsetup_gui_network_presentation *presentation,
+    const struct classicsetup_network_snapshot *snapshot);
 
 int classicsetup_gui_session_init(
     struct classicsetup_gui_session *session);

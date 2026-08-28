@@ -100,15 +100,28 @@ static void test_unavailable_and_ethernet(void)
     classicsetup_network_snapshot_reset(&snapshot);
     assert(snapshot.state == CLASSICSETUP_NETWORK_UNAVAILABLE);
     assert(!classicsetup_network_can_continue(&snapshot));
+    assert(!classicsetup_network_has_connection(&snapshot));
     snapshot.state = CLASSICSETUP_NETWORK_DISCONNECTED;
     snapshot.ethernet_available = true;
     assert(!classicsetup_network_can_continue(&snapshot));
+    assert(!classicsetup_network_has_connection(&snapshot));
     snapshot.ethernet_connected = true;
     snapshot.state = CLASSICSETUP_NETWORK_CONNECTED;
     snapshot.connectivity = CLASSICSETUP_NETWORK_CONNECTIVITY_INTERNET;
     assert(classicsetup_network_can_continue(&snapshot));
+    assert(classicsetup_network_has_connection(&snapshot));
     snapshot.connectivity = CLASSICSETUP_NETWORK_CONNECTIVITY_NETWORK;
     assert(!classicsetup_network_can_continue(&snapshot));
+    assert(classicsetup_network_has_connection(&snapshot));
+    snapshot.ethernet_connected = false;
+    snapshot.wifi_available = true;
+    snapshot.wifi_connected = true;
+    assert(classicsetup_network_has_connection(&snapshot));
+    snapshot.wifi_connected = false;
+    assert(!classicsetup_network_has_connection(&snapshot));
+    snapshot.ethernet_connected = true;
+    snapshot.wifi_available = false;
+    assert(classicsetup_network_has_connection(&snapshot));
 }
 
 static void test_async_state_transitions(void)

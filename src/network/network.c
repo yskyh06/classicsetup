@@ -67,6 +67,14 @@ bool classicsetup_network_can_continue(
                CLASSICSETUP_NETWORK_CONNECTIVITY_INTERNET;
 }
 
+bool classicsetup_network_has_connection(
+    const struct classicsetup_network_snapshot *snapshot)
+{
+    return snapshot != NULL &&
+           snapshot->state == CLASSICSETUP_NETWORK_CONNECTED &&
+           (snapshot->ethernet_connected || snapshot->wifi_connected);
+}
+
 void classicsetup_network_controller_init(
     struct classicsetup_network_controller *controller,
     struct classicsetup_network_backend backend,
