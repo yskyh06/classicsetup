@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#include "classicsetup/recommended.h"
+#include "classicsetup/config.h"
 #include "classicsetup/network.h"
 
 enum {
@@ -23,7 +23,7 @@ enum classicsetup_gui_page {
 
 enum classicsetup_gui_entry_mode {
     CLASSICSETUP_GUI_ENTRY_RECOMMENDED,
-    CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED
+    CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN
 };
 
 enum classicsetup_gui_back_action {
@@ -57,9 +57,16 @@ struct classicsetup_gui_session {
     enum classicsetup_gui_windows_version windows_version;
     bool options_placeholder;
     struct classicsetup_network_snapshot network;
-    bool advanced_storage_prepared;
+    bool advanced_plan_prepared;
     bool has_prepared_disk;
     struct classicsetup_disk_info prepared_disk;
+    enum classicsetup_install_mode prepared_install_mode;
+    struct classicsetup_partition_plan prepared_partition_plan;
+    struct classicsetup_format_plan prepared_format_plan;
+    struct classicsetup_format_plan
+        prepared_role_format_plans[CLASSICSETUP_PARTITION_ROLE_COUNT];
+    bool has_prepared_apply_plan;
+    struct classicsetup_apply_plan prepared_apply_plan;
 };
 
 void classicsetup_gui_session_reset(
@@ -91,11 +98,9 @@ int classicsetup_gui_set_windows_version(
 int classicsetup_gui_session_init(
     struct classicsetup_gui_session *session);
 
-int classicsetup_gui_session_init_after_advanced(
+int classicsetup_gui_session_init_advanced_plan(
     struct classicsetup_gui_session *session,
-    const struct classicsetup_disk_info *prepared_disk,
-    bool partition_apply_succeeded,
-    bool format_apply_verified);
+    const struct classicsetup_config *config);
 
 int classicsetup_gui_run(
     struct classicsetup_gui_session *session);

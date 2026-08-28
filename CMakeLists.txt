@@ -407,4 +407,10 @@ if(BUILD_TESTING)
             -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_no_function_keys.cmake
     )
+    add_test(
+        NAME tui_back_key_policy
+        COMMAND ${CMAKE_COMMAND}
+            -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_back_key_policy.cmake
+    )
 endif()

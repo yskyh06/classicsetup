@@ -42,7 +42,7 @@ enum classicsetup_state classicsetup_next_state_for_setup_mode(
         }
         if (event == CLASSICSETUP_EVENT_BACK) {
             return setup_mode == CLASSICSETUP_SETUP_ADVANCED
-                       ? CLASSICSETUP_STATE_FORMAT_APPLY_RESULT
+                       ? CLASSICSETUP_STATE_FORMAT
                        : CLASSICSETUP_STATE_SETUP_MODE;
         }
         return CLASSICSETUP_STATE_GUI_TRANSITION;
@@ -138,9 +138,9 @@ enum classicsetup_state classicsetup_next_state_for_setup_mode(
         return CLASSICSETUP_STATE_PARTITION;
     case CLASSICSETUP_STATE_FORMAT:
         if (event == CLASSICSETUP_EVENT_CONTINUE) {
-            return CLASSICSETUP_STATE_APPLY_PREVIEW;
+            return CLASSICSETUP_STATE_GUI_TRANSITION;
         }
-        if (event == CLASSICSETUP_EVENT_CANCEL) {
+        if (event == CLASSICSETUP_EVENT_BACK) {
             return CLASSICSETUP_STATE_PARTITION;
         }
         return CLASSICSETUP_STATE_FORMAT;

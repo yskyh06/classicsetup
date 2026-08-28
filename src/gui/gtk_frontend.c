@@ -559,7 +559,7 @@ static void update_summary(struct classicsetup_gui_runtime *runtime)
     char line[256];
 
     if (runtime->session->entry_mode ==
-            CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED &&
+            CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN &&
         runtime->session->has_prepared_disk) {
         const struct classicsetup_disk_info *disk =
             &runtime->session->prepared_disk;
@@ -567,7 +567,7 @@ static void update_summary(struct classicsetup_gui_runtime *runtime)
         (void)snprintf(
             line,
             sizeof(line),
-            "Prepared target disk: %.100s (%.100s)",
+            "Planned target disk: %.100s (%.100s)",
             disk->model,
             disk->device_path);
         gtk_label_set_text(GTK_LABEL(runtime->summary_disk), line);
@@ -727,7 +727,7 @@ static void activate(
     gtk_window_set_title(
         GTK_WINDOW(runtime->window),
         runtime->session->entry_mode ==
-                CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED
+                CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN
             ? "ClassicSetup - Windows setup"
             : "ClassicSetup - Recommended installation");
     gtk_window_set_default_size(GTK_WINDOW(runtime->window), 820, 540);
@@ -747,11 +747,11 @@ static void activate(
     sidebar = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_widget_add_css_class(sidebar, "classic-sidebar");
     if (runtime->session->entry_mode ==
-        CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED) {
+        CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN) {
         add_classic_label(sidebar, "Windows Setup", "classic-title", FALSE);
         add_classic_label(
             sidebar,
-            "Storage preparation is complete. Continue with the shared setup flow.",
+            "The advanced storage plan is ready. No disk changes have been applied yet.",
             "classic-muted",
             TRUE);
     } else {

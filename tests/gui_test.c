@@ -23,11 +23,11 @@ static void test_page_navigation(void)
                &destination) == CLASSICSETUP_GUI_BACK_TO_PAGE);
     assert(destination == CLASSICSETUP_GUI_PAGE_DISK);
     assert(classicsetup_gui_page_back_for_entry(
-               CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED,
+               CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN,
                CLASSICSETUP_GUI_PAGE_NETWORK,
                &destination) == CLASSICSETUP_GUI_BACK_TO_TUI);
     assert(classicsetup_gui_page_back_for_entry(
-               CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED,
+               CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN,
                CLASSICSETUP_GUI_PAGE_WINDOWS_VERSION,
                &destination) == CLASSICSETUP_GUI_BACK_TO_PAGE);
     assert(destination == CLASSICSETUP_GUI_PAGE_NETWORK);
@@ -68,26 +68,45 @@ static void test_session_and_disk_selection(void)
     assert(session.network.wifi_count == 0);
 }
 
-static void test_advanced_entry_requires_verified_storage(void)
+static void test_advanced_entry_preserves_planning_snapshot(void)
 {
     struct classicsetup_gui_session session;
-    struct classicsetup_disk_info disk = {0};
+    struct classicsetup_config config = {0};
 
-    (void)strcpy(disk.name, "sdb");
-    (void)strcpy(disk.device_path, "/dev/sdb");
-    (void)strcpy(disk.model, "Prepared test disk");
-    disk.size_bytes = 64ULL * 1024ULL * 1024ULL * 1024ULL;
-    assert(classicsetup_gui_session_init_after_advanced(
-               &session, &disk, false, true) != 0);
-    assert(classicsetup_gui_session_init_after_advanced(
-               &session, &disk, true, false) != 0);
-    assert(classicsetup_gui_session_init_after_advanced(
-               &session, &disk, true, true) == 0);
-    assert(session.entry_mode == CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED);
+    config.setup_mode = CLASSICSETUP_SETUP_ADVANCED;
+    config.install_mode = CLASSICSETUP_INSTALL_UEFI_GPT;
+    config.has_selected_disk = true;
+    config.has_partition_plan = true;
+    config.has_selected_plan_target = true;
+    config.selected_format_plan.valid = true;
+    config.selected_format_plan.filesystem = CLASSICSETUP_FS_NTFS;
+    config.selected_format_plan.mode = CLASSICSETUP_FORMAT_QUICK;
+    config.advanced_storage_plan_ready = true;
+    config.has_apply_plan = true;
+    (void)strcpy(config.selected_disk.name, "sdb");
+    (void)strcpy(config.selected_disk.device_path, "/dev/sdb");
+    (void)strcpy(config.selected_disk.model, "Planned test disk");
+    config.selected_disk.size_bytes =
+        64ULL * 1024ULL * 1024ULL * 1024ULL;
+    config.partition_plan.disk_sector_count = 42;
+    config.apply_plan.partition_count = 4;
+
+    config.advanced_storage_plan_ready = false;
+    assert(classicsetup_gui_session_init_advanced_plan(
+               &session, &config) != 0);
+    config.advanced_storage_plan_ready = true;
+    assert(classicsetup_gui_session_init_advanced_plan(
+               &session, &config) == 0);
+    assert(session.entry_mode == CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN);
     assert(session.page == CLASSICSETUP_GUI_PAGE_NETWORK);
-    assert(session.advanced_storage_prepared);
+    assert(session.advanced_plan_prepared);
     assert(session.has_prepared_disk);
     assert(strcmp(session.prepared_disk.device_path, "/dev/sdb") == 0);
+    assert(session.prepared_install_mode == CLASSICSETUP_INSTALL_UEFI_GPT);
+    assert(session.prepared_partition_plan.disk_sector_count == 42);
+    assert(session.prepared_format_plan.mode == CLASSICSETUP_FORMAT_QUICK);
+    assert(session.has_prepared_apply_plan);
+    assert(session.prepared_apply_plan.partition_count == 4);
     assert(session.assessment_count == 0);
     assert(!session.has_selected_disk);
 }
@@ -117,7 +136,7 @@ int main(void)
     test_page_navigation();
     test_session_and_disk_selection();
     test_selection_is_fail_closed_for_bios();
-    test_advanced_entry_requires_verified_storage();
+    test_advanced_entry_preserves_planning_snapshot();
     test_gtk_disabled_result();
     return 0;
 }

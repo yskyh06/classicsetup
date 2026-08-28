@@ -19,7 +19,7 @@ void classicsetup_gui_session_reset_for_entry(
     }
     memset(session, 0, sizeof(*session));
     session->entry_mode = entry_mode;
-    session->page = entry_mode == CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED
+    session->page = entry_mode == CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN
                         ? CLASSICSETUP_GUI_PAGE_NETWORK
                         : CLASSICSETUP_GUI_PAGE_DISK;
     session->windows_version = CLASSICSETUP_GUI_WINDOWS_11;
@@ -55,7 +55,7 @@ enum classicsetup_gui_back_action classicsetup_gui_page_back_for_entry(
         return CLASSICSETUP_GUI_BACK_TO_TUI;
     }
     if (page == CLASSICSETUP_GUI_PAGE_DISK ||
-        (entry_mode == CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED &&
+        (entry_mode == CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN &&
          page == CLASSICSETUP_GUI_PAGE_NETWORK) ||
         page < CLASSICSETUP_GUI_PAGE_DISK ||
         page >= CLASSICSETUP_GUI_PAGE_COUNT) {
@@ -93,21 +93,34 @@ int classicsetup_gui_set_windows_version(
     return 0;
 }
 
-int classicsetup_gui_session_init_after_advanced(
+int classicsetup_gui_session_init_advanced_plan(
     struct classicsetup_gui_session *session,
-    const struct classicsetup_disk_info *prepared_disk,
-    bool partition_apply_succeeded,
-    bool format_apply_verified)
+    const struct classicsetup_config *config)
 {
-    if (session == NULL || prepared_disk == NULL ||
-        !partition_apply_succeeded || !format_apply_verified) {
+    if (session == NULL || config == NULL ||
+        config->setup_mode != CLASSICSETUP_SETUP_ADVANCED ||
+        !config->advanced_storage_plan_ready ||
+        !config->has_selected_disk || !config->has_partition_plan ||
+        !config->has_selected_plan_target ||
+        !config->selected_format_plan.valid) {
         return -1;
     }
     classicsetup_gui_session_reset_for_entry(
         session,
-        CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED);
-    session->advanced_storage_prepared = true;
+        CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN);
+    session->advanced_plan_prepared = true;
     session->has_prepared_disk = true;
-    session->prepared_disk = *prepared_disk;
+    session->prepared_disk = config->selected_disk;
+    session->prepared_install_mode = config->install_mode;
+    session->prepared_partition_plan = config->partition_plan;
+    session->prepared_format_plan = config->selected_format_plan;
+    memcpy(
+        session->prepared_role_format_plans,
+        config->role_format_plans,
+        sizeof(session->prepared_role_format_plans));
+    session->has_prepared_apply_plan = config->has_apply_plan;
+    if (config->has_apply_plan) {
+        session->prepared_apply_plan = config->apply_plan;
+    }
     return 0;
 }

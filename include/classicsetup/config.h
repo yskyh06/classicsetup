@@ -44,6 +44,7 @@ struct classicsetup_config {
     struct classicsetup_format_plan selected_format_plan;
     struct classicsetup_format_plan
         role_format_plans[CLASSICSETUP_PARTITION_ROLE_COUNT];
+    bool advanced_storage_plan_ready;
     struct classicsetup_apply_plan apply_plan;
     bool has_apply_plan;
     struct classicsetup_apply_result apply_result;
@@ -86,6 +87,9 @@ int classicsetup_config_undo_windows_layout(
 int classicsetup_config_set_format_plan(
     struct classicsetup_config *config,
     enum classicsetup_format_mode windows_mode);
+
+bool classicsetup_config_advanced_plan_is_ready(
+    const struct classicsetup_config *config);
 
 int classicsetup_config_set_recommended_plan(
     struct classicsetup_config *config,

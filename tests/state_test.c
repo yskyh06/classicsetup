@@ -65,7 +65,7 @@ static void test_recommended_flow_skips_advanced_screens(void)
            CLASSICSETUP_STATE_EXIT);
 }
 
-static void test_advanced_flow_is_preserved(void)
+static void test_advanced_planning_enters_gui_without_apply_states(void)
 {
     enum classicsetup_state states[] = {
         CLASSICSETUP_STATE_WELCOME,
@@ -76,12 +76,6 @@ static void test_advanced_flow_is_preserved(void)
         CLASSICSETUP_STATE_DISK,
         CLASSICSETUP_STATE_PARTITION,
         CLASSICSETUP_STATE_FORMAT,
-        CLASSICSETUP_STATE_APPLY_PREVIEW,
-        CLASSICSETUP_STATE_APPLY_CONFIRMATION,
-        CLASSICSETUP_STATE_APPLY_RESULT,
-        CLASSICSETUP_STATE_FORMAT_APPLY_PREVIEW,
-        CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION,
-        CLASSICSETUP_STATE_FORMAT_APPLY_RESULT,
         CLASSICSETUP_STATE_GUI_TRANSITION,
         CLASSICSETUP_STATE_NEXT_STAGE,
         CLASSICSETUP_STATE_EXIT
@@ -119,9 +113,12 @@ static void test_back_and_cancel_policy(void)
     assert(next(CLASSICSETUP_STATE_DISK, CLASSICSETUP_EVENT_BACK,
                 CLASSICSETUP_SETUP_ADVANCED) ==
            CLASSICSETUP_STATE_INSTALL_MODE);
-    assert(next(CLASSICSETUP_STATE_FORMAT, CLASSICSETUP_EVENT_CANCEL,
+    assert(next(CLASSICSETUP_STATE_FORMAT, CLASSICSETUP_EVENT_BACK,
                 CLASSICSETUP_SETUP_ADVANCED) ==
            CLASSICSETUP_STATE_PARTITION);
+    assert(next(CLASSICSETUP_STATE_FORMAT, CLASSICSETUP_EVENT_CANCEL,
+                CLASSICSETUP_SETUP_ADVANCED) ==
+           CLASSICSETUP_STATE_FORMAT);
     assert(next(CLASSICSETUP_STATE_FORMAT_APPLY_CONFIRMATION,
                 CLASSICSETUP_EVENT_CANCEL,
                 CLASSICSETUP_SETUP_ADVANCED) ==
@@ -133,7 +130,7 @@ static void test_back_and_cancel_policy(void)
     assert(next(CLASSICSETUP_STATE_GUI_TRANSITION,
                 CLASSICSETUP_EVENT_BACK,
                 CLASSICSETUP_SETUP_ADVANCED) ==
-           CLASSICSETUP_STATE_FORMAT_APPLY_RESULT);
+           CLASSICSETUP_STATE_FORMAT);
 }
 
 static void test_quit_request_policy(void)
@@ -179,7 +176,7 @@ static void test_quit_request_policy(void)
 int main(void)
 {
     test_recommended_flow_skips_advanced_screens();
-    test_advanced_flow_is_preserved();
+    test_advanced_planning_enters_gui_without_apply_states();
     test_back_and_cancel_policy();
     test_quit_request_policy();
     assert(classicsetup_next_state(

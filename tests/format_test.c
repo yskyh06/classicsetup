@@ -141,6 +141,8 @@ static void test_config_stores_automatic_role_plans(void)
                0,
                &config.partition_plan) == 0);
     config.has_partition_plan = true;
+    config.setup_mode = CLASSICSETUP_SETUP_ADVANCED;
+    config.has_selected_disk = true;
     free_index = find_role(
         &config.partition_plan,
         CLASSICSETUP_PARTITION_ROLE_NONE);
@@ -164,6 +166,8 @@ static void test_config_stores_automatic_role_plans(void)
     assert(config.apply_result.code == CLASSICSETUP_APPLY_RESULT_NOT_RUN);
 
     assert(config.selected_format_plan.valid);
+    assert(config.advanced_storage_plan_ready);
+    assert(classicsetup_config_advanced_plan_is_ready(&config));
     assert(config.selected_format_plan.filesystem == CLASSICSETUP_FS_NTFS);
     assert(config.selected_format_plan.mode == CLASSICSETUP_FORMAT_FULL);
     assert(config.role_format_plans[CLASSICSETUP_PARTITION_ROLE_EFI].filesystem ==
@@ -235,6 +239,7 @@ static void test_disk_change_reset_clears_stale_plan(void)
     config.selected_plan_target = config.partition_plan.items[0];
     config.has_selected_plan_target = true;
     config.selected_format_plan.valid = true;
+    config.advanced_storage_plan_ready = true;
     config.role_format_plans[
         CLASSICSETUP_PARTITION_ROLE_WINDOWS].valid = true;
     config.has_apply_plan = true;
@@ -245,6 +250,7 @@ static void test_disk_change_reset_clears_stale_plan(void)
     assert(config.partition_plan.item_count == 0);
     assert(!config.has_selected_plan_target);
     assert(!config.selected_format_plan.valid);
+    assert(!config.advanced_storage_plan_ready);
     assert(!config.role_format_plans[
                CLASSICSETUP_PARTITION_ROLE_WINDOWS].valid);
     assert(!config.has_apply_plan);

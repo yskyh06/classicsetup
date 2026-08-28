@@ -2,99 +2,77 @@
 
 ## Current milestone
 
-- M10.2.1 Advanced -> Common GTK Flow Integration 완료.
-- GTK는 Recommended 전용 frontend가 아니라 공통 Windows setup frontend가 되었다.
-- Recommended는 GTK Disk부터, Advanced는 성공한 storage preparation 뒤 GTK Network부터 시작한다.
-- M7/M8 destructive safety, Recommended disk policy, NetworkManager backend는 변경하지 않았다.
-- GUI는 partition/format/download/image executor를 추가로 호출하지 않는다.
+- M10.2.2 Advanced Deferred Storage Apply + Global Back-Key Normalization 완료.
+- Advanced는 storage plan만 준비한 뒤 GTK Network로 진입하며 실제 partition/format apply는 수행하지 않는다.
+- Recommended는 기존처럼 GTK Disk부터 시작하고 Advanced TUI/GTK는 Network 이후 공통 page 구현을 공유한다.
+- M7/M8 destructive safety와 executor 제한, Recommended disk policy, NetworkManager backend는 변경하지 않았다.
+- 최종 GUI Install transaction은 아직 연결하지 않았다.
 
 ## Changed files
 
-- State/API: `include/classicsetup/state.h`, `include/classicsetup/gui.h`.
-- App routing: `src/app.c`, `src/state.c`.
-- GUI model/frontend: `src/gui/gui.c`, `src/gui/gtk_frontend.c`.
-- TUI fallback: `include/classicsetup/recommended_tui.h`, `src/tui/recommended.c`.
-- Tests: `tests/state_test.c`, `tests/gui_test.c`.
+- State/config/API: `include/classicsetup/config.h`, `include/classicsetup/format_selection.h`, `include/classicsetup/gui.h`.
+- Routing/model: `src/app.c`, `src/state.c`, `src/config.c`, `src/gui/gui.c`.
+- UI: `src/gui/gtk_frontend.c`, `src/tui/format_selection.c`.
+- Tests/build: `tests/state_test.c`, `tests/gui_test.c`, `tests/format_test.c`, `tests/check_back_key_policy.cmake`, `CMakeLists.txt`.
 - Snapshot: `.ai/handoff.md`.
 
 ## Implementation result
 
-### Unified GUI flow
-
-- Recommended: `Setup Mode -> GUI Transition -> Disk -> Network -> Windows Version -> Download -> Options -> Summary`.
-- Advanced: `Keyboard -> Installation Mode -> Disk -> Partition -> Format -> Partition Apply -> Format Apply -> GUI Transition -> Network -> Windows Version -> Download -> Options -> Summary`.
-- 기존 `RECOMMENDED_GUI_TRANSITION` state는 공통 의미의 `GUI_TRANSITION`으로 일반화했다.
-- Advanced의 `FORMAT_APPLY_RESULT + CONTINUE`는 placeholder 대신 `GUI_TRANSITION`으로 이동한다.
-- format result 화면은 success일 때만 Continue를 반환하며 app도 apply success와 format verification success를 다시 확인한다.
-
-### GUI entry context
-
-- `CLASSICSETUP_GUI_ENTRY_RECOMMENDED`: initial page `DISK`, 기존 Recommended scan/assessment/policy 사용.
-- `CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED`: initial page `NETWORK`, GUI disk scan/selection을 실행하지 않음.
-- session은 entry mode, current page, network/version 상태, prepared-storage flag와 prepared disk snapshot을 보관한다.
-- GTK pointer는 session에 없고 installation `config`는 GUI session reset 대상이 아니다.
-- Advanced session 생성은 partition apply success와 format verification success가 모두 필요하다.
-- Advanced target disk는 config에서 snapshot으로 복사되어 Summary에 표시된다.
-
-### Back, close, and failure policy
-
-- Recommended Network Back은 공통 page model을 통해 Disk로 이동한다.
-- Advanced Network Back은 GUI를 종료하고 TUI의 Format Apply Result로 복귀한다.
-- Recommended Disk Back/window close는 Setup Mode로 복귀한다.
-- Advanced window close도 Format Apply Result로 복귀하며 apply/format config를 보존한다.
-- GTK disabled/init error는 공통 fallback을 표시한다.
-- Recommended fallback Back은 Setup Mode, Advanced fallback Back은 Format Apply Result로 이동한다.
-- Advanced fallback 문구는 storage preparation 결과가 보존됨을 명시한다.
-
-### Shared frontend ownership
-
-- Network, Windows Version, Download, Options, Summary page는 두 entry mode가 동일 구현을 사용한다.
-- Advanced용 duplicate GTK page를 추가하지 않았다.
-- Network page는 M10.2의 system-bus NetworkManager/GTask backend를 그대로 사용한다.
-- Recommended의 Disk page만 기존 disk assessment core에 연결된다.
-- GTK application ID와 window/sidebar 문구를 공통 Windows setup 의미로 정리했다.
-- Summary는 Recommended GUI-selected disk 또는 Advanced prepared disk를 entry context에 따라 표시한다.
-
-### Functions added/changed
-
-- `classicsetup_gui_session_reset_for_entry()` (`src/gui/gui.c`): entry context와 initial page를 초기화.
-- `classicsetup_gui_page_back_for_entry()` (`src/gui/gui.c`): page 이동 또는 TUI exit를 순수 transition으로 결정.
-- `classicsetup_gui_session_init_after_advanced()` (`src/gui/gui.c`): success gate 확인 후 prepared disk snapshot과 Network initial page 구성.
-- `show_common_gui()` (`src/app.c`): Recommended/Advanced 공통 ncurses shutdown, GUI run, ncurses reinit lifecycle.
-- `show_format_apply_result()` (`src/app.c`): apply/format success를 재확인한 경우에만 GUI transition event 허용.
-- `classicsetup_next_state_for_setup_mode()` (`src/state.c`): 공통 GUI 합류 및 mode별 Back destination 처리.
-- `on_back_clicked()` (`src/gui/gtk_frontend.c`): callback 자체가 아닌 entry-aware page model의 결과를 적용.
-- `update_summary()` (`src/gui/gtk_frontend.c`): entry별 disk source를 표시.
-- `classicsetup_show_gui_unavailable()` (`src/tui/recommended.c`): mode에 맞는 safe fallback 안내.
+- Advanced 정상 흐름은 `Disk -> Partition Plan -> Format Plan -> GUI Transition -> Network`이다.
+- `FORMAT + CONTINUE`는 `APPLY_PREVIEW`가 아니라 공통 `GUI_TRANSITION`으로 이동한다.
+- partition/format Apply Preview, Confirmation, Result state와 executor API는 삭제하지 않았고 향후 최종 Install에서 재사용 가능하다.
+- `classicsetup_config_set_format_plan()`이 성공하면 `advanced_storage_plan_ready`를 설정한다.
+- `classicsetup_config_advanced_plan_is_ready()`는 Advanced mode, selected disk, valid partition plan, 최신 install target, NTFS Quick/Full format plan을 확인한다.
+- planning state 변경/reset 시 format plan과 readiness가 함께 무효화된다.
+- GUI 진입 전 execution result는 지우지만 installation config의 disk/partition/format plan은 유지한다.
+- immutable apply plan은 제한 경로에서 build 가능한 경우에만 optional snapshot으로 보관한다.
+- existing/deleted 등 M7 restricted layout에서 apply-plan build가 실패해도 planning GUI 진입은 막지 않는다.
+- 실패한 apply-plan build는 executor restriction을 우회하지 않으며 실제 실행은 여전히 향후 M7 gate를 통과해야 한다.
+- GUI entry context를 `CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN`으로 명확히 변경했다.
+- Recommended initial page는 Disk, Advanced Plan initial page는 Network다.
+- Advanced GUI session은 target disk, install mode, partition plan, selected/role format plans, optional immutable apply plan을 snapshot으로 가진다.
+- GUI session reset은 installation config나 storage plan을 지우지 않는다.
+- Advanced Network Back/window close/GTK fallback Back은 `FORMAT` planning 화면으로 복귀한다.
+- Summary는 Advanced disk를 `Planned target disk`로 표시하고 disk 변경이 아직 적용되지 않았음을 안내한다.
+- GUI Summary의 placeholder Install은 partition/format executor를 호출하지 않는다.
+- Format Selection의 page navigation은 `B=Back`; ESC handler와 `ESC=Cancel` footer를 제거했다.
+- ESC는 Create/Delete/Undo/error/quit 같은 modal 취소·닫기에만 남아 있다.
+- 최종 TUI 정책: `ENTER` safe continue/select, `B` page back, `Q` quit, `A` explicit action, `ESC` modal cancel, `C/D/U` partition actions.
+- `tui_back_key_policy` source audit가 ESC page-back 문구와 Format handler/footer 불일치를 회귀 검사한다.
 
 ## Build/test result
 
-- GTK4-enabled clean Debug build 성공.
-- `CLASSICSETUP_ENABLE_GTK=OFF` clean Debug/stub build 성공.
-- C17, `-Wall -Wextra -Wpedantic`, warning 0.
-- GTK-enabled CTest 13/13 통과.
-- GTK-disabled CTest 13/13 통과.
-- ASan/UBSan GTK-disabled CTest 13/13 통과.
-- 검증 항목: Recommended initial Disk, Advanced initial Network, Advanced success gate, failure/verify-failure rejection, mode별 Network Back, mode별 GUI fallback/close destination, prepared disk 보존, Recommended regression.
-- 실제 partition/format/network connection/destructive operation은 실행하지 않았다.
+- GTK4 ON clean Debug configure/build 성공; GTK frontend enabled.
+- GTK OFF clean Debug configure/build 성공; stub frontend enabled.
+- 두 구성 모두 C17, `-Wall -Wextra -Wpedantic`, warning 0.
+- GTK ON CTest 14/14 통과.
+- GTK OFF CTest 14/14 통과.
+- ASan/UBSan GTK OFF CTest 14/14 통과 (`detect_leaks=0`; 실행 환경 ptrace 때문에 LSan만 비활성).
+- 상태 테스트가 Advanced Format에서 GUI로 직접 이동하고 Apply states를 방문하지 않음을 검증한다.
+- GUI 테스트가 entry별 initial page/Back, planning snapshot 보존, stale GUI reset을 검증한다.
+- format/config 테스트가 planning readiness 생성과 reset 무효화를 검증한다.
+- 기존 apply/format safety와 restricted-layout 회귀 테스트가 모두 통과했다.
+- 실제 disk write, partition apply, mkfs, 임의 Wi-Fi 연결은 실행하지 않았다.
 
 ## Topics for ChatGPT to explain
 
-- 두 frontend 흐름이 하나의 공통 state machine으로 수렴하는 구조.
-- entry context와 current page가 서로 다른 책임을 갖는 이유.
-- Recommended Disk entry와 Advanced Network entry가 동일 GTK stack을 공유하는 방식.
-- TUI shutdown -> GTK main loop -> TUI reinit lifecycle 재사용.
-- installation config ownership과 GUI session ownership 분리.
-- session reset이 Advanced apply result를 지우지 않는 이유.
-- page transition model에서 Back/close destination을 결정하는 장점.
-- Advanced가 GUI Disk page와 storage executor를 다시 실행하면 안 되는 이유.
+- partition/format planning과 destructive execution을 분리하는 구조.
+- Windows source 확보 전에 destructive work를 미루는 이유.
+- installation config, GUI session, executor result의 서로 다른 ownership.
+- 여러 frontend 흐름이 공통 GUI state machine으로 수렴하는 방식.
+- GUI entry context와 current page의 차이.
+- Advanced가 GUI Disk page를 다시 실행하지 않는 이유.
+- optional immutable apply-plan snapshot과 executor eligibility의 차이.
+- page navigation `B`와 modal cancellation `ESC`를 분리하는 이유.
+- key mapping을 UI state-machine input contract로 다루는 방식.
+- 최종 Summary를 전체 install transaction boundary로 삼는 설계.
 
 ## Issues/cautions
 
-- Network는 실제 NetworkManager backend지만 captive portal/WPA Enterprise 등은 아직 미지원이다.
-- Windows Version, Download, Options, Summary의 install action은 placeholder다.
+- 최종 GUI Install은 아직 partition apply, format apply, image apply, boot configuration과 연결되지 않았다.
+- M7 actual apply는 existing/deleted가 포함된 unsupported layout을 계속 차단한다.
+- 기존 disk의 실제 preserve/erase/install 지원은 후속 작업이다.
 - Windows source discovery/download, ISO/WIM apply, boot configuration은 미구현이다.
-- GUI session은 한 번의 `classicsetup_gui_run()` 동안만 유지되며 application-wide persistence는 아직 없다.
-- Advanced storage 결과는 config에 유지되지만 GUI Summary는 현재 disk snapshot만 표시한다.
-- `AFTER_FORMAT` placeholder state는 호환을 위해 남아 있으나 정상 Advanced success 경로에서는 사용하지 않는다.
-- MBR destructive apply와 format은 계속 차단된다.
+- Apply Preview/Confirmation/Result TUI는 보존되어 있지만 현재 Advanced 정상 planning 경로 밖에 있다.
+- NetworkManager 기능은 유지되며 captive portal, WPA Enterprise, static IP 등은 미지원이다.
+- MBR destructive partition apply와 format은 계속 비활성이다.

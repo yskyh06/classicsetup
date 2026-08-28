@@ -7,6 +7,7 @@ static void clear_format_plans(struct classicsetup_config *config)
 {
     memset(&config->selected_format_plan, 0, sizeof(config->selected_format_plan));
     memset(config->role_format_plans, 0, sizeof(config->role_format_plans));
+    config->advanced_storage_plan_ready = false;
 }
 
 void classicsetup_config_set_setup_mode(
@@ -165,6 +166,32 @@ int classicsetup_config_undo_windows_layout(
     return 0;
 }
 
+bool classicsetup_config_advanced_plan_is_ready(
+    const struct classicsetup_config *config)
+{
+    size_t selected_index;
+
+    if (config == NULL ||
+        config->setup_mode != CLASSICSETUP_SETUP_ADVANCED ||
+        !config->advanced_storage_plan_ready ||
+        !config->has_selected_disk || !config->has_partition_plan ||
+        !classicsetup_plan_validate(&config->partition_plan) ||
+        !config->has_selected_plan_target ||
+        !classicsetup_plan_item_is_install_target(
+            &config->selected_plan_target) ||
+        classicsetup_plan_find_matching_item(
+            &config->partition_plan,
+            &config->selected_plan_target,
+            &selected_index) != 0 ||
+        !config->selected_format_plan.valid ||
+        config->selected_format_plan.filesystem != CLASSICSETUP_FS_NTFS ||
+        (config->selected_format_plan.mode != CLASSICSETUP_FORMAT_QUICK &&
+         config->selected_format_plan.mode != CLASSICSETUP_FORMAT_FULL)) {
+        return false;
+    }
+    return true;
+}
+
 int classicsetup_config_set_format_plan(
     struct classicsetup_config *config,
     enum classicsetup_format_mode windows_mode)
@@ -212,6 +239,7 @@ int classicsetup_config_set_format_plan(
         role_plans,
         sizeof(config->role_format_plans));
     classicsetup_config_clear_apply_state(config);
+    config->advanced_storage_plan_ready = true;
     return 0;
 }
 

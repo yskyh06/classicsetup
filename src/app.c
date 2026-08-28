@@ -150,24 +150,30 @@ static enum classicsetup_event simple_result_to_event(
 }
 
 static enum classicsetup_event show_common_gui(
-    const struct classicsetup_config *config,
+    struct classicsetup_config *config,
     enum classicsetup_gui_entry_mode entry_mode)
 {
     struct classicsetup_gui_session session;
     int result;
 
-    classicsetup_tui_shutdown();
-    if (entry_mode == CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED) {
-        result = classicsetup_gui_session_init_after_advanced(
-            &session,
+    if (entry_mode == CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN) {
+        if (!classicsetup_config_advanced_plan_is_ready(config)) {
+            return CLASSICSETUP_EVENT_BACK;
+        }
+        classicsetup_config_clear_apply_state(config);
+        config->has_apply_plan = classicsetup_build_apply_plan_for_mode(
+            config->install_mode,
             &config->selected_disk,
-            config->apply_result.code ==
-                CLASSICSETUP_APPLY_RESULT_SUCCESS,
-            config->format_result.code ==
-                CLASSICSETUP_FORMAT_RESULT_SUCCESS);
+            &config->partition_plan,
+            config->original_partition_count,
+            &config->apply_plan) == 0;
+        result = classicsetup_gui_session_init_advanced_plan(
+            &session,
+            config);
     } else {
         result = classicsetup_gui_session_init(&session);
     }
+    classicsetup_tui_shutdown();
     if (result != 0) {
         result = CLASSICSETUP_GUI_ERROR;
     } else {
@@ -186,7 +192,7 @@ static enum classicsetup_event show_common_gui(
         result == CLASSICSETUP_GUI_ERROR) {
         return simple_result_to_event(
             classicsetup_show_gui_unavailable(
-                entry_mode == CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED));
+                entry_mode == CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN));
     }
     return CLASSICSETUP_EVENT_QUIT_REQUEST;
 }
@@ -439,8 +445,8 @@ static enum classicsetup_event show_format(struct classicsetup_config *config)
             return CLASSICSETUP_EVENT_CANCEL;
         }
         return CLASSICSETUP_EVENT_CONTINUE;
-    case CLASSICSETUP_FORMAT_SELECTION_CANCEL:
-        return CLASSICSETUP_EVENT_CANCEL;
+    case CLASSICSETUP_FORMAT_SELECTION_BACK:
+        return CLASSICSETUP_EVENT_BACK;
     case CLASSICSETUP_FORMAT_SELECTION_QUIT:
         return CLASSICSETUP_EVENT_QUIT_REQUEST;
     }
@@ -643,7 +649,7 @@ int classicsetup_run(void)
             event = show_common_gui(
                 &config,
                 config.setup_mode == CLASSICSETUP_SETUP_ADVANCED
-                    ? CLASSICSETUP_GUI_ENTRY_AFTER_ADVANCED
+                    ? CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN
                     : CLASSICSETUP_GUI_ENTRY_RECOMMENDED);
         } else if (state == CLASSICSETUP_STATE_KEYBOARD) {
             event = show_keyboard(&config);

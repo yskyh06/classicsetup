@@ -42,7 +42,7 @@ static void draw_format_screen(enum classicsetup_format_mode selected)
         8,
         3,
         classicsetup_tui_canvas_width() - 6,
-        "Press ESC to select a different partition.");
+        "Press B to select a different partition.");
 
     classicsetup_tui_draw_frame(
         10,
@@ -60,7 +60,7 @@ static void draw_format_screen(enum classicsetup_format_mode selected)
         selected == CLASSICSETUP_FORMAT_FULL);
 
     classicsetup_tui_draw_footer(
-        "UP/DOWN=Select    ENTER=Continue    ESC=Cancel    Q=Quit");
+        "UP/DOWN=Select    ENTER=Continue    B=Back    Q=Quit");
     refresh();
 }
 
@@ -88,8 +88,8 @@ enum classicsetup_format_selection_result classicsetup_show_format_selection(
                 *format_mode = selected;
             }
             return CLASSICSETUP_FORMAT_SELECTION_CONTINUE;
-        } else if (key == 27) {
-            return CLASSICSETUP_FORMAT_SELECTION_CANCEL;
+        } else if (key == 'b' || key == 'B') {
+            return CLASSICSETUP_FORMAT_SELECTION_BACK;
         } else if (classicsetup_key_is_quit(key)) {
             return CLASSICSETUP_FORMAT_SELECTION_QUIT;
         }
