@@ -5,6 +5,7 @@
 
 #include "classicsetup/apply.h"
 #include "classicsetup/disk.h"
+#include "classicsetup/download.h"
 #include "classicsetup/format.h"
 #include "classicsetup/format_apply.h"
 #include "classicsetup/install_mode.h"
@@ -54,6 +55,11 @@ struct classicsetup_config {
     struct classicsetup_recommended_plan recommended_plan;
     bool has_recommended_plan;
     enum classicsetup_recommended_result_code recommended_result;
+    struct classicsetup_source_catalog windows_source_catalog;
+    size_t selected_windows_release_index;
+    bool has_selected_windows_release;
+    struct classicsetup_download_status windows_download;
+    struct classicsetup_workspace windows_source_workspace;
 };
 
 void classicsetup_config_set_setup_mode(

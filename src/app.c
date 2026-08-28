@@ -153,7 +153,8 @@ static enum classicsetup_event show_common_gui(
     struct classicsetup_config *config,
     enum classicsetup_gui_entry_mode entry_mode)
 {
-    struct classicsetup_gui_session session;
+    struct classicsetup_gui_session session = {0};
+    bool session_initialized;
     int result;
 
     if (entry_mode == CLASSICSETUP_GUI_ENTRY_ADVANCED_PLAN) {
@@ -173,11 +174,47 @@ static enum classicsetup_event show_common_gui(
     } else {
         result = classicsetup_gui_session_init(&session);
     }
+    session_initialized = result == 0;
+    if (result == 0 && config->has_selected_windows_release &&
+        config->selected_windows_release_index <
+            config->windows_source_catalog.release_count) {
+        session.source_catalog = config->windows_source_catalog;
+        session.selected_release_index =
+            config->selected_windows_release_index;
+        session.has_selected_release = true;
+        session.windows_version =
+            session.source_catalog.releases[
+                session.selected_release_index].family ==
+                    CLASSICSETUP_WINDOWS_10
+                ? CLASSICSETUP_GUI_WINDOWS_10
+                : CLASSICSETUP_GUI_WINDOWS_11;
+        session.download = config->windows_download;
+        session.workspace = config->windows_source_workspace;
+    }
     classicsetup_tui_shutdown();
     if (result != 0) {
         result = CLASSICSETUP_GUI_ERROR;
     } else {
         result = classicsetup_gui_run(&session);
+    }
+    if (session_initialized) {
+        if (session.has_selected_release && session.selected_release_index <
+                session.source_catalog.release_count) {
+            config->windows_source_catalog = session.source_catalog;
+            config->selected_windows_release_index =
+                session.selected_release_index;
+            config->has_selected_windows_release = true;
+            config->windows_download = session.download;
+            config->windows_source_workspace = session.workspace;
+        } else {
+            memset(&config->windows_source_catalog, 0,
+                   sizeof(config->windows_source_catalog));
+            config->selected_windows_release_index = 0;
+            config->has_selected_windows_release = false;
+            classicsetup_download_status_reset(&config->windows_download);
+            memset(&config->windows_source_workspace, 0,
+                   sizeof(config->windows_source_workspace));
+        }
     }
     if (!classicsetup_tui_init()) {
         return CLASSICSETUP_EVENT_QUIT_REQUEST;

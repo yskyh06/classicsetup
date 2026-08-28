@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include "classicsetup/config.h"
+#include "classicsetup/download.h"
 #include "classicsetup/network.h"
 
 enum {
@@ -55,6 +56,11 @@ struct classicsetup_gui_session {
     int scan_failed;
     bool has_selected_disk;
     enum classicsetup_gui_windows_version windows_version;
+    struct classicsetup_source_catalog source_catalog;
+    size_t selected_release_index;
+    bool has_selected_release;
+    struct classicsetup_download_status download;
+    struct classicsetup_workspace workspace;
     bool options_placeholder;
     struct classicsetup_network_snapshot network;
     bool advanced_plan_prepared;
@@ -94,6 +100,13 @@ int classicsetup_gui_select_disk(
 int classicsetup_gui_set_windows_version(
     struct classicsetup_gui_session *session,
     enum classicsetup_gui_windows_version version);
+
+int classicsetup_gui_select_release(
+    struct classicsetup_gui_session *session,
+    size_t index);
+
+bool classicsetup_gui_summary_is_ready(
+    const struct classicsetup_gui_session *session);
 
 int classicsetup_gui_session_init(
     struct classicsetup_gui_session *session);

@@ -3,16 +3,19 @@ cmake_minimum_required(VERSION 3.16)
 project(classicsetup LANGUAGES C)
 
 find_package(Curses REQUIRED)
+find_package(PkgConfig QUIET)
 
 option(CLASSICSETUP_ENABLE_GTK
     "Build the optional GTK4 Recommended frontend when GTK4 is available"
+    ON)
+option(CLASSICSETUP_ENABLE_DOWNLOAD
+    "Build official Windows source discovery/download support"
     ON)
 
 set(CLASSICSETUP_GTK_FRONTEND src/gui/gtk_stub.c)
 set(CLASSICSETUP_NETWORK_BACKEND src/network/network_manager_stub.c)
 set(CLASSICSETUP_GTK_ENABLED OFF)
 if(CLASSICSETUP_ENABLE_GTK)
-    find_package(PkgConfig QUIET)
     if(PkgConfig_FOUND)
         pkg_check_modules(GTK4 QUIET IMPORTED_TARGET gtk4)
     endif()
@@ -27,6 +30,25 @@ if(CLASSICSETUP_ENABLE_GTK)
     endif()
 else()
     message(STATUS "ClassicSetup GTK4 frontend: disabled by option")
+endif()
+
+set(CLASSICSETUP_SOURCE_BACKEND src/source/microsoft_source_stub.c)
+set(CLASSICSETUP_DOWNLOAD_BACKEND src/source/download_stub.c)
+set(CLASSICSETUP_DOWNLOAD_ENABLED OFF)
+if(CLASSICSETUP_ENABLE_DOWNLOAD AND PkgConfig_FOUND)
+    pkg_check_modules(LIBCURL QUIET IMPORTED_TARGET libcurl)
+    find_package(OpenSSL QUIET)
+    if(LIBCURL_FOUND AND OpenSSL_FOUND)
+        set(CLASSICSETUP_SOURCE_BACKEND
+            src/source/microsoft_source_curl.c)
+        set(CLASSICSETUP_DOWNLOAD_BACKEND src/source/download_curl.c)
+        set(CLASSICSETUP_DOWNLOAD_ENABLED ON)
+        message(STATUS "ClassicSetup Windows download: enabled")
+    else()
+        message(STATUS "ClassicSetup Windows download: disabled (libcurl/OpenSSL not found)")
+    endif()
+else()
+    message(STATUS "ClassicSetup Windows download: disabled by option")
 endif()
 
 add_executable(classicsetup
@@ -49,6 +71,11 @@ add_executable(classicsetup
     ${CLASSICSETUP_GTK_FRONTEND}
     src/network/network.c
     ${CLASSICSETUP_NETWORK_BACKEND}
+    src/source/download_model.c
+    ${CLASSICSETUP_DOWNLOAD_BACKEND}
+    ${CLASSICSETUP_SOURCE_BACKEND}
+    src/source/windows_source.c
+    src/source/workspace.c
     src/main.c
     src/state.c
     src/tui/after_format.c
@@ -80,6 +107,18 @@ target_include_directories(classicsetup PRIVATE
 )
 
 target_link_libraries(classicsetup PRIVATE ${CURSES_LIBRARIES})
+
+if(CLASSICSETUP_DOWNLOAD_ENABLED)
+    target_link_libraries(classicsetup PRIVATE
+        PkgConfig::LIBCURL
+        OpenSSL::Crypto
+    )
+    target_compile_definitions(classicsetup PRIVATE
+        CLASSICSETUP_DOWNLOAD_ENABLED=1)
+else()
+    target_compile_definitions(classicsetup PRIVATE
+        CLASSICSETUP_DOWNLOAD_ENABLED=0)
+endif()
 
 if(CLASSICSETUP_GTK_ENABLED)
     target_compile_definitions(classicsetup PRIVATE
@@ -122,6 +161,9 @@ if(BUILD_TESTING)
         src/gui/gui.c
         src/gui/gtk_stub.c
         src/network/network.c
+        src/source/download_model.c
+        src/source/windows_source.c
+        src/source/workspace.c
     )
 
     set_target_properties(classicsetup_gui_test PROPERTIES
@@ -137,6 +179,34 @@ if(BUILD_TESTING)
         )
     endif()
     add_test(NAME gui_navigation COMMAND classicsetup_gui_test)
+
+    add_executable(classicsetup_source_test
+        tests/source_test.c
+        src/source/download_model.c
+        ${CLASSICSETUP_DOWNLOAD_BACKEND}
+        src/source/windows_source.c
+        src/source/workspace.c
+    )
+    set_target_properties(classicsetup_source_test PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED YES
+        C_EXTENSIONS NO
+    )
+    target_include_directories(classicsetup_source_test PRIVATE include)
+    target_compile_definitions(classicsetup_source_test PRIVATE
+        CLASSICSETUP_DOWNLOAD_ENABLED=$<BOOL:${CLASSICSETUP_DOWNLOAD_ENABLED}>)
+    if(CLASSICSETUP_DOWNLOAD_ENABLED)
+        target_link_libraries(classicsetup_source_test PRIVATE
+            PkgConfig::LIBCURL
+            OpenSSL::Crypto
+        )
+    endif()
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(classicsetup_source_test PRIVATE
+            -Wall -Wextra -Wpedantic
+        )
+    endif()
+    add_test(NAME windows_source_pipeline COMMAND classicsetup_source_test)
 
     add_executable(classicsetup_network_test
         tests/network_test.c

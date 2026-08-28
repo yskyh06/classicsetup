@@ -123,6 +123,35 @@ static void test_selection_is_fail_closed_for_bios(void)
     assert(!session.has_selected_disk);
 }
 
+static void test_source_selection_and_summary_gate(void)
+{
+    struct classicsetup_gui_session session;
+
+    classicsetup_gui_session_reset(&session);
+    session.network.state = CLASSICSETUP_NETWORK_CONNECTED;
+    session.network.connectivity =
+        CLASSICSETUP_NETWORK_CONNECTIVITY_INTERNET;
+    session.options_placeholder = true;
+    session.source_catalog.state = CLASSICSETUP_SOURCE_READY;
+    session.source_catalog.release_count = 1;
+    session.source_catalog.releases[0].family = CLASSICSETUP_WINDOWS_11;
+    assert(classicsetup_gui_select_release(&session, 0) == 0);
+    assert(session.has_selected_release);
+    assert(!classicsetup_gui_summary_is_ready(&session));
+    session.workspace.valid = true;
+    session.workspace.verified_iso = true;
+    session.download.state = CLASSICSETUP_DOWNLOAD_COMPLETE;
+    session.download.error = CLASSICSETUP_DOWNLOAD_ERROR_NONE;
+    assert(classicsetup_gui_summary_is_ready(&session));
+    assert(classicsetup_gui_set_windows_version(
+               &session, CLASSICSETUP_GUI_WINDOWS_10) != 0);
+    classicsetup_gui_session_reset(&session);
+    assert(!session.has_selected_release);
+    assert(session.source_catalog.state == CLASSICSETUP_SOURCE_IDLE);
+    assert(session.download.state == CLASSICSETUP_DOWNLOAD_NOT_STARTED);
+    assert(!session.workspace.valid);
+}
+
 static void test_gtk_disabled_result(void)
 {
     struct classicsetup_gui_session session;
@@ -137,6 +166,7 @@ int main(void)
     test_session_and_disk_selection();
     test_selection_is_fail_closed_for_bios();
     test_advanced_entry_preserves_planning_snapshot();
+    test_source_selection_and_summary_gate();
     test_gtk_disabled_result();
     return 0;
 }

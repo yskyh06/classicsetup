@@ -24,6 +24,8 @@ void classicsetup_gui_session_reset_for_entry(
                         : CLASSICSETUP_GUI_PAGE_DISK;
     session->windows_version = CLASSICSETUP_GUI_WINDOWS_11;
     classicsetup_network_snapshot_reset(&session->network);
+    classicsetup_source_catalog_reset(&session->source_catalog);
+    classicsetup_download_status_reset(&session->download);
 }
 
 enum classicsetup_gui_page classicsetup_gui_page_next(
@@ -89,8 +91,40 @@ int classicsetup_gui_set_windows_version(
          version != CLASSICSETUP_GUI_WINDOWS_10)) {
         return -1;
     }
+    if (session->download.state != CLASSICSETUP_DOWNLOAD_NOT_STARTED) {
+        return -1;
+    }
     session->windows_version = version;
+    session->has_selected_release = false;
+    session->selected_release_index = 0;
+    classicsetup_source_catalog_reset(&session->source_catalog);
     return 0;
+}
+
+int classicsetup_gui_select_release(
+    struct classicsetup_gui_session *session,
+    size_t index)
+{
+    if (session == NULL ||
+        session->source_catalog.state != CLASSICSETUP_SOURCE_READY ||
+        index >= session->source_catalog.release_count ||
+        session->download.state != CLASSICSETUP_DOWNLOAD_NOT_STARTED) {
+        return -1;
+    }
+    session->selected_release_index = index;
+    session->has_selected_release = true;
+    return 0;
+}
+
+bool classicsetup_gui_summary_is_ready(
+    const struct classicsetup_gui_session *session)
+{
+    return session != NULL &&
+           classicsetup_network_can_continue(&session->network) &&
+           session->has_selected_release &&
+           session->options_placeholder &&
+           classicsetup_download_is_ready(
+               &session->download, &session->workspace);
 }
 
 int classicsetup_gui_session_init_advanced_plan(
