@@ -93,6 +93,7 @@ const char *classicsetup_uup_error_message(enum classicsetup_uup_error error)
         "The generated install.wim was not found.",
         "The generated install.wim could not be verified.",
         "There is not enough temporary storage.",
+        "The temporary workspace could not be created safely.",
         "The UUP operation was cancelled."
     };
 
@@ -750,7 +751,6 @@ int classicsetup_uup_download_and_build_iso(
 {
     const struct classicsetup_uup_tool_manifest *manifest =
         classicsetup_uup_tool_manifest();
-    const unsigned long long reserve = 24ULL * 1024ULL * 1024ULL * 1024ULL;
     struct classicsetup_process_result result;
     struct classicsetup_uup_payload_summary payload;
     char *arguments[CLASSICSETUP_UUP_ARG_COUNT];
@@ -780,11 +780,18 @@ int classicsetup_uup_download_and_build_iso(
                       progress_callback, progress_context);
         return -1;
     }
-    if (!classicsetup_workspace_has_space(
-            workspace, 0, reserve, NULL)) {
+    status->workspace_required_bytes =
+        CLASSICSETUP_UUP_WORKSPACE_RESERVE_BYTES;
+    (void)snprintf(status->workspace_root,
+                   sizeof(status->workspace_root), "%s",
+                   workspace->root_path);
+    if (classicsetup_workspace_available_bytes(
+            workspace, &status->workspace_available_bytes) != 0 ||
+        status->workspace_available_bytes <
+            CLASSICSETUP_UUP_WORKSPACE_RESERVE_BYTES) {
         report_status(status, CLASSICSETUP_UUP_FAILED,
                       CLASSICSETUP_UUP_ERROR_OUT_OF_SPACE,
-                      "At least 24 GiB of temporary space is required.",
+                      "There is not enough temporary storage.",
                       progress_callback, progress_context);
         return -1;
     }

@@ -2,111 +2,88 @@
 
 ## Current milestone
 
-- M12: the manually live-validated Microsoft UUP route is connected to the shared GTK
-  Windows-source flow and is the preferred automatic source when UUP support is built.
-- Recommended starts with Microsoft Windows Update/UUP without exposing UUPMediaCreator
-  internals. Advanced joins the same GTK flow after non-destructive storage planning.
-- Final Install remains disconnected. No partition, format, WIM-to-target, EFI, BCD, or
-  reboot operation was invoked; M7/M8 safety and disk policy are unchanged.
+- M12 workspace-root refinement for tmpfs environments.
+- The GTK UUP pipeline remains connected and preferred for the validated automatic Windows
+  source; final disk/image apply is still disconnected.
+- M7/M8 destructive safety, Recommended/Advanced disk policy, NetworkManager, source
+  discovery, payload verification, and ISO/WIM verification were not changed.
 
 ## Changed files
 
-- `include/classicsetup/{uup,windows_source,workspace,gui,process}.h`: UUP stages/errors,
-  target/runtime model, edition and verified-source metadata, payload/workspace ownership,
-  and cancellable process environment API.
-- `src/source/uup.c`: validated Retail target, shell-free UUP download/conversion pipeline,
-  payload artifact checks, ISO boot sanity, ISO image extraction, WIM verification, and
-  actual-image metadata registration.
-- `src/source/workspace.c`: private UUP/image directories and success/cancel/failure cleanup.
-- `src/core/process.c`: bounded process-group cancellation, optional explicit environment,
-  and rolling output-tail capture for truthful completion-marker validation.
-- `src/gui/{gui,gtk_frontend}.c`: UUP default policy, async staged worker, status/progress,
-  cancel/retry/back integration, edition display, and verified-image Summary.
-- `CMakeLists.txt`, `packaging/uupmediacreator.manifest`: optional UUP build, pinned runtime
-  paths/metadata, configurable DOTNET_ROOT/converter/libwim/7-Zip, and packaging seam.
-- `tests/{uup,gui}_test.c`: UUP model/argv/payload/ISO/WIM/runtime/process and GUI policy tests.
+- `include/classicsetup/workspace.h`: workspace creation result/diagnostic types, selected
+  base path, reserve-aware creation, capacity, and diagnostic APIs.
+- `src/source/workspace.c`: configurable root selection, private child validation, selected
+  filesystem capacity checks, and cleanup path hardening.
+- `include/classicsetup/uup.h`, `src/source/uup.c`: shared 24 GiB reserve and workspace
+  diagnostic state; the pipeline rechecks the filesystem containing the actual workspace.
+- `src/gui/gtk_frontend.c`: reserve-aware workspace creation, unchanged user-facing
+  out-of-space message, and debug-only sanitized capacity diagnostics.
+- `CMakeLists.txt`: optional `CLASSICSETUP_WORKSPACE_ROOT` configure-time staging root.
+- `tests/source_test.c`: override, capacity, symlink, relative-path, and cleanup-boundary
+  regressions.
 
 ## Implementation result
 
-- Default automatic model: Windows 11, Korean (`ko-KR`), x64 (`amd64`), Professional,
-  using the live-validated Retail request identity `10.0.22631.1`, Retail/Retail,
-  `ni_release`. This is extensible, but only this validated combination is currently
-  advertised; Windows 10/other combinations fail closed.
-- GTK stages are truthful: CHECKING_TOOL, SEARCHING, RESOLVING, DOWNLOADING,
-  VERIFYING_PAYLOAD, BUILDING_IMAGE, VERIFYING_IMAGE, COMPLETE/FAILED/CANCELLED. Unknown
-  upstream progress is indeterminate; payload file/byte totals appear only after inspection.
-- The worker invokes pinned UUPDownload `request-download`, never a shell, UUP Dump,
-  runtime GitHub bootstrap, mirror, or arbitrary URL. An explicit CMake DOTNET_ROOT may be
-  used for development; otherwise a valid inherited value or system apphost discovery is
-  used. No developer home path is compiled by default.
-- Download success requires exit 0 plus the retained completion marker. The payload must
-  have one metadata-qualified build root, replay and Professional metadata, sane file count
-  and size, no zero-byte files, and no `.part`/`.tmp` residue.
-- UUPMediaConverter receives that exact validated payload root and a workspace-owned ISO
-  destination. Exit 0 is insufficient: `[Done]`, regular ISO, ISO9660 PVD, and El Torito
-  boot descriptor are required.
-- Verification avoids the old validation-only mkisofs interception and privileged mounts.
-  Configured `7z` reads ISO/UDF and extracts only `sources/install.wim` or `install.esd`;
-  `wimlib-imagex verify/info` then requires Windows 11 Pro, x86_64, ko-KR, image count >= 1.
-- The backend-neutral verified-source object owns backend=UUP, kind=ISO, verified path,
-  edition/index, language/architecture, and actual WIM build. Summary uses this object, so
-  a 26200 offer producing base WIM 26100.1 is shown as 26100.1, never as integrated 26200.
-- Success retains only the verified ISO and cleans UUP, extracted WIM, and conversion
-  intermediates. Failure/cancel cleans workspace-owned partials only. Cancel sends SIGTERM
-  to the process group, waits a bounded interval, then SIGKILLs if needed; retry/exit waits
-  for worker completion.
-- Backends remain Microsoft UUP, fail-closed Microsoft Retail ISO, and future Existing ISO.
-  UUP-disabled builds default to Retail and reject unavailable UUP selection.
-- ISO production remains behind the verified-source boundary, leaving a future audited
-  direct-WIM producer possible without GTK changes. No temporary-WIM race hack was added.
-
-- LIVE VERIFIED MANUALLY BEFORE M12: pinned OSTooling/UUPMediaCreator v3.1.9.3, commit
-  `e0c4ce00dc5415bb0441e599aa9a86a2f6021707`, archive SHA-256
-  `4a73e28321d893e4fed5f0e774702722995930e4864c6965e78e586d19803ce9`;
-  Retail discovery, 384/384 payload, Korean amd64 Professional, bootable ISO, and WIM
-  verify/info succeeded. Actual WIM was Windows 11 Pro ko-KR x86_64 build 26100.1.
-- LIVE VERIFIED THROUGH CLASSICSETUP GTK: not performed in M12; Codex did not repeat the
-  multi-GB transfer. The real GTK worker path is connected and fixture-tested.
-
-- Manual GTK validation: provide GTK4, .NET 8, CA certificates, `wimtools`, and
-  `p7zip-full`; configure `CLASSICSETUP_UUP_TOOL_ROOT` to the hash-verified bundle,
-  `CLASSICSETUP_UUP_CONVERTER_ROOT` to the validated converter runtime, and optionally
-  `CLASSICSETUP_UUP_DOTNET_ROOT` for development. Set the verifier to
-  `/usr/bin/wimlib-imagex` and extractor to `/usr/bin/7z`.
-- Launch ClassicSetup normally, enter GTK, confirm Network, select validated Windows
-  11/Korean/x64/Pro, and start Download. Observe each stage; optionally Cancel, wait for
-  Retry, then retry. A full run must reach VERIFYING_IMAGE and COMPLETE, and Summary must
-  show actual image metadata. Do not press final Install; it remains a placeholder.
+- Runtime root precedence is:
+  1. non-empty `CLASSICSETUP_WORKSPACE_ROOT` environment override;
+  2. non-empty CMake `CLASSICSETUP_WORKSPACE_ROOT` configured staging directory;
+  3. `/var/tmp`;
+  4. `/tmp` as the final fallback.
+- `/var/tmp` is therefore preferred over `/tmp` for multi-GiB artifacts. This fixes the
+  observed Ubuntu VM case where `/tmp` is a roughly 2.7 GiB tmpfs while the persistent root
+  filesystem has about 50 GiB free.
+- An explicit/configured root must be absolute, must be a real directory rather than a
+  symlink, and must be writable/searchable. Invalid explicit roots fail closed instead of
+  silently redirecting files elsewhere.
+- Under the selected base, ClassicSetup creates or validates a private
+  `classicsetup-<effective-uid>` directory owned by the process user with exact mode 0700,
+  then creates a unique `workspace-XXXXXX` child with mode 0700.
+- The workspace manager records both the selected base and unique root. Artifact cleanup
+  remains scoped to validated paths beneath that unique workspace and rejects empty, `.` or
+  `..` path components; it does not recursively remove the selected base or private parent.
+- `statvfs()` is run on the selected private parent before creation and again on the actual
+  unique workspace. The UUP pipeline repeats the check on its actual workspace path before
+  downloading. It no longer consults `/tmp` when another filesystem owns the workspace.
+- The conservative reserve remains 24 GiB (`CLASSICSETUP_UUP_WORKSPACE_RESERVE_BYTES`).
+  Insufficient capacity still presents `There is not enough temporary storage.`
+- Debug builds may report only the selected workspace root, available bytes/GiB, and required
+  bytes/GiB. No URL token, cookie, credential, or unrelated path is included.
+- No user home path is hardcoded. A production image may set the CMake staging root; local
+  development can use, for example, an absolute persistent path through the environment.
+- The existing UUP lifecycle remains unchanged: partial/conversion artifacts are
+  workspace-owned; verified source retention and cancellation/failure cleanup keep their
+  established boundaries.
 
 ## Build/test result
 
-- Clean Debug GTK ON + UUP ON: C17 build succeeds without `-Wall -Wextra -Wpedantic`
-  warnings; CTest 16/16 passes.
-- Clean Debug GTK OFF + UUP ON: build succeeds; CTest 16/16 passes.
-- Clean Debug GTK ON + UUP OFF: build succeeds without UUP warnings; CTest 16/16 passes.
-- ASan+UBSan GTK OFF/UUP ON: build succeeds; CTest 16/16 passes with leak detection disabled.
-- `git diff --check` passes. Tests use sparse/local fixtures and mock tools; no Microsoft
-  payload, destructive executor, or target-disk operation was run.
+- Clean Debug GTK ON + UUP ON: build succeeds with C17 and no
+  `-Wall -Wextra -Wpedantic` warnings; CTest 16/16 passes.
+- Clean Debug GTK OFF + UUP ON: build succeeds with no warnings; CTest 16/16 passes.
+- ASan+UBSan GTK OFF + UUP ON: CTest 16/16 passes with leak detection disabled because
+  LeakSanitizer cannot operate under this environment's ptrace supervision.
+- Tests cover a small-capacity candidate versus a large alternate root, selected-root
+  insufficient capacity, relative override rejection, symlink-root rejection, 0700 private
+  ownership, diagnostic formatting, and cleanup escape prevention.
+- `git diff --check` passes. No ISO/UUP payload download or destructive disk operation ran.
 
 ## Topics for ChatGPT to explain
 
-- GTK worker/main-context ownership and why UUP subprocesses cannot run on the UI thread.
-- Artifact verification versus trusting exit status or a requested update label.
-- Reporting identity, offered update metadata, and authoritative WIM metadata.
-- ISO9660/UDF extraction with 7-Zip versus privileged loop mounting.
-- Process groups, graceful cancellation, bounded kill escalation, join, and clean retry.
-- Backend-neutral verified source and the ISO-producer/direct-WIM producer seam.
-- DOTNET_ROOT configuration and native SONAME/ABI pinning in a reproducible rootfs.
+- Why `/tmp` may be tmpfs and why `/var/tmp` is a safer default for large installer staging.
+- Environment/config/default precedence and why invalid explicit configuration fails closed.
+- `statvfs()` capacity checks on the filesystem that will actually own an artifact.
+- Secure temporary-directory construction with absolute paths, ownership, 0700 permissions,
+  symlink rejection, and unique `mkdtemp()` children.
+- Workspace ownership boundaries and why recursive cleanup must never escape the unique root.
+- Difference between user-facing storage errors and sanitized debug capacity diagnostics.
 
 ## Issues/cautions
 
-- `p7zip-full`/`7z` is required for unprivileged ISO/UDF extraction and was not installed in
-  the Codex environment; extraction was tested with a deterministic mock. The final rootfs
-  must pin and validate it.
-- The live WSL overlay used system libwim because bundled libwim expects `libfuse3.so.3`
-  while WSL has `.so.4`. Production must bundle matching `.so.3`, rebuild/pin libwim, or
-  formally pin a compatible rootfs libwim; arbitrary ABI substitution is prohibited.
-- v3.1.9.3 does not integrate downloaded KBs. The validated output is base 26100.1 even
-  when Microsoft offers a 26200 update.
-- Existing ISO UI, direct WIM production, image apply, final disk transaction, and boot
-  configuration remain unimplemented. Retail Sentinel rejection remains fail-closed.
+- The 24 GiB gate is intentionally conservative and may need measurement-based refinement
+  for future direct-WIM or target-disk staging paths.
+- Intermediate ancestor symlink policy is delegated to the administrator-selected absolute
+  base; the selected base itself and ClassicSetup-owned child are validated and fail closed.
+- `/var/tmp` and `/tmp` fallback availability still depends on runtime permissions. If neither
+  is safe/usable, workspace creation fails rather than weakening ownership checks.
+- Actual GTK UUP multi-GiB transfer was not repeated for this refinement.
+- Direct WIM, final image apply, disk transaction, EFI/BCD, and boot configuration remain
+  future work; existing UUPMediaCreator/libwim rootfs ABI cautions remain applicable.

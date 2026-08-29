@@ -816,13 +816,48 @@ static void download_worker(
     if (runtime->session->source_backend ==
         CLASSICSETUP_SOURCE_MICROSOFT_UUP) {
         struct classicsetup_uup_target target;
+        struct classicsetup_workspace_diagnostics workspace_diagnostics;
+        int workspace_result;
 
-        if (classicsetup_workspace_create(&result->workspace) != 0) {
+        workspace_result = classicsetup_workspace_create_for_reserve(
+            &result->workspace,
+            CLASSICSETUP_UUP_WORKSPACE_RESERVE_BYTES,
+            &workspace_diagnostics);
+#ifndef NDEBUG
+        {
+            char diagnostic_text[512];
+
+            if (classicsetup_workspace_format_diagnostics(
+                    &workspace_diagnostics, diagnostic_text,
+                    sizeof(diagnostic_text)) == 0) {
+                g_debug("ClassicSetup workspace: %s", diagnostic_text);
+            }
+        }
+#endif
+        if (workspace_result != CLASSICSETUP_WORKSPACE_CREATE_OK) {
             result->status.state = CLASSICSETUP_DOWNLOAD_FAILED;
-            result->status.error = CLASSICSETUP_DOWNLOAD_ERROR_WRITE;
+            result->status.error =
+                workspace_result == CLASSICSETUP_WORKSPACE_CREATE_NO_SPACE
+                    ? CLASSICSETUP_DOWNLOAD_ERROR_OUT_OF_SPACE
+                    : CLASSICSETUP_DOWNLOAD_ERROR_WRITE;
+            result->uup_status.stage = CLASSICSETUP_UUP_FAILED;
+            result->uup_status.error =
+                workspace_result == CLASSICSETUP_WORKSPACE_CREATE_NO_SPACE
+                    ? CLASSICSETUP_UUP_ERROR_OUT_OF_SPACE
+                    : CLASSICSETUP_UUP_ERROR_WORKSPACE_FAILED;
+            result->uup_status.workspace_available_bytes =
+                workspace_diagnostics.available_bytes;
+            result->uup_status.workspace_required_bytes =
+                workspace_diagnostics.required_bytes;
+            (void)snprintf(result->uup_status.workspace_root,
+                           sizeof(result->uup_status.workspace_root), "%s",
+                           workspace_diagnostics.root_path);
             (void)snprintf(result->status.message,
                            sizeof(result->status.message), "%s",
-                           "The temporary workspace could not be created.");
+                           workspace_result ==
+                                   CLASSICSETUP_WORKSPACE_CREATE_NO_SPACE
+                               ? "There is not enough temporary storage."
+                               : "The temporary workspace could not be created.");
         } else if (classicsetup_uup_recommended_target(&target) != 0 ||
                    classicsetup_uup_download_and_build_iso(
                        &target, &result->workspace,

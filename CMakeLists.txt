@@ -30,6 +30,11 @@ set(CLASSICSETUP_UUP_ISO_EXTRACTOR
     CACHE FILEPATH "7-Zip executable used for unprivileged ISO/UDF extraction")
 set(CLASSICSETUP_UUP_BUNDLE_DIR "" CACHE PATH
     "Pre-staged, hash-verified UUPMediaCreator bundle for packaging")
+set(CLASSICSETUP_WORKSPACE_ROOT "" CACHE PATH
+    "Optional persistent base directory for ClassicSetup workspaces")
+
+add_compile_definitions(
+    CLASSICSETUP_CONFIGURED_WORKSPACE_ROOT="${CLASSICSETUP_WORKSPACE_ROOT}")
 
 set(CLASSICSETUP_GTK_FRONTEND src/gui/gtk_stub.c)
 set(CLASSICSETUP_NETWORK_BACKEND src/network/network_manager_stub.c)

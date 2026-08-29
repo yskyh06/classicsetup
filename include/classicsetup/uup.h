@@ -14,6 +14,8 @@
     "e0c4ce00dc5415bb0441e599aa9a86a2f6021707"
 #define CLASSICSETUP_UUPMC_LINUX_X64_SHA256 \
     "4a73e28321d893e4fed5f0e774702722995930e4864c6965e78e586d19803ce9"
+#define CLASSICSETUP_UUP_WORKSPACE_RESERVE_BYTES \
+    (24ULL * 1024ULL * 1024ULL * 1024ULL)
 
 enum {
     CLASSICSETUP_UUP_TEXT_SIZE = 128,
@@ -59,6 +61,7 @@ enum classicsetup_uup_error {
     CLASSICSETUP_UUP_ERROR_WIM_NOT_FOUND,
     CLASSICSETUP_UUP_ERROR_WIM_VERIFY_FAILED,
     CLASSICSETUP_UUP_ERROR_OUT_OF_SPACE,
+    CLASSICSETUP_UUP_ERROR_WORKSPACE_FAILED,
     CLASSICSETUP_UUP_ERROR_CANCELLED
 };
 
@@ -106,8 +109,11 @@ struct classicsetup_uup_status {
     unsigned long long total_bytes;
     size_t files_completed;
     size_t total_files;
+    unsigned long long workspace_available_bytes;
+    unsigned long long workspace_required_bytes;
     int child_exit_status;
     char detail[CLASSICSETUP_UUP_TEXT_SIZE];
+    char workspace_root[CLASSICSETUP_WORKSPACE_PATH_SIZE];
 };
 
 struct classicsetup_uup_payload_summary {

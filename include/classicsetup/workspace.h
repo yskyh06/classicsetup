@@ -6,6 +6,18 @@
 
 enum { CLASSICSETUP_WORKSPACE_PATH_SIZE = 4096 };
 
+enum classicsetup_workspace_create_result {
+    CLASSICSETUP_WORKSPACE_CREATE_OK = 0,
+    CLASSICSETUP_WORKSPACE_CREATE_ERROR = -1,
+    CLASSICSETUP_WORKSPACE_CREATE_NO_SPACE = -2
+};
+
+struct classicsetup_workspace_diagnostics {
+    char root_path[CLASSICSETUP_WORKSPACE_PATH_SIZE];
+    unsigned long long available_bytes;
+    unsigned long long required_bytes;
+};
+
 enum classicsetup_artifact_type {
     CLASSICSETUP_ARTIFACT_TEMPORARY,
     CLASSICSETUP_ARTIFACT_PARTIAL_DOWNLOAD,
@@ -20,6 +32,7 @@ struct classicsetup_workspace {
     bool valid;
     bool verified_iso;
     bool verified_wim;
+    char base_path[CLASSICSETUP_WORKSPACE_PATH_SIZE];
     char root_path[CLASSICSETUP_WORKSPACE_PATH_SIZE];
     char iso_final_path[CLASSICSETUP_WORKSPACE_PATH_SIZE];
     char iso_partial_path[CLASSICSETUP_WORKSPACE_PATH_SIZE];
@@ -34,6 +47,26 @@ struct classicsetup_workspace {
 };
 
 int classicsetup_workspace_create(struct classicsetup_workspace *workspace);
+
+int classicsetup_workspace_create_for_reserve(
+    struct classicsetup_workspace *workspace,
+    unsigned long long required_bytes,
+    struct classicsetup_workspace_diagnostics *diagnostics);
+
+int classicsetup_workspace_create_in(
+    struct classicsetup_workspace *workspace,
+    const char *base_path,
+    unsigned long long required_bytes,
+    struct classicsetup_workspace_diagnostics *diagnostics);
+
+int classicsetup_workspace_format_diagnostics(
+    const struct classicsetup_workspace_diagnostics *diagnostics,
+    char *output,
+    size_t output_size);
+
+bool classicsetup_workspace_capacity_allows(
+    unsigned long long available_bytes,
+    unsigned long long required_bytes);
 
 int classicsetup_workspace_available_bytes(
     const struct classicsetup_workspace *workspace,

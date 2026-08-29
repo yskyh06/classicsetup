@@ -1,5 +1,9 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <assert.h>
+#include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -286,6 +290,86 @@ static void test_workspace_and_verification(void)
     classicsetup_workspace_cleanup_after_install(&second, false);
 }
 
+static void test_workspace_root_policy(void)
+{
+    char base_template[] = "/tmp/classicsetup-root-test-XXXXXX";
+    char link_path[CLASSICSETUP_WORKSPACE_PATH_SIZE];
+    char victim_path[CLASSICSETUP_WORKSPACE_PATH_SIZE];
+    char saved_uup_path[CLASSICSETUP_WORKSPACE_PATH_SIZE];
+    char private_parent[CLASSICSETUP_WORKSPACE_PATH_SIZE];
+    char diagnostics_text[512];
+    struct classicsetup_workspace workspace;
+    struct classicsetup_workspace_diagnostics diagnostics;
+    const char *base = mkdtemp(base_template);
+    FILE *victim;
+    int written;
+
+    assert(base != NULL);
+    assert(!classicsetup_workspace_capacity_allows(
+        27ULL * 1024ULL * 1024ULL * 1024ULL / 10ULL,
+        24ULL * 1024ULL * 1024ULL * 1024ULL));
+    assert(classicsetup_workspace_capacity_allows(
+        50ULL * 1024ULL * 1024ULL * 1024ULL,
+        24ULL * 1024ULL * 1024ULL * 1024ULL));
+    assert(chmod(base, 0700) == 0);
+    assert(setenv("CLASSICSETUP_WORKSPACE_ROOT", base, 1) == 0);
+    assert(classicsetup_workspace_create_for_reserve(
+               &workspace, 1, &diagnostics) ==
+           CLASSICSETUP_WORKSPACE_CREATE_OK);
+    assert(strcmp(workspace.base_path, base) == 0);
+    assert(strncmp(workspace.root_path, base, strlen(base)) == 0);
+    assert(strcmp(diagnostics.root_path, workspace.root_path) == 0);
+    assert(diagnostics.available_bytes >= 1);
+    assert(diagnostics.required_bytes == 1);
+    assert(classicsetup_workspace_format_diagnostics(
+               &diagnostics, diagnostics_text,
+               sizeof(diagnostics_text)) == 0);
+    assert(strstr(diagnostics_text, "workspace_root=") != NULL);
+    assert(strstr(diagnostics_text, "available_bytes=") != NULL);
+    assert(strstr(diagnostics_text, "required_bytes=1") != NULL);
+
+    written = snprintf(victim_path, sizeof(victim_path), "%s/victim", base);
+    assert(written > 0 && (size_t)written < sizeof(victim_path));
+    victim = fopen(victim_path, "wb");
+    assert(victim != NULL);
+    assert(fputs("keep", victim) >= 0);
+    assert(fclose(victim) == 0);
+    (void)strcpy(saved_uup_path, workspace.uup_path);
+    (void)snprintf(workspace.uup_path, sizeof(workspace.uup_path), "%s",
+                   victim_path);
+    classicsetup_workspace_cleanup_cancel(&workspace);
+    assert(access(victim_path, F_OK) == 0);
+    (void)strcpy(workspace.uup_path, saved_uup_path);
+    classicsetup_workspace_cleanup_after_install(&workspace, false);
+    assert(unlink(victim_path) == 0);
+
+    assert(classicsetup_workspace_create_in(
+               &workspace, base, ULLONG_MAX, &diagnostics) ==
+           CLASSICSETUP_WORKSPACE_CREATE_NO_SPACE);
+    assert(diagnostics.available_bytes < diagnostics.required_bytes);
+    assert(setenv("CLASSICSETUP_WORKSPACE_ROOT", "relative/path", 1) == 0);
+    assert(classicsetup_workspace_create_for_reserve(
+               &workspace, 0, &diagnostics) ==
+           CLASSICSETUP_WORKSPACE_CREATE_ERROR);
+
+    written = snprintf(link_path, sizeof(link_path), "%s-link", base);
+    assert(written > 0 && (size_t)written < sizeof(link_path));
+    assert(symlink(base, link_path) == 0);
+    assert(setenv("CLASSICSETUP_WORKSPACE_ROOT", link_path, 1) == 0);
+    assert(classicsetup_workspace_create_for_reserve(
+               &workspace, 0, &diagnostics) ==
+           CLASSICSETUP_WORKSPACE_CREATE_ERROR);
+    assert(unlink(link_path) == 0);
+    assert(unsetenv("CLASSICSETUP_WORKSPACE_ROOT") == 0);
+
+    written = snprintf(private_parent, sizeof(private_parent),
+                       "%s/classicsetup-%lu", base,
+                       (unsigned long)geteuid());
+    assert(written > 0 && (size_t)written < sizeof(private_parent));
+    assert(rmdir(private_parent) == 0);
+    assert(rmdir(base) == 0);
+}
+
 static void test_download_backend_fallback(void)
 {
 #if !CLASSICSETUP_DOWNLOAD_ENABLED
@@ -309,6 +393,7 @@ int main(void)
     test_source_mapping_and_policy();
     test_source_resolve_diagnostics();
     test_workspace_and_verification();
+    test_workspace_root_policy();
     test_download_backend_fallback();
     return 0;
 }
