@@ -3,6 +3,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifndef CLASSICSETUP_ENABLE_UUP
+#define CLASSICSETUP_ENABLE_UUP 1
+#endif
+
 void classicsetup_gui_session_reset(
     struct classicsetup_gui_session *session)
 {
@@ -24,9 +28,46 @@ void classicsetup_gui_session_reset_for_entry(
                         ? CLASSICSETUP_GUI_PAGE_NETWORK
                         : CLASSICSETUP_GUI_PAGE_DISK;
     session->windows_version = CLASSICSETUP_GUI_WINDOWS_11;
+    session->source_backend = CLASSICSETUP_ENABLE_UUP
+                                  ? CLASSICSETUP_SOURCE_MICROSOFT_UUP
+                                  : CLASSICSETUP_SOURCE_MICROSOFT_RETAIL;
     classicsetup_network_snapshot_reset(&session->network);
     classicsetup_source_catalog_reset(&session->source_catalog);
     classicsetup_download_status_reset(&session->download);
+    classicsetup_uup_status_reset(&session->uup_status);
+}
+
+int classicsetup_gui_set_source_backend(
+    struct classicsetup_gui_session *session,
+    enum classicsetup_source_backend backend)
+{
+    if (session == NULL ||
+        (backend != CLASSICSETUP_SOURCE_MICROSOFT_RETAIL &&
+         backend != CLASSICSETUP_SOURCE_MICROSOFT_UUP &&
+         backend != CLASSICSETUP_SOURCE_EXISTING_ISO) ||
+        classicsetup_gui_source_change_requirement(session) !=
+            CLASSICSETUP_GUI_SOURCE_CHANGE_ALLOWED) {
+        return -1;
+    }
+#if !CLASSICSETUP_ENABLE_UUP
+    if (backend == CLASSICSETUP_SOURCE_MICROSOFT_UUP) {
+        return -1;
+    }
+#endif
+    if (session->source_backend == backend) {
+        return 0;
+    }
+    session->source_backend = backend;
+    session->has_selected_release = false;
+    session->has_selected_release_name = false;
+    session->has_selected_language = false;
+    session->has_selected_architecture = false;
+    session->selected_release_name[0] = '\0';
+    session->selected_release_index = 0;
+    classicsetup_source_catalog_reset(&session->source_catalog);
+    classicsetup_source_resolve_diagnostics_reset(
+        &session->source_diagnostics);
+    return 0;
 }
 
 enum classicsetup_gui_page classicsetup_gui_page_next(
@@ -104,6 +145,8 @@ int classicsetup_gui_set_windows_version(
     session->selected_release_name[0] = '\0';
     session->selected_release_index = 0;
     classicsetup_source_catalog_reset(&session->source_catalog);
+    classicsetup_source_resolve_diagnostics_reset(
+        &session->source_diagnostics);
     return 0;
 }
 
@@ -174,6 +217,8 @@ int classicsetup_gui_select_release_name(
     session->has_selected_architecture = false;
     session->has_selected_release = false;
     session->selected_release_index = 0;
+    classicsetup_source_resolve_diagnostics_reset(
+        &session->source_diagnostics);
     return 0;
 }
 
@@ -208,6 +253,8 @@ int classicsetup_gui_select_language(
     session->has_selected_architecture = false;
     session->has_selected_release = false;
     session->selected_release_index = 0;
+    classicsetup_source_resolve_diagnostics_reset(
+        &session->source_diagnostics);
     return 0;
 }
 
@@ -235,11 +282,15 @@ int classicsetup_gui_select_architecture(
             session->has_selected_architecture = true;
             session->selected_release_index = index;
             session->has_selected_release = true;
+            classicsetup_source_resolve_diagnostics_reset(
+                &session->source_diagnostics);
             return 0;
         }
     }
     session->has_selected_architecture = false;
     session->has_selected_release = false;
+    classicsetup_source_resolve_diagnostics_reset(
+        &session->source_diagnostics);
     return -1;
 }
 
@@ -297,6 +348,11 @@ void classicsetup_gui_discard_downloaded_source(
             &session->workspace, false);
     }
     classicsetup_download_status_reset(&session->download);
+    classicsetup_uup_status_reset(&session->uup_status);
+    memset(&session->verified_source, 0,
+           sizeof(session->verified_source));
+    classicsetup_source_resolve_diagnostics_reset(
+        &session->source_diagnostics);
     for (index = 0; index < session->source_catalog.release_count; ++index) {
         memset(session->source_catalog.releases[index].download_uri, 0,
                sizeof(session->source_catalog.releases[index].download_uri));
@@ -312,7 +368,12 @@ bool classicsetup_gui_summary_is_ready(
            classicsetup_gui_source_selection_is_valid(session) &&
            session->options_placeholder &&
            classicsetup_download_is_ready(
-               &session->download, &session->workspace);
+               &session->download, &session->workspace) &&
+           (session->source_backend !=
+                CLASSICSETUP_SOURCE_MICROSOFT_UUP ||
+            (session->verified_source.verified &&
+             session->verified_source.kind ==
+                 CLASSICSETUP_VERIFIED_SOURCE_ISO));
 }
 
 void classicsetup_gui_network_presentation_reset(

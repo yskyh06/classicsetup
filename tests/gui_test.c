@@ -43,6 +43,12 @@ static void test_session_and_disk_selection(void)
     assert(session.entry_mode == CLASSICSETUP_GUI_ENTRY_RECOMMENDED);
     assert(session.page == CLASSICSETUP_GUI_PAGE_DISK);
     assert(session.windows_version == CLASSICSETUP_GUI_WINDOWS_11);
+#if CLASSICSETUP_ENABLE_UUP
+    assert(session.source_backend ==
+           CLASSICSETUP_SOURCE_MICROSOFT_UUP);
+#else
+    assert(session.source_backend == CLASSICSETUP_SOURCE_MICROSOFT_RETAIL);
+#endif
     assert(session.network.state == CLASSICSETUP_NETWORK_UNAVAILABLE);
     assert(!classicsetup_network_can_continue(&session.network));
     session.firmware = CLASSICSETUP_FIRMWARE_UEFI;
@@ -58,6 +64,16 @@ static void test_session_and_disk_selection(void)
                &session,
                CLASSICSETUP_GUI_WINDOWS_10) == 0);
     assert(session.windows_version == CLASSICSETUP_GUI_WINDOWS_10);
+#if CLASSICSETUP_ENABLE_UUP
+    assert(classicsetup_gui_set_source_backend(
+               &session,
+               CLASSICSETUP_SOURCE_MICROSOFT_UUP) == 0);
+    assert(session.source_backend == CLASSICSETUP_SOURCE_MICROSOFT_UUP);
+#else
+    assert(classicsetup_gui_set_source_backend(
+               &session,
+               CLASSICSETUP_SOURCE_MICROSOFT_UUP) != 0);
+#endif
     assert(classicsetup_gui_set_windows_version(
                &session,
                (enum classicsetup_gui_windows_version)99) != 0);
@@ -144,6 +160,18 @@ static void test_source_selection_and_summary_gate(void)
     session.workspace.verified_iso = true;
     session.download.state = CLASSICSETUP_DOWNLOAD_COMPLETE;
     session.download.error = CLASSICSETUP_DOWNLOAD_ERROR_NONE;
+#if CLASSICSETUP_ENABLE_UUP
+    session.verified_source.backend =
+        CLASSICSETUP_SOURCE_MICROSOFT_UUP;
+    session.verified_source.kind = CLASSICSETUP_VERIFIED_SOURCE_ISO;
+    session.verified_source.family = CLASSICSETUP_WINDOWS_11;
+    session.verified_source.architecture = CLASSICSETUP_ARCH_X64;
+    session.verified_source.language =
+        CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN;
+    (void)strcpy(session.verified_source.build, "26100.1");
+    (void)strcpy(session.verified_source.edition, "Professional");
+    session.verified_source.verified = true;
+#endif
     assert(classicsetup_gui_summary_is_ready(&session));
     assert(classicsetup_gui_set_windows_version(
                &session, CLASSICSETUP_GUI_WINDOWS_10) != 0);

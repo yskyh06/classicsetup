@@ -3,7 +3,10 @@
 #include "classicsetup/process.h"
 
 #include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -152,4 +155,158 @@ int classicsetup_run_process(
         arguments,
         "",
         result);
+}
+
+static ssize_t append_available_output(
+    int descriptor,
+    struct classicsetup_process_result *result,
+    size_t *used)
+{
+    char chunk[256];
+    ssize_t count;
+
+    do {
+        count = read(descriptor, chunk, sizeof(chunk));
+    } while (count < 0 && errno == EINTR);
+    if (count > 0) {
+        size_t capacity = sizeof(result->output) - 1;
+        size_t incoming = (size_t)count;
+
+        {
+            size_t required = *used + incoming;
+
+            if (required > capacity) {
+                size_t discard = required - capacity;
+
+                memmove(result->output, result->output + discard,
+                        *used - discard);
+                *used -= discard;
+            }
+            memcpy(result->output + *used, chunk, incoming);
+            *used += incoming;
+        }
+        result->output[*used] = '\0';
+    }
+    return count;
+}
+
+static int run_process_cancellable_internal(
+    const char *executable,
+    char *const arguments[],
+    const char *environment_name,
+    const char *environment_value,
+    classicsetup_process_cancel_callback cancel_callback,
+    void *cancel_context,
+    struct classicsetup_process_result *result)
+{
+    int output_pipe[2];
+    int status = 0;
+    int child_done = 0;
+    int cancel_sent = 0;
+    int cancel_polls = 0;
+    pid_t child;
+    size_t used = 0;
+
+    if (executable == NULL || arguments == NULL || arguments[0] == NULL ||
+        result == NULL || pipe(output_pipe) != 0) {
+        return -1;
+    }
+    memset(result, 0, sizeof(*result));
+    child = fork();
+    if (child < 0) {
+        close(output_pipe[0]);
+        close(output_pipe[1]);
+        return -1;
+    }
+    if (child == 0) {
+        (void)setpgid(0, 0);
+        close(output_pipe[0]);
+        if (dup2(output_pipe[1], STDOUT_FILENO) < 0 ||
+            dup2(output_pipe[1], STDERR_FILENO) < 0) {
+            _exit(126);
+        }
+        close(output_pipe[1]);
+        if (environment_name != NULL && environment_value != NULL &&
+            setenv(environment_name, environment_value, 1) != 0) {
+            _exit(126);
+        }
+        execv(executable, arguments);
+        _exit(127);
+    }
+    (void)setpgid(child, child);
+    close(output_pipe[1]);
+    (void)fcntl(output_pipe[0], F_SETFL,
+                fcntl(output_pipe[0], F_GETFL, 0) | O_NONBLOCK);
+
+    while (!child_done) {
+        struct pollfd descriptor = {output_pipe[0], POLLIN | POLLHUP, 0};
+        pid_t waited;
+
+        (void)poll(&descriptor, 1, 100);
+        if ((descriptor.revents & (POLLIN | POLLHUP)) != 0) {
+            (void)append_available_output(output_pipe[0], result, &used);
+        }
+        if (!cancel_sent && cancel_callback != NULL &&
+            cancel_callback(cancel_context)) {
+            (void)kill(-child, SIGTERM);
+            cancel_sent = 1;
+        }
+        if (cancel_sent && ++cancel_polls >= 20) {
+            (void)kill(-child, SIGKILL);
+        }
+        do {
+            waited = waitpid(child, &status, WNOHANG);
+        } while (waited < 0 && errno == EINTR);
+        if (waited == child) {
+            child_done = 1;
+        } else if (waited < 0) {
+            close(output_pipe[0]);
+            return -1;
+        }
+    }
+    while (poll(&(struct pollfd){output_pipe[0], POLLIN | POLLHUP, 0},
+                1, 0) > 0) {
+        if (append_available_output(output_pipe[0], result, &used) <= 0) {
+            break;
+        }
+    }
+    close(output_pipe[0]);
+    if (WIFEXITED(status)) {
+        result->exited = 1;
+        result->exit_status = WEXITSTATUS(status);
+    } else if (WIFSIGNALED(status)) {
+        result->signaled = 1;
+        result->signal_number = WTERMSIG(status);
+    }
+    return cancel_sent ? 1 : 0;
+}
+
+int classicsetup_run_process_cancellable(
+    const char *executable,
+    char *const arguments[],
+    classicsetup_process_cancel_callback cancel_callback,
+    void *cancel_context,
+    struct classicsetup_process_result *result)
+{
+    return run_process_cancellable_internal(
+        executable, arguments, NULL, NULL, cancel_callback,
+        cancel_context, result);
+}
+
+int classicsetup_run_process_cancellable_with_environment(
+    const char *executable,
+    char *const arguments[],
+    const char *environment_name,
+    const char *environment_value,
+    classicsetup_process_cancel_callback cancel_callback,
+    void *cancel_context,
+    struct classicsetup_process_result *result)
+{
+    if (environment_name == NULL || environment_name[0] == '\0' ||
+        strchr(environment_name, '=') != NULL || environment_value == NULL) {
+        return -1;
+    }
+    return run_process_cancellable_internal(
+        executable, arguments, environment_name, environment_value,
+        cancel_callback, cancel_context, result);
 }

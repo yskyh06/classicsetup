@@ -1,0 +1,4 @@
+# Local, hash-verified validation bundle. Packaging consumes an explicitly
+# staged directory; release binaries and archives are not source artifacts.
+*
+!.gitignore

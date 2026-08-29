@@ -1,0 +1,19 @@
+# ClassicSetup bundled UUPMediaCreator pin. Packaging must verify this archive
+# before staging it; the installer never downloads tools at runtime.
+UPSTREAM=https://github.com/OSTooling/UUPMediaCreator
+VERSION=3.1.9.3
+TAG=v3.1.9.3
+COMMIT=e0c4ce00dc5415bb0441e599aa9a86a2f6021707
+LICENSE=MIT
+LINUX_X64_ARCHIVE=linux-x64-binaries.zip
+LINUX_X64_SHA256=4a73e28321d893e4fed5f0e774702722995930e4864c6965e78e586d19803ce9
+TARGET_FRAMEWORK=net8.0
+PUBLISH_MODE=single-file
+INSTALL_ROOT=/usr/lib/classicsetup/tools/uupmediacreator
+DOWNLOAD_EXECUTABLE=UUPDownload
+CONVERTER_EXECUTABLE=UUPMediaConverter
+DOTNET_RUNTIME_MAJOR=8
+# Final rootfs packaging must explicitly pin a compatible libwim/libfuse ABI.
+WIM_VERIFIER=wimlib-imagex
+# 7-Zip is used as an unprivileged UDF-aware ISO reader; no loop mount is needed.
+ISO_EXTRACTOR=7z

@@ -3,6 +3,8 @@
 #include "classicsetup/workspace.h"
 
 #include <limits.h>
+#include <dirent.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,6 +27,70 @@ static void remove_file(const char *path)
     }
 }
 
+static int path_is_owned(const struct classicsetup_workspace *workspace,
+                         const char *path)
+{
+    size_t root_length;
+
+    if (workspace == NULL || path == NULL || !workspace->valid) {
+        return 0;
+    }
+    root_length = strlen(workspace->root_path);
+    return root_length > 0 && strncmp(path, workspace->root_path,
+                                      root_length) == 0 &&
+           path[root_length] == '/';
+}
+
+static int remove_tree(const struct classicsetup_workspace *workspace,
+                       const char *path)
+{
+    struct stat info;
+    DIR *directory;
+    struct dirent *entry;
+    int failed = 0;
+
+    if (!path_is_owned(workspace, path)) {
+        return -1;
+    }
+    if (lstat(path, &info) != 0) {
+        return errno == ENOENT ? 0 : -1;
+    }
+    if (!S_ISDIR(info.st_mode)) {
+        return unlink(path);
+    }
+    directory = opendir(path);
+    if (directory == NULL) {
+        return -1;
+    }
+    while ((entry = readdir(directory)) != NULL) {
+        char child[CLASSICSETUP_WORKSPACE_PATH_SIZE];
+        int written;
+
+        if (strcmp(entry->d_name, ".") == 0 ||
+            strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+        written = snprintf(child, sizeof(child), "%s/%s", path,
+                           entry->d_name);
+        if (written <= 0 || (size_t)written >= sizeof(child) ||
+            remove_tree(workspace, child) != 0) {
+            failed = 1;
+        }
+    }
+    if (closedir(directory) != 0) {
+        failed = 1;
+    }
+    if (rmdir(path) != 0) {
+        failed = 1;
+    }
+    return failed ? -1 : 0;
+}
+
+static int create_private_directory(const char *path)
+{
+    return mkdir(path, S_IRWXU) == 0 && chmod(path, S_IRWXU) == 0 ? 0 : -1;
+}
+
 int classicsetup_workspace_create(struct classicsetup_workspace *workspace)
 {
     char template_path[] = "/tmp/classicsetup-XXXXXX";
@@ -37,7 +103,15 @@ int classicsetup_workspace_create(struct classicsetup_workspace *workspace)
     root = mkdtemp(template_path);
     if (root == NULL || chmod(root, S_IRWXU) != 0 ||
         snprintf(workspace->root_path, sizeof(workspace->root_path),
-                 "%s", root) < 0 ||
+                 "%s", root) < 0) {
+        if (root != NULL) {
+            (void)rmdir(root);
+        }
+        memset(workspace, 0, sizeof(*workspace));
+        return -1;
+    }
+    workspace->valid = true;
+    if (
         set_path(workspace->iso_final_path,
                  sizeof(workspace->iso_final_path), root,
                  "windows.iso") != 0 ||
@@ -49,15 +123,65 @@ int classicsetup_workspace_create(struct classicsetup_workspace *workspace)
                  "source-metadata.tmp") != 0 ||
         set_path(workspace->debug_path,
                  sizeof(workspace->debug_path), root,
-                 "debug.tmp") != 0) {
+                 "debug.tmp") != 0 ||
+        set_path(workspace->uup_path,
+                 sizeof(workspace->uup_path), root, "uup") != 0 ||
+        set_path(workspace->image_path,
+                 sizeof(workspace->image_path), root, "image") != 0 ||
+        set_path(workspace->wim_final_path,
+                 sizeof(workspace->wim_final_path), root,
+                 "install.wim") != 0 ||
+        set_path(workspace->wim_partial_path,
+                 sizeof(workspace->wim_partial_path), root,
+                 "install.wim.part") != 0 ||
+        set_path(workspace->iso_debug_path,
+                 sizeof(workspace->iso_debug_path), root,
+                 "windows-uup-debug.iso") != 0 ||
+        create_private_directory(workspace->uup_path) != 0 ||
+        create_private_directory(workspace->image_path) != 0) {
         if (root != NULL) {
+            if (workspace->uup_path[0] != '\0') {
+                (void)remove_tree(workspace, workspace->uup_path);
+            }
+            if (workspace->image_path[0] != '\0') {
+                (void)remove_tree(workspace, workspace->image_path);
+            }
             (void)rmdir(root);
         }
         memset(workspace, 0, sizeof(*workspace));
         return -1;
     }
-    workspace->valid = true;
     return 0;
+}
+
+int classicsetup_workspace_promote_verified_wim(
+    struct classicsetup_workspace *workspace)
+{
+    if (workspace == NULL || !workspace->valid || workspace->verified_wim ||
+        rename(workspace->wim_partial_path, workspace->wim_final_path) != 0) {
+        return -1;
+    }
+    workspace->verified_wim = true;
+    return 0;
+}
+
+int classicsetup_workspace_cleanup_uup_intermediates(
+    struct classicsetup_workspace *workspace)
+{
+    int failed = 0;
+
+    if (workspace == NULL || !workspace->valid) {
+        return -1;
+    }
+    if (remove_tree(workspace, workspace->uup_path) != 0 ||
+        remove_tree(workspace, workspace->image_path) != 0) {
+        failed = 1;
+    }
+    if (create_private_directory(workspace->uup_path) != 0 ||
+        create_private_directory(workspace->image_path) != 0) {
+        failed = 1;
+    }
+    return failed ? -1 : 0;
 }
 
 int classicsetup_workspace_available_bytes(
@@ -115,6 +239,9 @@ void classicsetup_workspace_cleanup_cancel(
     remove_file(workspace->iso_partial_path);
     remove_file(workspace->metadata_path);
     remove_file(workspace->debug_path);
+    remove_file(workspace->wim_partial_path);
+    remove_file(workspace->iso_debug_path);
+    (void)classicsetup_workspace_cleanup_uup_intermediates(workspace);
 }
 
 void classicsetup_workspace_cleanup_failure(
@@ -132,6 +259,8 @@ void classicsetup_workspace_cleanup_success(
     remove_file(workspace->iso_partial_path);
     remove_file(workspace->metadata_path);
     remove_file(workspace->debug_path);
+    remove_file(workspace->wim_partial_path);
+    (void)classicsetup_workspace_cleanup_uup_intermediates(workspace);
 }
 
 void classicsetup_workspace_cleanup_after_install(
@@ -146,7 +275,12 @@ void classicsetup_workspace_cleanup_after_install(
         remove_file(workspace->iso_final_path);
         workspace->verified_iso = false;
     }
-    if (!workspace->verified_iso) {
+    remove_file(workspace->wim_final_path);
+    workspace->verified_wim = false;
+    remove_file(workspace->iso_debug_path);
+    (void)remove_tree(workspace, workspace->uup_path);
+    (void)remove_tree(workspace, workspace->image_path);
+    if (!workspace->verified_iso && !workspace->verified_wim) {
         (void)rmdir(workspace->root_path);
         memset(workspace, 0, sizeof(*workspace));
     }

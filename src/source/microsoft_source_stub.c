@@ -19,6 +19,21 @@ int classicsetup_microsoft_source_discover(
 int classicsetup_microsoft_source_resolve(
     struct classicsetup_windows_release *release)
 {
+    struct classicsetup_source_resolve_diagnostics diagnostics;
+
+    return classicsetup_microsoft_source_resolve_with_diagnostics(
+        release, &diagnostics);
+}
+
+int classicsetup_microsoft_source_resolve_with_diagnostics(
+    struct classicsetup_windows_release *release,
+    struct classicsetup_source_resolve_diagnostics *diagnostics)
+{
     (void)release;
+    if (diagnostics != NULL) {
+        classicsetup_source_resolve_diagnostics_reset(diagnostics);
+        diagnostics->error =
+            CLASSICSETUP_SOURCE_RESOLVE_NETWORK_ERROR;
+    }
     return -1;
 }

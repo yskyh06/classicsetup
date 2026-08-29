@@ -45,6 +45,7 @@ struct classicsetup_gui_runtime {
     GtkStringList *language_model;
     GtkWidget *architecture_dropdown;
     GtkStringList *architecture_model;
+    GtkWidget *edition_value;
     GtkWidget *change_source_button;
     char release_choices[CLASSICSETUP_SOURCE_MAX_RELEASES]
                         [CLASSICSETUP_SOURCE_NAME_SIZE];
@@ -81,11 +82,24 @@ struct download_task_result {
     struct classicsetup_windows_release release;
     struct classicsetup_workspace workspace;
     struct classicsetup_download_status status;
+    struct classicsetup_source_resolve_diagnostics resolve_diagnostics;
+    struct classicsetup_uup_status uup_status;
+    struct classicsetup_verified_windows_source verified_source;
+};
+
+struct source_task_request {
+    enum classicsetup_windows_family family;
+    enum classicsetup_source_backend backend;
 };
 
 struct progress_event {
     struct classicsetup_gui_runtime *runtime;
     struct classicsetup_download_status status;
+};
+
+struct uup_progress_event {
+    struct classicsetup_gui_runtime *runtime;
+    struct classicsetup_uup_status status;
 };
 
 static void add_classic_label(
@@ -356,14 +370,18 @@ static void source_discovery_worker(
     GTask *task, gpointer source_object, gpointer task_data,
     GCancellable *cancellable)
 {
+    const struct source_task_request *request = task_data;
     struct classicsetup_source_catalog *catalog = g_new0(
         struct classicsetup_source_catalog, 1);
-    enum classicsetup_windows_family family =
-        (enum classicsetup_windows_family)GPOINTER_TO_INT(task_data);
 
     (void)source_object;
     (void)cancellable;
-    if (classicsetup_microsoft_source_discover(family, catalog) != 0) {
+    if (request->backend ==
+        CLASSICSETUP_SOURCE_MICROSOFT_UUP) {
+        (void)classicsetup_uup_recommended_catalog(
+            request->family, catalog);
+    } else if (classicsetup_microsoft_source_discover(
+                   request->family, catalog) != 0) {
         g_task_return_pointer(task, catalog, g_free);
         return;
     }
@@ -582,7 +600,10 @@ static void update_source_controls(
     } else if (catalog->state == CLASSICSETUP_SOURCE_READY) {
         gtk_label_set_text(
             GTK_LABEL(runtime->source_status),
-            "Only combinations returned by Microsoft's official source are shown. Editions are selected later from the ISO.");
+            runtime->session->source_backend ==
+                    CLASSICSETUP_SOURCE_MICROSOFT_UUP
+                ? "Source: Microsoft Windows Update. The resulting image version will be shown after verification."
+                : "Only combinations returned by Microsoft's official source are shown. Editions are selected later from the ISO.");
     } else {
         gtk_label_set_text(GTK_LABEL(runtime->source_status),
                            "Release discovery has not started.");
@@ -601,6 +622,19 @@ static void update_source_controls(
     gtk_widget_set_visible(
         runtime->change_source_button,
         requirement != CLASSICSETUP_GUI_SOURCE_CHANGE_ALLOWED);
+    if (runtime->edition_value != NULL) {
+        const char *edition_name = "Windows 11 Pro";
+
+        if (runtime->session->has_selected_release &&
+            runtime->session->source_catalog.releases[
+                runtime->session->selected_release_index]
+                    .edition_name[0] != '\0') {
+            edition_name = runtime->session->source_catalog.releases[
+                runtime->session->selected_release_index].edition_name;
+        }
+        gtk_label_set_text(
+            GTK_LABEL(runtime->edition_value), edition_name);
+    }
     update_navigation(runtime);
 }
 
@@ -635,6 +669,7 @@ static void start_source_discovery(
     struct classicsetup_gui_runtime *runtime)
 {
     GTask *task;
+    struct source_task_request *request;
 
     if (runtime->source_task_active || runtime->download_task_active) {
         return;
@@ -644,16 +679,18 @@ static void start_source_discovery(
     runtime->session->has_selected_language = false;
     runtime->session->has_selected_architecture = false;
     runtime->session->selected_release_name[0] = '\0';
+    classicsetup_source_resolve_diagnostics_reset(
+        &runtime->session->source_diagnostics);
     classicsetup_source_catalog_reset(&runtime->session->source_catalog);
     runtime->session->source_catalog.state =
         CLASSICSETUP_SOURCE_DISCOVERING;
     runtime->source_task_active = true;
     update_source_controls(runtime);
     task = g_task_new(NULL, NULL, source_discovery_finished, runtime);
-    g_task_set_task_data(
-        task,
-        GINT_TO_POINTER((int)selected_family(runtime->session)),
-        NULL);
+    request = g_new0(struct source_task_request, 1);
+    request->family = selected_family(runtime->session);
+    request->backend = runtime->session->source_backend;
+    g_task_set_task_data(task, request, g_free);
     g_task_run_in_thread(task, source_discovery_worker);
     g_object_unref(task);
 }
@@ -679,6 +716,89 @@ static void download_progress_from_worker(
     g_main_context_invoke(NULL, progress_on_main, event);
 }
 
+static const char *uup_stage_message(enum classicsetup_uup_stage stage)
+{
+    switch (stage) {
+    case CLASSICSETUP_UUP_CHECKING_TOOL:
+        return "Checking Windows source tools...";
+    case CLASSICSETUP_UUP_SEARCHING:
+        return "Searching Microsoft Windows Update...";
+    case CLASSICSETUP_UUP_RESOLVING:
+        return "Resolving a stable Windows release...";
+    case CLASSICSETUP_UUP_DOWNLOADING:
+        return "Downloading Windows files...";
+    case CLASSICSETUP_UUP_VERIFYING_PAYLOAD:
+        return "Verifying downloaded Windows files...";
+    case CLASSICSETUP_UUP_BUILDING_IMAGE:
+        return "Preparing the Windows image...";
+    case CLASSICSETUP_UUP_VERIFYING_IMAGE:
+        return "Verifying the Windows image...";
+    case CLASSICSETUP_UUP_COMPLETE:
+        return "Windows is ready to install.";
+    case CLASSICSETUP_UUP_CANCELLED:
+        return "Windows download was cancelled.";
+    case CLASSICSETUP_UUP_FAILED:
+        return "Windows could not be prepared.";
+    case CLASSICSETUP_UUP_IDLE:
+        break;
+    }
+    return "Ready to download Windows.";
+}
+
+static gboolean uup_progress_on_main(gpointer user_data)
+{
+    struct uup_progress_event *event = user_data;
+    struct classicsetup_download_status *download =
+        &event->runtime->session->download;
+
+    event->runtime->session->uup_status = event->status;
+    download->bytes_received = event->status.bytes_received;
+    download->total_bytes = event->status.total_bytes;
+    download->progress_fraction =
+        event->status.stage == CLASSICSETUP_UUP_COMPLETE ? 1.0 : 0.0;
+    if (event->status.stage == CLASSICSETUP_UUP_CANCELLED) {
+        download->state = CLASSICSETUP_DOWNLOAD_CANCELLED;
+        download->error = CLASSICSETUP_DOWNLOAD_ERROR_CANCELLED;
+    } else if (event->status.stage == CLASSICSETUP_UUP_FAILED) {
+        download->state = CLASSICSETUP_DOWNLOAD_FAILED;
+        download->error = CLASSICSETUP_DOWNLOAD_ERROR_SOURCE;
+    } else if (event->status.stage == CLASSICSETUP_UUP_COMPLETE) {
+        download->state = CLASSICSETUP_DOWNLOAD_COMPLETE;
+        download->error = CLASSICSETUP_DOWNLOAD_ERROR_NONE;
+    } else if (event->status.stage == CLASSICSETUP_UUP_CHECKING_TOOL ||
+               event->status.stage == CLASSICSETUP_UUP_SEARCHING ||
+               event->status.stage == CLASSICSETUP_UUP_RESOLVING) {
+        download->state = CLASSICSETUP_DOWNLOAD_PREPARING;
+    } else if (event->status.stage ==
+               CLASSICSETUP_UUP_VERIFYING_IMAGE) {
+        download->state = CLASSICSETUP_DOWNLOAD_VERIFYING;
+    } else {
+        download->state = CLASSICSETUP_DOWNLOAD_DOWNLOADING;
+    }
+    (void)snprintf(download->message, sizeof(download->message), "%s",
+                   uup_stage_message(event->status.stage));
+    update_download_page(event->runtime);
+    g_free(event);
+    return G_SOURCE_REMOVE;
+}
+
+static void uup_progress_from_worker(
+    const struct classicsetup_uup_status *status,
+    void *user_data)
+{
+    struct uup_progress_event *event = g_new0(
+        struct uup_progress_event, 1);
+
+    event->runtime = user_data;
+    event->status = *status;
+    g_main_context_invoke(NULL, uup_progress_on_main, event);
+}
+
+static bool uup_cancel_requested(void *context)
+{
+    return atomic_load((atomic_bool *)context);
+}
+
 static void download_worker(
     GTask *task, gpointer source_object, gpointer task_data,
     GCancellable *cancellable)
@@ -693,12 +813,55 @@ static void download_worker(
         runtime->session->selected_release_index];
     classicsetup_download_status_reset(&result->status);
     result->status.state = CLASSICSETUP_DOWNLOAD_PREPARING;
-    if (classicsetup_microsoft_source_resolve(&result->release) != 0) {
+    if (runtime->session->source_backend ==
+        CLASSICSETUP_SOURCE_MICROSOFT_UUP) {
+        struct classicsetup_uup_target target;
+
+        if (classicsetup_workspace_create(&result->workspace) != 0) {
+            result->status.state = CLASSICSETUP_DOWNLOAD_FAILED;
+            result->status.error = CLASSICSETUP_DOWNLOAD_ERROR_WRITE;
+            (void)snprintf(result->status.message,
+                           sizeof(result->status.message), "%s",
+                           "The temporary workspace could not be created.");
+        } else if (classicsetup_uup_recommended_target(&target) != 0 ||
+                   classicsetup_uup_download_and_build_iso(
+                       &target, &result->workspace,
+                       uup_cancel_requested,
+                       &runtime->download_cancel_requested,
+                       uup_progress_from_worker, runtime,
+                       &result->uup_status,
+                       &result->verified_source) != 0) {
+            result->status.state =
+                result->uup_status.stage == CLASSICSETUP_UUP_CANCELLED
+                    ? CLASSICSETUP_DOWNLOAD_CANCELLED
+                    : CLASSICSETUP_DOWNLOAD_FAILED;
+            result->status.error =
+                result->uup_status.stage == CLASSICSETUP_UUP_CANCELLED
+                    ? CLASSICSETUP_DOWNLOAD_ERROR_CANCELLED
+                    : CLASSICSETUP_DOWNLOAD_ERROR_SOURCE;
+            (void)snprintf(result->status.message,
+                           sizeof(result->status.message), "%s",
+                           classicsetup_uup_error_message(
+                               result->uup_status.error));
+        } else {
+            result->status.state = CLASSICSETUP_DOWNLOAD_COMPLETE;
+            result->status.error = CLASSICSETUP_DOWNLOAD_ERROR_NONE;
+            result->status.progress_fraction = 1.0;
+            result->status.bytes_received =
+                result->uup_status.bytes_received;
+            result->status.total_bytes = result->uup_status.total_bytes;
+            (void)snprintf(result->status.message,
+                           sizeof(result->status.message), "%s",
+                           "Windows is ready to install.");
+        }
+    } else if (classicsetup_microsoft_source_resolve_with_diagnostics(
+            &result->release, &result->resolve_diagnostics) != 0) {
         result->status.state = CLASSICSETUP_DOWNLOAD_FAILED;
         result->status.error = CLASSICSETUP_DOWNLOAD_ERROR_SOURCE;
         (void)snprintf(result->status.message,
                        sizeof(result->status.message), "%s",
-                       "Microsoft did not provide a usable download link.");
+                       classicsetup_source_resolve_error_message(
+                           result->resolve_diagnostics.error));
     } else if (classicsetup_workspace_create(&result->workspace) != 0) {
         result->status.state = CLASSICSETUP_DOWNLOAD_FAILED;
         result->status.error = CLASSICSETUP_DOWNLOAD_ERROR_WRITE;
@@ -733,8 +896,13 @@ static void download_finished(
         task_result->release.resolved = false;
         runtime->session->source_catalog.releases[
             runtime->session->selected_release_index] = task_result->release;
+        runtime->session->source_diagnostics =
+            task_result->resolve_diagnostics;
         runtime->session->download = task_result->status;
         runtime->session->workspace = task_result->workspace;
+        runtime->session->uup_status = task_result->uup_status;
+        runtime->session->verified_source =
+            task_result->verified_source;
         g_free(task_result);
     } else {
         runtime->session->download.state = CLASSICSETUP_DOWNLOAD_FAILED;
@@ -1349,7 +1517,7 @@ static GtkWidget *build_windows_version_page(
 {
     GtkWidget *box = build_placeholder_page(
         "Select Windows Version",
-        "ClassicSetup discovers currently available consumer ISO sources from Microsoft's official download service.");
+        "ClassicSetup uses a validated Microsoft Windows Update source and verifies the resulting Windows image.");
     GtkWidget *windows11 = gtk_check_button_new_with_label("Windows 11");
     GtkWidget *windows10 = gtk_check_button_new_with_label("Windows 10");
 
@@ -1411,6 +1579,12 @@ static GtkWidget *build_windows_version_page(
     g_signal_connect(runtime->architecture_dropdown, "notify::selected",
                      G_CALLBACK(on_architecture_selected), runtime);
     gtk_box_append(GTK_BOX(box), runtime->architecture_dropdown);
+    add_classic_label(box, "Edition", "classic-section-title", FALSE);
+    runtime->edition_value = gtk_label_new("Windows 11 Pro");
+    gtk_label_set_xalign(GTK_LABEL(runtime->edition_value), 0.0F);
+    gtk_widget_add_css_class(runtime->edition_value,
+                             "classic-source-summary");
+    gtk_box_append(GTK_BOX(box), runtime->edition_value);
     runtime->source_status = gtk_label_new(
         "Release discovery has not started.");
     gtk_label_set_xalign(GTK_LABEL(runtime->source_status), 0.0F);
@@ -1457,17 +1631,29 @@ static void update_download_page(struct classicsetup_gui_runtime *runtime)
             &runtime->session->source_catalog.releases[
                 runtime->session->selected_release_index];
 
-        (void)snprintf(detail, sizeof(detail), "%s\n%s  |  %s",
+        (void)snprintf(detail, sizeof(detail),
+                       "%.70s\n%.55s  |  %s  |  %.55s\nSource: Microsoft Windows Update",
                        release->release_name, release->language_name,
                        classicsetup_windows_architecture_label(
-                           release->architecture));
+                           release->architecture),
+                       release->edition_name[0] != '\0'
+                           ? release->edition_name
+                           : "Edition selected after verification");
         gtk_label_set_text(GTK_LABEL(runtime->download_release), detail);
     }
     gtk_label_set_text(
         GTK_LABEL(runtime->download_status),
         status->message[0] != '\0' ? status->message
                                    : "Ready to download the selected Windows image.");
-    if (status->total_bytes != 0) {
+    if (runtime->session->source_backend ==
+            CLASSICSETUP_SOURCE_MICROSOFT_UUP &&
+        runtime->session->uup_status.total_files != 0) {
+        (void)snprintf(
+            detail, sizeof(detail), "%zu files verified    %.2f GiB",
+            runtime->session->uup_status.files_completed,
+            (double)runtime->session->uup_status.total_bytes /
+                1073741824.0);
+    } else if (status->total_bytes != 0) {
         (void)snprintf(
             detail, sizeof(detail), "%.2f GiB / %.2f GiB    %.1f MiB/s",
             (double)status->bytes_received / 1073741824.0,
@@ -1478,11 +1664,25 @@ static void update_download_page(struct classicsetup_gui_runtime *runtime)
                        (double)status->bytes_received / 1073741824.0);
     }
     gtk_label_set_text(GTK_LABEL(runtime->download_detail), detail);
-    gtk_progress_bar_set_fraction(
-        GTK_PROGRESS_BAR(runtime->download_progress),
-        status->progress_fraction >= 0.0 &&
-                status->progress_fraction <= 1.0
-            ? status->progress_fraction : 0.0);
+    if (runtime->session->source_backend ==
+            CLASSICSETUP_SOURCE_MICROSOFT_UUP &&
+        active && status->state != CLASSICSETUP_DOWNLOAD_COMPLETE) {
+        gtk_progress_bar_pulse(
+            GTK_PROGRESS_BAR(runtime->download_progress));
+        gtk_progress_bar_set_text(
+            GTK_PROGRESS_BAR(runtime->download_progress), "In progress");
+    } else {
+        gtk_progress_bar_set_fraction(
+            GTK_PROGRESS_BAR(runtime->download_progress),
+            status->progress_fraction >= 0.0 &&
+                    status->progress_fraction <= 1.0
+                ? status->progress_fraction : 0.0);
+        gtk_progress_bar_set_text(
+            GTK_PROGRESS_BAR(runtime->download_progress),
+            status->state == CLASSICSETUP_DOWNLOAD_COMPLETE
+                ? "Complete"
+                : NULL);
+    }
     gtk_widget_set_sensitive(
         runtime->download_start_button,
         classicsetup_gui_source_selection_is_valid(runtime->session) &&
@@ -1505,7 +1705,7 @@ static GtkWidget *build_download_page(
 {
     GtkWidget *box = build_placeholder_page(
         "Download Windows",
-        "The selected multi-edition ISO will be downloaded from Microsoft and verified before use.");
+        "ClassicSetup will download Windows files from Microsoft Windows Update, prepare an ISO, and verify the contained Windows image.");
     GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
 
     runtime->download_release = gtk_label_new("Windows source not selected");
@@ -1687,17 +1887,39 @@ static void update_summary(struct classicsetup_gui_runtime *runtime)
             disk->device_path);
         gtk_label_set_text(GTK_LABEL(runtime->summary_disk), line);
     }
-    gtk_label_set_text(
-        GTK_LABEL(runtime->summary_version),
-        runtime->session->windows_version == CLASSICSETUP_GUI_WINDOWS_10
-            ? "Windows family: Windows 10"
-            : "Windows family: Windows 11");
+    if (runtime->session->verified_source.verified) {
+        (void)snprintf(
+            line, sizeof(line), "Windows: Windows 11 Pro");
+        gtk_label_set_text(GTK_LABEL(runtime->summary_version), line);
+    } else {
+        gtk_label_set_text(
+            GTK_LABEL(runtime->summary_version),
+            runtime->session->windows_version == CLASSICSETUP_GUI_WINDOWS_10
+                ? "Windows family: Windows 10"
+                : "Windows family: Windows 11");
+    }
     gtk_label_set_text(
         GTK_LABEL(runtime->summary_network),
         classicsetup_network_can_continue(&runtime->session->network)
             ? "Network: connected to the Internet"
             : "Network: Internet connection required");
-    if (runtime->session->has_selected_release) {
+    if (runtime->session->verified_source.verified) {
+        const struct classicsetup_verified_windows_source *source =
+            &runtime->session->verified_source;
+
+        (void)snprintf(line, sizeof(line), "Image build: %.180s",
+                       source->build);
+        gtk_label_set_text(GTK_LABEL(runtime->summary_release), line);
+        gtk_label_set_text(GTK_LABEL(runtime->summary_language),
+                           "Language: Korean (ko-KR)");
+        (void)snprintf(
+            line, sizeof(line), "Architecture: %s",
+            classicsetup_windows_architecture_label(
+                source->architecture));
+        gtk_label_set_text(GTK_LABEL(runtime->summary_architecture), line);
+        (void)snprintf(line, sizeof(line), "%s",
+                       "Source: Microsoft Windows Update");
+    } else if (runtime->session->has_selected_release) {
         const struct classicsetup_windows_release *release =
             &runtime->session->source_catalog.releases[
                 runtime->session->selected_release_index];
@@ -1729,7 +1951,9 @@ static void update_summary(struct classicsetup_gui_runtime *runtime)
     gtk_label_set_text(GTK_LABEL(runtime->summary_source), line);
     gtk_label_set_text(
         GTK_LABEL(runtime->summary_verification),
-        runtime->session->has_selected_release &&
+        runtime->session->verified_source.verified
+            ? "Windows image: verified (ISO and contained WIM)"
+            : (runtime->session->has_selected_release &&
             classicsetup_download_is_ready(
             &runtime->session->download, &runtime->session->workspace)
             ? (runtime->session->source_catalog.releases[
@@ -1737,7 +1961,7 @@ static void update_summary(struct classicsetup_gui_runtime *runtime)
                        .official_hash_available
                    ? "Download: verified using official SHA-256"
                    : "Download: basic ISO checks passed; official hash was unavailable")
-            : "Download: not verified");
+            : "Download: not verified"));
 }
 
 static void update_navigation(struct classicsetup_gui_runtime *runtime)

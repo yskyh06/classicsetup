@@ -7,6 +7,7 @@
 #include "classicsetup/config.h"
 #include "classicsetup/download.h"
 #include "classicsetup/network.h"
+#include "classicsetup/uup.h"
 
 enum {
     CLASSICSETUP_GUI_MAX_DISKS = 32,
@@ -75,7 +76,9 @@ struct classicsetup_gui_session {
     int scan_failed;
     bool has_selected_disk;
     enum classicsetup_gui_windows_version windows_version;
+    enum classicsetup_source_backend source_backend;
     struct classicsetup_source_catalog source_catalog;
+    struct classicsetup_source_resolve_diagnostics source_diagnostics;
     char selected_release_name[CLASSICSETUP_SOURCE_NAME_SIZE];
     bool has_selected_release_name;
     enum classicsetup_windows_language selected_language;
@@ -85,6 +88,8 @@ struct classicsetup_gui_session {
     size_t selected_release_index;
     bool has_selected_release;
     struct classicsetup_download_status download;
+    struct classicsetup_uup_status uup_status;
+    struct classicsetup_verified_windows_source verified_source;
     struct classicsetup_workspace workspace;
     bool options_placeholder;
     struct classicsetup_network_snapshot network;
@@ -125,6 +130,10 @@ int classicsetup_gui_select_disk(
 int classicsetup_gui_set_windows_version(
     struct classicsetup_gui_session *session,
     enum classicsetup_gui_windows_version version);
+
+int classicsetup_gui_set_source_backend(
+    struct classicsetup_gui_session *session,
+    enum classicsetup_source_backend backend);
 
 int classicsetup_gui_select_release(
     struct classicsetup_gui_session *session,

@@ -11,6 +11,25 @@ option(CLASSICSETUP_ENABLE_GTK
 option(CLASSICSETUP_ENABLE_DOWNLOAD
     "Build official Windows source discovery/download support"
     ON)
+option(CLASSICSETUP_ENABLE_UUP
+    "Build the pinned Microsoft UUP acquisition backend"
+    ON)
+set(CLASSICSETUP_UUP_TOOL_ROOT
+    "/usr/lib/classicsetup/tools/uupmediacreator"
+    CACHE PATH "Pinned bundled UUPMediaCreator installation directory")
+set(CLASSICSETUP_UUP_CONVERTER_ROOT
+    "${CLASSICSETUP_UUP_TOOL_ROOT}"
+    CACHE PATH "Validated UUPMediaConverter runtime directory")
+set(CLASSICSETUP_UUP_DOTNET_ROOT "" CACHE PATH
+    "Optional explicit .NET runtime root for UUP apphosts")
+set(CLASSICSETUP_WIMLIB_EXECUTABLE
+    "/usr/bin/wimlib-imagex"
+    CACHE FILEPATH "wimlib-imagex used to verify generated WIM images")
+set(CLASSICSETUP_UUP_ISO_EXTRACTOR
+    "/usr/bin/7z"
+    CACHE FILEPATH "7-Zip executable used for unprivileged ISO/UDF extraction")
+set(CLASSICSETUP_UUP_BUNDLE_DIR "" CACHE PATH
+    "Pre-staged, hash-verified UUPMediaCreator bundle for packaging")
 
 set(CLASSICSETUP_GTK_FRONTEND src/gui/gtk_stub.c)
 set(CLASSICSETUP_NETWORK_BACKEND src/network/network_manager_stub.c)
@@ -75,6 +94,7 @@ add_executable(classicsetup
     ${CLASSICSETUP_DOWNLOAD_BACKEND}
     ${CLASSICSETUP_SOURCE_BACKEND}
     src/source/windows_source.c
+    src/source/uup.c
     src/source/workspace.c
     src/main.c
     src/state.c
@@ -107,6 +127,27 @@ target_include_directories(classicsetup PRIVATE
 )
 
 target_link_libraries(classicsetup PRIVATE ${CURSES_LIBRARIES})
+
+target_compile_definitions(classicsetup PRIVATE
+    CLASSICSETUP_ENABLE_UUP=$<BOOL:${CLASSICSETUP_ENABLE_UUP}>
+    CLASSICSETUP_UUP_TOOL_ROOT="${CLASSICSETUP_UUP_TOOL_ROOT}"
+    CLASSICSETUP_UUP_CONVERTER_ROOT="${CLASSICSETUP_UUP_CONVERTER_ROOT}"
+    CLASSICSETUP_UUP_DOTNET_ROOT="${CLASSICSETUP_UUP_DOTNET_ROOT}"
+    CLASSICSETUP_WIMLIB_EXECUTABLE="${CLASSICSETUP_WIMLIB_EXECUTABLE}"
+    CLASSICSETUP_UUP_ISO_EXTRACTOR="${CLASSICSETUP_UUP_ISO_EXTRACTOR}"
+)
+if(CLASSICSETUP_ENABLE_UUP)
+    message(STATUS "ClassicSetup Microsoft UUP backend: enabled (bundled runtime required)")
+    install(FILES packaging/uupmediacreator.manifest
+        DESTINATION share/classicsetup)
+    if(CLASSICSETUP_UUP_BUNDLE_DIR)
+        install(DIRECTORY "${CLASSICSETUP_UUP_BUNDLE_DIR}/"
+            DESTINATION lib/classicsetup/tools/uupmediacreator
+            USE_SOURCE_PERMISSIONS)
+    endif()
+else()
+    message(STATUS "ClassicSetup Microsoft UUP backend: disabled by option")
+endif()
 
 if(CLASSICSETUP_DOWNLOAD_ENABLED)
     target_link_libraries(classicsetup PRIVATE
@@ -160,9 +201,11 @@ if(BUILD_TESTING)
         tests/gui_test.c
         src/gui/gui.c
         src/gui/gtk_stub.c
+        src/core/process.c
         src/network/network.c
         src/source/download_model.c
         src/source/windows_source.c
+        src/source/uup.c
         src/source/workspace.c
     )
 
@@ -173,6 +216,8 @@ if(BUILD_TESTING)
     )
 
     target_include_directories(classicsetup_gui_test PRIVATE include)
+    target_compile_definitions(classicsetup_gui_test PRIVATE
+        CLASSICSETUP_ENABLE_UUP=$<BOOL:${CLASSICSETUP_ENABLE_UUP}>)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(classicsetup_gui_test PRIVATE
             -Wall -Wextra -Wpedantic
@@ -207,6 +252,34 @@ if(BUILD_TESTING)
         )
     endif()
     add_test(NAME windows_source_pipeline COMMAND classicsetup_source_test)
+
+    add_executable(classicsetup_uup_test
+        tests/uup_test.c
+        src/core/process.c
+        src/source/uup.c
+        src/source/windows_source.c
+        src/source/workspace.c
+    )
+    set_target_properties(classicsetup_uup_test PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED YES
+        C_EXTENSIONS NO
+    )
+    target_include_directories(classicsetup_uup_test PRIVATE include)
+    target_compile_definitions(classicsetup_uup_test PRIVATE
+        CLASSICSETUP_ENABLE_UUP=$<BOOL:${CLASSICSETUP_ENABLE_UUP}>
+        CLASSICSETUP_UUP_TOOL_ROOT="${CLASSICSETUP_UUP_TOOL_ROOT}"
+        CLASSICSETUP_UUP_CONVERTER_ROOT="${CLASSICSETUP_UUP_CONVERTER_ROOT}"
+        CLASSICSETUP_UUP_DOTNET_ROOT="${CLASSICSETUP_UUP_DOTNET_ROOT}"
+        CLASSICSETUP_WIMLIB_EXECUTABLE="${CLASSICSETUP_WIMLIB_EXECUTABLE}"
+        CLASSICSETUP_UUP_ISO_EXTRACTOR="${CLASSICSETUP_UUP_ISO_EXTRACTOR}"
+    )
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(classicsetup_uup_test PRIVATE
+            -Wall -Wextra -Wpedantic
+        )
+    endif()
+    add_test(NAME uup_backend_model COMMAND classicsetup_uup_test)
 
     add_executable(classicsetup_network_test
         tests/network_test.c

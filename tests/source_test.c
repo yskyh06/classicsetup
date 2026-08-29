@@ -112,6 +112,119 @@ static void test_source_mapping_and_policy(void)
                "{\"Errors\":[{\"Type\":8}]}", &catalog) != 0);
 }
 
+static void test_source_resolve_diagnostics(void)
+{
+    struct classicsetup_windows_release release = {0};
+    struct classicsetup_source_resolve_diagnostics diagnostics;
+    char formatted[1024];
+
+    release.architecture = CLASSICSETUP_ARCH_X64;
+    assert(classicsetup_windows_source_parse_download_diagnostic(
+               "{\"ProductDownloadOptions\":[{\"DownloadType\":"
+               "\"64-bit\",\"Uri\":\"https://software.download."
+               "prss.microsoft.com/windows.iso?token=hidden\"}]}",
+               &release, &diagnostics) == 0);
+    assert(diagnostics.error == CLASSICSETUP_SOURCE_RESOLVE_NONE);
+    assert(diagnostics.response_is_json);
+    assert(diagnostics.expected_field_present);
+    assert(diagnostics.link_present);
+    assert(strstr(release.download_uri, "token=hidden") != NULL);
+    assert(classicsetup_windows_source_sanitize_uri(
+               release.download_uri, diagnostics.endpoint,
+               sizeof(diagnostics.endpoint)) == 0);
+    diagnostics.session_id_present = true;
+    diagnostics.cookie_engine_enabled = true;
+    (void)snprintf(diagnostics.product_edition_id,
+                   sizeof(diagnostics.product_edition_id), "%s", "3321");
+    (void)snprintf(diagnostics.sku_id, sizeof(diagnostics.sku_id), "%s",
+                   "20");
+    assert(classicsetup_source_resolve_format_diagnostics(
+               &diagnostics, formatted, sizeof(formatted)) == 0);
+    assert(strstr(formatted, "stage=links") != NULL);
+    assert(strstr(formatted, "error=none") != NULL);
+    assert(strstr(formatted, "session=1") != NULL);
+    assert(strstr(formatted, "cookies=1") != NULL);
+    assert(strstr(formatted, "token") == NULL);
+    assert(strstr(formatted, "hidden") == NULL);
+    assert(strchr(formatted, '?') == NULL);
+
+    assert(classicsetup_windows_source_parse_download_diagnostic(
+               "{\"ProductDownloadLinks\":[{\"url\":\"https://"
+               "software.download.prss.microsoft.com/windows.iso\"}]}",
+               &release, &diagnostics) != 0);
+    assert(diagnostics.error == CLASSICSETUP_SOURCE_RESOLVE_SCHEMA_CHANGED);
+
+    assert(classicsetup_windows_source_parse_download_diagnostic(
+               "{\"ProductDownloadOptions\":[{\"DownloadType\":"
+               "\"64-bit\",\"Uri\":\"https://mirror.invalid/"
+               "windows.iso\"}]}",
+               &release, &diagnostics) != 0);
+    assert(diagnostics.error == CLASSICSETUP_SOURCE_RESOLVE_POLICY_REJECTED);
+
+    assert(classicsetup_windows_source_parse_download_diagnostic(
+               "{\"ProductDownloadOptions\":[{\"DownloadType\":"
+               "\"32-bit\",\"Uri\":\"https://software.download."
+               "prss.microsoft.com/windows.iso\"}]}",
+               &release, &diagnostics) != 0);
+    assert(diagnostics.error == CLASSICSETUP_SOURCE_RESOLVE_NO_LINK);
+
+    assert(classicsetup_windows_source_parse_download_diagnostic(
+               "{\"Errors\":[{\"Type\":8,\"Key\":\"SentinelReject\"}]}",
+               &release, &diagnostics) != 0);
+    assert(diagnostics.error == CLASSICSETUP_SOURCE_RESOLVE_SESSION_REQUIRED);
+
+    assert(classicsetup_windows_source_parse_download_diagnostic(
+               "{\"Errors\":[{\"Type\":429,\"Key\":\"TooManyRequests\"}]}",
+               &release, &diagnostics) != 0);
+    assert(diagnostics.error == CLASSICSETUP_SOURCE_RESOLVE_RATE_LIMITED);
+
+    assert(classicsetup_windows_source_parse_download_diagnostic(
+               "<html><body>Consent is required for this session.</body>"
+               "</html>",
+               &release, &diagnostics) != 0);
+    assert(diagnostics.error == CLASSICSETUP_SOURCE_RESOLVE_SESSION_REQUIRED);
+
+    assert(classicsetup_windows_source_parse_download_diagnostic(
+               "{\"ProductDownloadOptions\":[]}", &release,
+               &diagnostics) != 0);
+    assert(diagnostics.error == CLASSICSETUP_SOURCE_RESOLVE_NO_LINK);
+
+    assert(classicsetup_windows_source_parse_download_diagnostic(
+               "{\"ProductDownloadOptions\":[{\"DownloadType\":"
+               "\"64-bit\"",
+               &release, &diagnostics) != 0);
+    assert(diagnostics.error == CLASSICSETUP_SOURCE_RESOLVE_MALFORMED);
+
+    assert(classicsetup_windows_source_parse_download_diagnostic(
+               "<html><body><a data-download-type=\"64-bit\" href=\""
+               "https://software.download.prss.microsoft.com/windows.iso?"
+               "signed=secret\">Download</a></body></html>",
+               &release, &diagnostics) == 0);
+    assert(diagnostics.error == CLASSICSETUP_SOURCE_RESOLVE_NONE);
+    assert(diagnostics.response_is_html);
+    assert(diagnostics.link_present);
+    release.resolved = false;
+    release.download_uri[0] = '\0';
+    assert(classicsetup_windows_source_parse_download(
+               "<a data-download-type=\"64-bit\" href=\"https://"
+               "software.download.prss.microsoft.com/windows.iso\">"
+               "Download</a>",
+               &release) == 0);
+
+    assert(classicsetup_source_resolve_classify_http(403, false) ==
+           CLASSICSETUP_SOURCE_RESOLVE_HTTP_ERROR);
+    assert(classicsetup_source_resolve_classify_http(429, false) ==
+           CLASSICSETUP_SOURCE_RESOLVE_RATE_LIMITED);
+    assert(classicsetup_source_resolve_classify_http(302, true) ==
+           CLASSICSETUP_SOURCE_RESOLVE_REDIRECT_REJECTED);
+    assert(classicsetup_source_resolve_classify_http(0, false) ==
+           CLASSICSETUP_SOURCE_RESOLVE_NETWORK_ERROR);
+    assert(strcmp(classicsetup_source_resolve_error_message(
+                      CLASSICSETUP_SOURCE_RESOLVE_SESSION_REQUIRED),
+                  "Microsoft requires an active source-download session.") ==
+           0);
+}
+
 static void write_iso_fixture(const char *path, int valid)
 {
     unsigned char zero[32768] = {0};
@@ -194,6 +307,7 @@ static void test_download_backend_fallback(void)
 int main(void)
 {
     test_source_mapping_and_policy();
+    test_source_resolve_diagnostics();
     test_workspace_and_verification();
     test_download_backend_fallback();
     return 0;
