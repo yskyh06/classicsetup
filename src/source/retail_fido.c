@@ -90,20 +90,29 @@ int classicsetup_retail_recommended_catalog(
                        "Only the validated Windows 11 Retail source is enabled.");
         return -1;
     }
-    release = &catalog->releases[0];
-    release->family = CLASSICSETUP_WINDOWS_11;
-    release->language = CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN;
-    release->architecture = CLASSICSETUP_ARCH_X64;
-    release->edition = CLASSICSETUP_WINDOWS_EDITION_PROFESSIONAL;
-    (void)snprintf(release->release_name, sizeof(release->release_name), "%s",
-                   "Latest stable Retail");
-    (void)snprintf(release->language_name, sizeof(release->language_name), "%s",
-                   "Korean");
-    (void)snprintf(release->architecture_token,
-                   sizeof(release->architecture_token), "%s", "x64");
-    (void)snprintf(release->edition_name, sizeof(release->edition_name), "%s",
-                   "Windows 11 Home/Pro/Edu");
-    catalog->release_count = 1;
+    for (catalog->release_count = 0; catalog->release_count < 2;
+         ++catalog->release_count) {
+        release = &catalog->releases[catalog->release_count];
+        release->family = CLASSICSETUP_WINDOWS_11;
+        release->language = catalog->release_count == 0
+                                ? CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN
+                                : CLASSICSETUP_WINDOWS_LANGUAGE_ENGLISH;
+        release->architecture = CLASSICSETUP_ARCH_X64;
+        release->edition = CLASSICSETUP_WINDOWS_EDITION_PROFESSIONAL;
+        (void)snprintf(release->release_name,
+                       sizeof(release->release_name), "%s",
+                       "Latest stable Retail");
+        (void)snprintf(release->language_name,
+                       sizeof(release->language_name), "%s",
+                       release->language ==
+                               CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN
+                           ? "Korean" : "English");
+        (void)snprintf(release->architecture_token,
+                       sizeof(release->architecture_token), "%s", "x64");
+        (void)snprintf(release->edition_name,
+                       sizeof(release->edition_name), "%s",
+                       "Windows 11 Home/Pro/Edu");
+    }
     catalog->state = CLASSICSETUP_SOURCE_READY;
     return 0;
 }
@@ -222,16 +231,20 @@ int classicsetup_retail_build_fido_argv(
     char *arguments[], size_t argument_count)
 {
     const char *architecture;
+    const char *language;
 
     if (pwsh == NULL || script == NULL || release == NULL ||
         arguments == NULL || argument_count < RETAIL_ARG_COUNT ||
         release->family != CLASSICSETUP_WINDOWS_11 ||
-        release->language != CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN ||
+        (release->language != CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN &&
+         release->language != CLASSICSETUP_WINDOWS_LANGUAGE_ENGLISH) ||
         release->architecture != CLASSICSETUP_ARCH_X64) {
         return -1;
     }
     architecture = classicsetup_windows_architecture_label(
         release->architecture);
+    language = release->language == CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN
+                   ? "Korean" : "English";
     arguments[0] = (char *)pwsh;
     arguments[1] = "-NoLogo";
     arguments[2] = "-NoProfile";
@@ -245,7 +258,7 @@ int classicsetup_retail_build_fido_argv(
     arguments[10] = "-Ed";
     arguments[11] = "Home/Pro/Edu";
     arguments[12] = "-Lang";
-    arguments[13] = "Korean";
+    arguments[13] = (char *)language;
     arguments[14] = "-Arch";
     arguments[15] = (char *)architecture;
     arguments[16] = "-GetUrl";
@@ -479,11 +492,17 @@ int classicsetup_retail_parse_wim_metadata(
         return -1;
     }
     (void)copy_info(output, "Default Language:", language, sizeof(language));
-    if (language[0] != '\0' &&
-        release->language == CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN &&
-        strcasecmp(language, "ko-KR") != 0 &&
-        strcasecmp(language, "Korean") != 0) {
-        return -1;
+    if (language[0] != '\0') {
+        if (release->language == CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN &&
+            strcasecmp(language, "ko-KR") != 0 &&
+            strcasecmp(language, "Korean") != 0) {
+            return -1;
+        }
+        if (release->language == CLASSICSETUP_WINDOWS_LANGUAGE_ENGLISH &&
+            strcasecmp(language, "en-US") != 0 &&
+            strcasecmp(language, "English") != 0) {
+            return -1;
+        }
     }
     if ((release->family == CLASSICSETUP_WINDOWS_11 &&
          !contains_case_insensitive(name, "Windows 11")) ||

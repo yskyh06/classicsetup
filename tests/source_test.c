@@ -405,7 +405,7 @@ static void test_retail_model_and_resolver(void)
 
     assert(classicsetup_retail_recommended_catalog(
                CLASSICSETUP_WINDOWS_11, &catalog) == 0);
-    assert(catalog.release_count == 1);
+    assert(catalog.release_count == 2);
     release = catalog.releases[0];
     assert(release.architecture == CLASSICSETUP_ARCH_X64);
     assert(release.language == CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN);
@@ -417,6 +417,19 @@ static void test_retail_model_and_resolver(void)
     assert(strcmp(arguments[5], CLASSICSETUP_TEST_FIDO_SCRIPT) == 0);
     assert(strcmp(arguments[15], "x64") == 0);
     assert(arguments[17] == NULL);
+    release = catalog.releases[1];
+    assert(release.language == CLASSICSETUP_WINDOWS_LANGUAGE_ENGLISH);
+    assert(classicsetup_retail_build_fido_argv(
+               "/usr/bin/pwsh", CLASSICSETUP_TEST_FIDO_SCRIPT,
+               &release, arguments,
+               sizeof(arguments) / sizeof(arguments[0])) == 0);
+    assert(strcmp(arguments[13], "English") == 0);
+    assert(classicsetup_retail_parse_wim_metadata(
+               &release,
+               "Name: Windows 11 Pro\nArchitecture: x86_64\n"
+               "Default Language: en-US\n",
+               "/private/windows.iso", &verified_source) == 0);
+    release = catalog.releases[0];
     assert(classicsetup_retail_validate_script(
                CLASSICSETUP_TEST_FIDO_SCRIPT,
                CLASSICSETUP_TEST_FIDO_SHA256) == 0);

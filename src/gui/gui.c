@@ -7,6 +7,16 @@
 #define CLASSICSETUP_ENABLE_UUP 1
 #endif
 
+static void reset_retail_acquisition(
+    struct classicsetup_gui_session *session)
+{
+    session->retail_fido_attempted = false;
+    session->retail_webview_started = false;
+    classicsetup_retail_status_reset(&session->retail_status);
+    classicsetup_retail_browser_status_reset(
+        &session->retail_browser_status);
+}
+
 void classicsetup_gui_session_reset(
     struct classicsetup_gui_session *session)
 {
@@ -29,6 +39,7 @@ void classicsetup_gui_session_reset_for_entry(
                         : CLASSICSETUP_GUI_PAGE_DISK;
     session->windows_version = CLASSICSETUP_GUI_WINDOWS_11;
     session->source_backend = CLASSICSETUP_SOURCE_MICROSOFT_RETAIL;
+    session->retail_source_mode = CLASSICSETUP_GUI_RETAIL_AUTOMATIC;
     classicsetup_network_snapshot_reset(&session->network);
     classicsetup_source_catalog_reset(&session->source_catalog);
     classicsetup_download_status_reset(&session->download);
@@ -36,6 +47,52 @@ void classicsetup_gui_session_reset_for_entry(
     classicsetup_retail_status_reset(&session->retail_status);
     classicsetup_retail_browser_status_reset(
         &session->retail_browser_status);
+}
+
+int classicsetup_gui_set_retail_source_mode(
+    struct classicsetup_gui_session *session,
+    enum classicsetup_gui_retail_source_mode mode)
+{
+    if (session == NULL ||
+        mode < CLASSICSETUP_GUI_RETAIL_AUTOMATIC ||
+        mode > CLASSICSETUP_GUI_RETAIL_CUSTOM ||
+        classicsetup_gui_source_change_requirement(session) !=
+            CLASSICSETUP_GUI_SOURCE_CHANGE_ALLOWED) {
+        return -1;
+    }
+    session->retail_source_mode = mode;
+    reset_retail_acquisition(session);
+    return 0;
+}
+
+bool classicsetup_gui_retail_try_fido_once(
+    struct classicsetup_gui_session *session)
+{
+    if (session == NULL ||
+        session->retail_source_mode !=
+            CLASSICSETUP_GUI_RETAIL_AUTOMATIC ||
+        session->retail_fido_attempted) {
+        return false;
+    }
+    session->retail_fido_attempted = true;
+    return true;
+}
+
+bool classicsetup_gui_retail_start_webview_once(
+    struct classicsetup_gui_session *session)
+{
+    if (session == NULL || session->retail_webview_started ||
+        (session->retail_source_mode ==
+             CLASSICSETUP_GUI_RETAIL_AUTOMATIC &&
+         !session->retail_fido_attempted) ||
+        (session->retail_source_mode !=
+             CLASSICSETUP_GUI_RETAIL_AUTOMATIC &&
+         session->retail_source_mode !=
+             CLASSICSETUP_GUI_RETAIL_MICROSOFT_PAGE)) {
+        return false;
+    }
+    session->retail_webview_started = true;
+    return true;
 }
 
 int classicsetup_gui_set_source_backend(
@@ -59,6 +116,8 @@ int classicsetup_gui_set_source_backend(
         return 0;
     }
     session->source_backend = backend;
+    session->retail_source_mode = CLASSICSETUP_GUI_RETAIL_AUTOMATIC;
+    reset_retail_acquisition(session);
     session->has_selected_release = false;
     session->has_selected_release_name = false;
     session->has_selected_language = false;
@@ -139,6 +198,7 @@ int classicsetup_gui_set_windows_version(
         return -1;
     }
     session->windows_version = version;
+    reset_retail_acquisition(session);
     session->has_selected_release = false;
     session->has_selected_release_name = false;
     session->has_selected_language = false;
@@ -176,6 +236,7 @@ int classicsetup_gui_select_release(
     session->selected_architecture =
         session->source_catalog.releases[index].architecture;
     session->has_selected_architecture = true;
+    reset_retail_acquisition(session);
     return 0;
 }
 
@@ -218,6 +279,7 @@ int classicsetup_gui_select_release_name(
     session->has_selected_architecture = false;
     session->has_selected_release = false;
     session->selected_release_index = 0;
+    reset_retail_acquisition(session);
     classicsetup_source_resolve_diagnostics_reset(
         &session->source_diagnostics);
     return 0;
@@ -254,6 +316,7 @@ int classicsetup_gui_select_language(
     session->has_selected_architecture = false;
     session->has_selected_release = false;
     session->selected_release_index = 0;
+    reset_retail_acquisition(session);
     classicsetup_source_resolve_diagnostics_reset(
         &session->source_diagnostics);
     return 0;
@@ -283,6 +346,7 @@ int classicsetup_gui_select_architecture(
             session->has_selected_architecture = true;
             session->selected_release_index = index;
             session->has_selected_release = true;
+            reset_retail_acquisition(session);
             classicsetup_source_resolve_diagnostics_reset(
                 &session->source_diagnostics);
             return 0;

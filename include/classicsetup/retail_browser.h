@@ -25,7 +25,11 @@ struct classicsetup_retail_browser_status {
     char delivery_host[128];
 };
 
-const char *classicsetup_retail_browser_page_uri(void);
+const char *classicsetup_retail_browser_page_uri(
+    enum classicsetup_windows_language language);
+
+bool classicsetup_retail_browser_should_show_webview(
+    const struct classicsetup_retail_browser_status *status);
 
 void classicsetup_retail_browser_status_reset(
     struct classicsetup_retail_browser_status *status);

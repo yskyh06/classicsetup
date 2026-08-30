@@ -56,6 +56,7 @@ struct classicsetup_gui_runtime {
     GtkStringList *architecture_model;
     GtkWidget *edition_value;
     GtkWidget *change_source_button;
+    GtkWidget *retail_source_buttons[4];
     char release_choices[CLASSICSETUP_SOURCE_MAX_RELEASES]
                         [CLASSICSETUP_SOURCE_NAME_SIZE];
     size_t release_choice_count;
@@ -68,13 +69,23 @@ struct classicsetup_gui_runtime {
     bool source_change_pending;
     GtkWidget *download_status;
     GtkWidget *download_detail;
+    GtkWidget *download_size;
+    GtkWidget *download_rate;
+    GtkWidget *download_eta;
     GtkWidget *download_progress;
     GtkWidget *download_start_button;
     GtkWidget *download_cancel_button;
     GtkWidget *download_release;
     GtkWidget *retail_browser_box;
+    GtkWidget *retail_preparing_box;
+    GtkWidget *retail_preparing_selection;
+    GtkWidget *retail_manual_notice;
     GtkWidget *retail_retry_button;
     GtkWidget *retail_existing_iso_button;
+    GtkWidget *sidebar_download_box;
+    GtkWidget *sidebar_download_title;
+    GtkWidget *sidebar_download_progress;
+    GtkWidget *sidebar_download_detail;
 #if CLASSICSETUP_ENABLE_WEBKIT_RETAIL
     WebKitWebView *retail_web_view;
     WebKitNetworkSession *retail_network_session;
@@ -158,12 +169,21 @@ static GtkWidget *build_page_base(
     const char *title,
     const char *description)
 {
-    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    GtkWidget *header_text = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+    GtkWidget *icon = gtk_label_new("i");
     GtkWidget *separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
 
     gtk_widget_add_css_class(box, "classicsetup-dialog-content");
-    add_classic_label(box, title, "classic-title", TRUE);
-    add_classic_label(box, description, "classic-subtitle", TRUE);
+    gtk_widget_add_css_class(header, "classicsetup-page-header");
+    gtk_widget_add_css_class(icon, "classicsetup-page-icon");
+    gtk_widget_set_hexpand(header_text, TRUE);
+    add_classic_label(header_text, title, "classic-title", TRUE);
+    add_classic_label(header_text, description, "classic-subtitle", TRUE);
+    gtk_box_append(GTK_BOX(header), header_text);
+    gtk_box_append(GTK_BOX(header), icon);
+    gtk_box_append(GTK_BOX(box), header);
     gtk_box_append(GTK_BOX(box), separator);
     return box;
 }
@@ -259,6 +279,29 @@ static GtkWidget *build_sidebar(struct classicsetup_gui_runtime *runtime)
     for (page = CLASSICSETUP_GUI_PAGE_DISK;
          page < CLASSICSETUP_GUI_PAGE_COUNT; ++page) {
         gtk_box_append(GTK_BOX(sidebar), build_sidebar_step(runtime, page));
+    }
+    {
+        GtkWidget *spacer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+        runtime->sidebar_download_box =
+            gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+        runtime->sidebar_download_title = gtk_label_new("Windows download");
+        runtime->sidebar_download_progress = gtk_progress_bar_new();
+        runtime->sidebar_download_detail = gtk_label_new("");
+        gtk_widget_set_vexpand(spacer, TRUE);
+        gtk_widget_add_css_class(runtime->sidebar_download_box,
+                                 "classic-sidebar-download");
+        gtk_label_set_xalign(GTK_LABEL(runtime->sidebar_download_title), 0.0F);
+        gtk_label_set_xalign(GTK_LABEL(runtime->sidebar_download_detail), 0.0F);
+        gtk_label_set_wrap(GTK_LABEL(runtime->sidebar_download_detail), TRUE);
+        gtk_box_append(GTK_BOX(runtime->sidebar_download_box),
+                       runtime->sidebar_download_title);
+        gtk_box_append(GTK_BOX(runtime->sidebar_download_box),
+                       runtime->sidebar_download_progress);
+        gtk_box_append(GTK_BOX(runtime->sidebar_download_box),
+                       runtime->sidebar_download_detail);
+        gtk_widget_set_visible(runtime->sidebar_download_box, FALSE);
+        gtk_box_append(GTK_BOX(sidebar), spacer);
+        gtk_box_append(GTK_BOX(sidebar), runtime->sidebar_download_box);
     }
     return sidebar;
 }
@@ -363,6 +406,9 @@ static gboolean disk_is_selectable(
 
 static void update_navigation(struct classicsetup_gui_runtime *runtime);
 static void update_download_page(struct classicsetup_gui_runtime *runtime);
+#if CLASSICSETUP_ENABLE_WEBKIT_RETAIL
+static void start_retail_browser(struct classicsetup_gui_runtime *runtime);
+#endif
 
 static void finish_pending_exit(struct classicsetup_gui_runtime *runtime)
 {
@@ -651,6 +697,14 @@ static void update_source_controls(
     gtk_widget_set_sensitive(
         runtime->architecture_dropdown,
         editable && runtime->architecture_choice_count > 0);
+    for (index = 0; index < 4; ++index) {
+        if (runtime->retail_source_buttons[index] != NULL) {
+            gtk_widget_set_sensitive(
+                runtime->retail_source_buttons[index],
+                editable && index <=
+                    CLASSICSETUP_GUI_RETAIL_MICROSOFT_PAGE);
+        }
+    }
     gtk_widget_set_visible(
         runtime->change_source_button,
         requirement != CLASSICSETUP_GUI_SOURCE_CHANGE_ALLOWED);
@@ -1019,6 +1073,7 @@ static void download_finished(
     struct classicsetup_gui_runtime *runtime = user_data;
     struct download_task_result *task_result;
     GError *error = NULL;
+    bool start_webview_fallback = false;
 
     (void)source_object;
     task_result = g_task_propagate_pointer(G_TASK(result), &error);
@@ -1037,6 +1092,15 @@ static void download_finished(
         runtime->session->retail_status = task_result->retail_status;
         runtime->session->verified_source =
             task_result->verified_source;
+        if (task_result->status.state == CLASSICSETUP_DOWNLOAD_FAILED &&
+            task_result->status.error == CLASSICSETUP_DOWNLOAD_ERROR_SOURCE &&
+            runtime->session->source_backend ==
+                CLASSICSETUP_SOURCE_MICROSOFT_RETAIL &&
+            runtime->session->retail_source_mode ==
+                CLASSICSETUP_GUI_RETAIL_AUTOMATIC) {
+            start_webview_fallback =
+                classicsetup_gui_retail_start_webview_once(runtime->session);
+        }
         if (runtime->session->retail_browser_status.stage >=
             CLASSICSETUP_RETAIL_BROWSER_DOWNLOADING) {
             if (task_result->status.state ==
@@ -1070,6 +1134,13 @@ static void download_finished(
         update_source_controls(runtime);
     }
     update_download_page(runtime);
+#if CLASSICSETUP_ENABLE_WEBKIT_RETAIL
+    if (start_webview_fallback) {
+        start_retail_browser(runtime);
+    }
+#else
+    (void)start_webview_fallback;
+#endif
     finish_pending_exit(runtime);
 }
 
@@ -1610,6 +1681,55 @@ static void on_architecture_selected(
     update_navigation(runtime);
 }
 
+static void on_retail_source_toggled(
+    GtkCheckButton *button, gpointer user_data)
+{
+    struct classicsetup_gui_runtime *runtime = user_data;
+    int value;
+
+    if (!gtk_check_button_get_active(button)) {
+        return;
+    }
+    value = GPOINTER_TO_INT(g_object_get_data(
+        G_OBJECT(button), "classicsetup-retail-source"));
+    (void)classicsetup_gui_set_retail_source_mode(
+        runtime->session,
+        (enum classicsetup_gui_retail_source_mode)value);
+    update_download_page(runtime);
+}
+
+static GtkWidget *build_source_option(
+    struct classicsetup_gui_runtime *runtime,
+    enum classicsetup_gui_retail_source_mode mode,
+    const char *icon_text, const char *title, const char *description,
+    gboolean enabled, GtkCheckButton *group)
+{
+    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *button = gtk_check_button_new();
+    GtkWidget *icon = gtk_label_new(icon_text);
+    GtkWidget *text = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+
+    gtk_widget_add_css_class(row, "classic-source-option");
+    gtk_widget_add_css_class(icon, "classic-source-icon");
+    if (group != NULL) {
+        gtk_check_button_set_group(GTK_CHECK_BUTTON(button), group);
+    }
+    g_object_set_data(G_OBJECT(button), "classicsetup-retail-source",
+                      GINT_TO_POINTER(mode));
+    g_signal_connect(button, "toggled",
+                     G_CALLBACK(on_retail_source_toggled), runtime);
+    gtk_widget_set_sensitive(row, enabled);
+    gtk_widget_set_sensitive(button, enabled);
+    add_classic_label(text, title, "classic-option-title", TRUE);
+    add_classic_label(text, description, "classic-option-description", TRUE);
+    gtk_widget_set_hexpand(text, TRUE);
+    gtk_box_append(GTK_BOX(row), icon);
+    gtk_box_append(GTK_BOX(row), button);
+    gtk_box_append(GTK_BOX(row), text);
+    runtime->retail_source_buttons[mode] = button;
+    return row;
+}
+
 static void source_change_confirmed(
     GObject *source_object,
     GAsyncResult *result,
@@ -1687,16 +1807,47 @@ static GtkWidget *build_windows_version_page(
     struct classicsetup_gui_runtime *runtime)
 {
     GtkWidget *box = build_placeholder_page(
-        "Select Windows Version",
-        "ClassicSetup uses a validated Microsoft Windows Update source and verifies the resulting Windows image.");
+        "Choose a Windows source",
+        "Select how ClassicSetup should obtain the Windows installation image.");
     GtkWidget *windows11 = gtk_check_button_new_with_label("Windows 11");
     GtkWidget *windows10 = gtk_check_button_new_with_label("Windows 10");
+    GtkWidget *automatic;
+
+    add_classic_label(box, "Windows installation files",
+                      "classic-section-title", FALSE);
+    automatic = build_source_option(
+        runtime, CLASSICSETUP_GUI_RETAIL_AUTOMATIC, "↓",
+        "Download automatically from Microsoft — Recommended",
+        "ClassicSetup prepares an official Microsoft download automatically and opens the Microsoft page only if needed.",
+        TRUE, NULL);
+    gtk_box_append(GTK_BOX(box), automatic);
+    gtk_box_append(GTK_BOX(box), build_source_option(
+        runtime, CLASSICSETUP_GUI_RETAIL_MICROSOFT_PAGE, "W",
+        "Use Microsoft download page",
+        "Use Microsoft's official page and click the real 64-bit download control.",
+        TRUE, GTK_CHECK_BUTTON(runtime->retail_source_buttons[
+                  CLASSICSETUP_GUI_RETAIL_AUTOMATIC])));
+    gtk_box_append(GTK_BOX(box), build_source_option(
+        runtime, CLASSICSETUP_GUI_RETAIL_EXISTING_ISO, "▣",
+        "Use existing ISO — Not available yet",
+        "Choose a local Windows ISO file.", FALSE,
+        GTK_CHECK_BUTTON(runtime->retail_source_buttons[
+            CLASSICSETUP_GUI_RETAIL_AUTOMATIC])));
+    gtk_box_append(GTK_BOX(box), build_source_option(
+        runtime, CLASSICSETUP_GUI_RETAIL_CUSTOM, "…",
+        "Custom download — Future option",
+        "Use a custom source after this safe workflow is implemented.", FALSE,
+        GTK_CHECK_BUTTON(runtime->retail_source_buttons[
+            CLASSICSETUP_GUI_RETAIL_AUTOMATIC])));
+    gtk_check_button_set_active(GTK_CHECK_BUTTON(
+        runtime->retail_source_buttons[runtime->session->retail_source_mode]),
+        TRUE);
 
     runtime->windows11_button = windows11;
     runtime->windows10_button = windows10;
 
     add_classic_label(
-        box, "Windows family", "classic-section-title", FALSE);
+        box, "Windows image", "classic-section-title", FALSE);
     gtk_check_button_set_group(GTK_CHECK_BUTTON(windows10),
                                GTK_CHECK_BUTTON(windows11));
     gtk_check_button_set_active(
@@ -1774,7 +1925,7 @@ static GtkWidget *build_windows_version_page(
 /* These IDs are present in Microsoft's current Windows 11 public download
  * page. The script stops and exposes the full page if any expected element is
  * absent; it never guesses a SKU or interacts with a challenge. */
-static const char retail_prepare_script[] =
+static const char retail_prepare_script_format[] =
     "(() => {"
     "if(document.querySelector('iframe[src*=\"captcha\" i],"
     "[id*=\"captcha\" i],[class*=\"captcha\" i]'))return 'manual';"
@@ -1782,7 +1933,7 @@ static const char retail_prepare_script[] =
     "const dl=links&&links.querySelector("
     "'a[href^=\"https://software.download.prss.microsoft.com/\"]');"
     "if(dl){let hash='';const rows=[...links.querySelectorAll('tr')];"
-    "const row=rows.find(r=>/(Korean|한국어)/i.test(r.textContent||''));"
+    "const row=rows.find(r=>/(%s)/i.test(r.textContent||''));"
     "if(row){const match=(row.textContent||'').match(/\\b[0-9a-f]{64}\\b/i);"
     "if(match)hash=match[0].toUpperCase();}"
     "if(!document.getElementById('classicsetup-download-focus')){"
@@ -1807,8 +1958,8 @@ static const char retail_prepare_script[] =
     "const option=[...language.options].find(o=>{let value=o.value;"
     "try{const data=JSON.parse(value);value=[data.language,data.Language,"
     "data.locale,data.Locale].filter(Boolean).join(' ');}catch(e){}"
-    "return /(^|\\b)(Korean|ko-KR)(\\b|$)/i.test(value)||"
-    "/한국어/.test(o.textContent||'');});"
+    "return /(%s)/i.test(value)||"
+    "/(%s)/i.test(o.textContent||'');});"
     "if(!option)return 'manual';language.value=option.value;"
     "language.dispatchEvent(new Event('change',{bubbles:true}));"
     "const confirm=document.querySelector('#submit-sku');"
@@ -1837,8 +1988,8 @@ static void set_retail_browser_failure(
     struct classicsetup_gui_runtime *runtime,
     const char *message)
 {
-    runtime->session->retail_browser_status.stage =
-        CLASSICSETUP_RETAIL_BROWSER_FAILED;
+    classicsetup_retail_browser_fallback_to_full_page(
+        &runtime->session->retail_browser_status);
     gtk_label_set_text(GTK_LABEL(runtime->download_status), message);
     gtk_widget_set_visible(runtime->retail_retry_button, TRUE);
     update_download_page(runtime);
@@ -2002,6 +2153,11 @@ static void retail_automation_finished(
 static gboolean retail_automation_tick(gpointer user_data)
 {
     struct classicsetup_gui_runtime *runtime = user_data;
+    const bool korean = runtime->session->selected_language ==
+                        CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN;
+    const char *pattern = korean ? "Korean|ko-KR|한국어"
+                                 : "English|en-US";
+    char *script;
 
     runtime->retail_automation_timer = 0;
     if (runtime->retail_web_view == NULL ||
@@ -2009,15 +2165,18 @@ static gboolean retail_automation_tick(gpointer user_data)
         runtime->session->retail_browser_status.full_page_fallback) {
         return G_SOURCE_REMOVE;
     }
+    script = g_strdup_printf(retail_prepare_script_format,
+                             pattern, pattern, pattern);
     webkit_web_view_evaluate_javascript(
         runtime->retail_web_view,
-        retail_prepare_script,
+        script,
         -1,
         NULL,
         NULL,
         NULL,
         retail_automation_finished,
         runtime);
+    g_free(script);
     return G_SOURCE_REMOVE;
 }
 
@@ -2084,13 +2243,15 @@ static void start_retail_browser(
     runtime->retail_automation_attempts = 0;
     memset(runtime->retail_expected_sha256, 0,
            sizeof(runtime->retail_expected_sha256));
-    gtk_widget_set_visible(runtime->retail_browser_box, TRUE);
+    gtk_widget_set_visible(runtime->retail_browser_box, FALSE);
+    gtk_widget_set_visible(runtime->retail_preparing_box, TRUE);
     gtk_widget_set_visible(runtime->retail_retry_button, FALSE);
     gtk_label_set_text(GTK_LABEL(runtime->download_status),
                        "Preparing Microsoft download...");
     webkit_web_view_load_uri(
         runtime->retail_web_view,
-        classicsetup_retail_browser_page_uri());
+        classicsetup_retail_browser_page_uri(
+            runtime->session->selected_language));
     update_download_page(runtime);
 }
 
@@ -2108,8 +2269,17 @@ static void on_download_start_clicked(GtkButton *button, gpointer user_data)
     (void)button;
     if (runtime->session->source_backend ==
         CLASSICSETUP_SOURCE_MICROSOFT_RETAIL) {
+        if (runtime->session->retail_source_mode ==
+                CLASSICSETUP_GUI_RETAIL_AUTOMATIC &&
+            classicsetup_gui_retail_try_fido_once(runtime->session)) {
+            start_download(runtime);
+            return;
+        }
 #if CLASSICSETUP_ENABLE_WEBKIT_RETAIL
-        start_retail_browser(runtime);
+        if (classicsetup_gui_retail_start_webview_once(runtime->session) ||
+            runtime->session->retail_webview_started) {
+            start_retail_browser(runtime);
+        }
 #else
         gtk_label_set_text(
             GTK_LABEL(runtime->download_status),
@@ -2136,12 +2306,17 @@ static void update_download_page(struct classicsetup_gui_runtime *runtime)
     const struct classicsetup_download_status *status =
         &runtime->session->download;
     char detail[256];
+    char size_text[160];
+    char rate_text[96];
+    char eta_text[128];
     gboolean active = runtime->download_task_active;
     gboolean source_supported = TRUE;
 
 #if !CLASSICSETUP_ENABLE_WEBKIT_RETAIL
     if (runtime->session->source_backend ==
-        CLASSICSETUP_SOURCE_MICROSOFT_RETAIL) {
+            CLASSICSETUP_SOURCE_MICROSOFT_RETAIL &&
+        runtime->session->retail_source_mode ==
+            CLASSICSETUP_GUI_RETAIL_MICROSOFT_PAGE) {
         source_supported = FALSE;
     }
 #endif
@@ -2149,6 +2324,23 @@ static void update_download_page(struct classicsetup_gui_runtime *runtime)
     if (runtime->download_status == NULL) {
         return;
     }
+#if CLASSICSETUP_ENABLE_WEBKIT_RETAIL
+    if (runtime->retail_browser_box != NULL &&
+        runtime->retail_preparing_box != NULL) {
+        bool show_webview = classicsetup_retail_browser_should_show_webview(
+            &runtime->session->retail_browser_status);
+        bool browser_active = runtime->session->retail_browser_status.stage !=
+                                  CLASSICSETUP_RETAIL_BROWSER_IDLE &&
+                              runtime->session->retail_browser_status.stage !=
+                                  CLASSICSETUP_RETAIL_BROWSER_COMPLETE;
+        gtk_widget_set_visible(runtime->retail_browser_box, show_webview);
+        gtk_widget_set_visible(runtime->retail_preparing_box,
+                               browser_active && !show_webview && !active);
+        gtk_widget_set_visible(runtime->retail_manual_notice,
+                               runtime->session->retail_browser_status
+                                   .full_page_fallback);
+    }
+#endif
     if (runtime->download_release != NULL &&
         runtime->session->has_selected_release) {
         const struct classicsetup_windows_release *release =
@@ -2168,6 +2360,15 @@ static void update_download_page(struct classicsetup_gui_runtime *runtime)
                            ? "Microsoft Windows Update"
                            : "Microsoft official ISO");
         gtk_label_set_text(GTK_LABEL(runtime->download_release), detail);
+#if CLASSICSETUP_ENABLE_WEBKIT_RETAIL
+        if (runtime->retail_preparing_selection != NULL) {
+            (void)snprintf(detail, sizeof(detail),
+                           "Windows 11\n%.80s\n64-bit",
+                           release->language_name);
+            gtk_label_set_text(
+                GTK_LABEL(runtime->retail_preparing_selection), detail);
+        }
+#endif
     }
     gtk_label_set_text(
         GTK_LABEL(runtime->download_status),
@@ -2192,6 +2393,44 @@ static void update_download_page(struct classicsetup_gui_runtime *runtime)
                        (double)status->bytes_received / 1073741824.0);
     }
     gtk_label_set_text(GTK_LABEL(runtime->download_detail), detail);
+    if (status->total_bytes != 0) {
+        (void)snprintf(size_text, sizeof(size_text),
+                       "Downloaded: %.2f GiB / %.2f GiB",
+                       (double)status->bytes_received / 1073741824.0,
+                       (double)status->total_bytes / 1073741824.0);
+    } else {
+        (void)snprintf(size_text, sizeof(size_text),
+                       "Downloaded: %.2f GiB",
+                       (double)status->bytes_received / 1073741824.0);
+    }
+    (void)snprintf(rate_text, sizeof(rate_text),
+                   status->bytes_per_second > 0.0
+                       ? "Transfer rate: %.1f MiB/s"
+                       : "Transfer rate: Calculating...",
+                   status->bytes_per_second / 1048576.0);
+    if (status->total_bytes > status->bytes_received &&
+        status->bytes_per_second > 0.0) {
+        unsigned long long seconds = (unsigned long long)(
+            (double)(status->total_bytes - status->bytes_received) /
+            status->bytes_per_second);
+        if (seconds >= 3600) {
+            (void)snprintf(eta_text, sizeof(eta_text),
+                           "Estimated time remaining: %llu hr %llu min",
+                           seconds / 3600, (seconds % 3600) / 60);
+        } else {
+            (void)snprintf(eta_text, sizeof(eta_text),
+                           "Estimated time remaining: %llu min %llu sec",
+                           seconds / 60, seconds % 60);
+        }
+    } else {
+        (void)snprintf(eta_text, sizeof(eta_text), "%s",
+                       status->state == CLASSICSETUP_DOWNLOAD_COMPLETE
+                           ? "Estimated time remaining: Complete"
+                           : "Estimated time remaining: Calculating...");
+    }
+    gtk_label_set_text(GTK_LABEL(runtime->download_size), size_text);
+    gtk_label_set_text(GTK_LABEL(runtime->download_rate), rate_text);
+    gtk_label_set_text(GTK_LABEL(runtime->download_eta), eta_text);
     if (runtime->session->source_backend ==
             CLASSICSETUP_SOURCE_MICROSOFT_UUP &&
         active && status->state != CLASSICSETUP_DOWNLOAD_COMPLETE) {
@@ -2222,12 +2461,20 @@ static void update_download_page(struct classicsetup_gui_runtime *runtime)
 #if CLASSICSETUP_ENABLE_WEBKIT_RETAIL
         runtime->session->source_backend ==
                 CLASSICSETUP_SOURCE_MICROSOFT_RETAIL
-            ? "Open Microsoft Download Page"
+            ? (runtime->session->retail_source_mode ==
+                       CLASSICSETUP_GUI_RETAIL_AUTOMATIC &&
+                   !runtime->session->retail_fido_attempted
+                   ? "Download from Microsoft"
+                   : "Open Microsoft Download Page")
             :
 #else
         runtime->session->source_backend ==
                 CLASSICSETUP_SOURCE_MICROSOFT_RETAIL
-            ? "Microsoft Browser Unavailable"
+            ? (runtime->session->retail_source_mode ==
+                       CLASSICSETUP_GUI_RETAIL_AUTOMATIC &&
+                   !runtime->session->retail_fido_attempted
+                   ? "Download from Microsoft"
+                   : "Microsoft Browser Unavailable")
             :
 #endif
         status->state == CLASSICSETUP_DOWNLOAD_FAILED ||
@@ -2235,6 +2482,36 @@ static void update_download_page(struct classicsetup_gui_runtime *runtime)
             ? "Retry"
             : "Download");
     gtk_widget_set_sensitive(runtime->download_cancel_button, active);
+    if (runtime->sidebar_download_box != NULL) {
+        bool show_sidebar = status->state != CLASSICSETUP_DOWNLOAD_NOT_STARTED ||
+            runtime->session->retail_browser_status.stage !=
+                CLASSICSETUP_RETAIL_BROWSER_IDLE;
+        const char *sidebar_title = "Preparing Windows download";
+        if (status->state == CLASSICSETUP_DOWNLOAD_DOWNLOADING) {
+            sidebar_title = "Downloading Windows";
+        } else if (status->state == CLASSICSETUP_DOWNLOAD_VERIFYING) {
+            sidebar_title = "Verifying Windows image";
+        } else if (status->state == CLASSICSETUP_DOWNLOAD_COMPLETE) {
+            sidebar_title = "Windows image ready";
+        } else if (status->state == CLASSICSETUP_DOWNLOAD_FAILED) {
+            sidebar_title = "Windows download failed";
+        } else if (status->state == CLASSICSETUP_DOWNLOAD_CANCELLED) {
+            sidebar_title = "Windows download cancelled";
+        }
+        gtk_label_set_text(GTK_LABEL(runtime->sidebar_download_title),
+                           sidebar_title);
+        gtk_progress_bar_set_fraction(
+            GTK_PROGRESS_BAR(runtime->sidebar_download_progress),
+            status->progress_fraction >= 0.0 &&
+                    status->progress_fraction <= 1.0
+                ? status->progress_fraction : 0.0);
+        (void)snprintf(detail, sizeof(detail), "%.2f / %.2f GiB\n%.1f MiB/s",
+                       (double)status->bytes_received / 1073741824.0,
+                       (double)status->total_bytes / 1073741824.0,
+                       status->bytes_per_second / 1048576.0);
+        gtk_label_set_text(GTK_LABEL(runtime->sidebar_download_detail), detail);
+        gtk_widget_set_visible(runtime->sidebar_download_box, show_sidebar);
+    }
     update_source_controls(runtime);
     update_navigation(runtime);
 }
@@ -2244,8 +2521,9 @@ static GtkWidget *build_download_page(
 {
     GtkWidget *box = build_placeholder_page(
         "Download Windows",
-        "Use Microsoft's official download page, then ClassicSetup will download and verify the selected Windows ISO.");
+        "ClassicSetup is preparing a Windows installation image from Microsoft.");
     GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *download_details = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
 
     runtime->download_release = gtk_label_new("Windows source not selected");
     gtk_label_set_xalign(GTK_LABEL(runtime->download_release), 0.0F);
@@ -2260,6 +2538,17 @@ static GtkWidget *build_download_page(
         GTK_PROGRESS_BAR(runtime->download_progress), TRUE);
     runtime->download_detail = gtk_label_new("0 bytes received");
     gtk_label_set_xalign(GTK_LABEL(runtime->download_detail), 0.0F);
+    runtime->download_size = gtk_label_new("Downloaded: 0 bytes");
+    runtime->download_rate = gtk_label_new("Transfer rate: Calculating...");
+    runtime->download_eta = gtk_label_new(
+        "Estimated time remaining: Calculating...");
+    gtk_label_set_xalign(GTK_LABEL(runtime->download_size), 0.0F);
+    gtk_label_set_xalign(GTK_LABEL(runtime->download_rate), 0.0F);
+    gtk_label_set_xalign(GTK_LABEL(runtime->download_eta), 0.0F);
+    gtk_widget_add_css_class(download_details, "classic-download-details");
+    gtk_box_append(GTK_BOX(download_details), runtime->download_size);
+    gtk_box_append(GTK_BOX(download_details), runtime->download_rate);
+    gtk_box_append(GTK_BOX(download_details), runtime->download_eta);
     runtime->download_start_button = gtk_button_new_with_label("Download");
     runtime->download_cancel_button =
         gtk_button_new_with_label("Cancel Download");
@@ -2272,6 +2561,32 @@ static GtkWidget *build_download_page(
     gtk_box_append(GTK_BOX(box), runtime->download_release);
     gtk_box_append(GTK_BOX(box), runtime->download_status);
 #if CLASSICSETUP_ENABLE_WEBKIT_RETAIL
+    runtime->retail_preparing_box = gtk_box_new(
+        GTK_ORIENTATION_VERTICAL, 7);
+    gtk_widget_add_css_class(runtime->retail_preparing_box,
+                             "classic-preparing-pane");
+    add_classic_label(runtime->retail_preparing_box,
+        "Preparing the Microsoft download page",
+        "classic-section-title", TRUE);
+    add_classic_label(runtime->retail_preparing_box,
+        "ClassicSetup is automatically setting the selected Windows version, language, and 64-bit option. Please wait until Microsoft's real 64-bit download control is ready.",
+        NULL, TRUE);
+    runtime->retail_preparing_selection = gtk_label_new(
+        "Windows 11\nKorean\n64-bit");
+    gtk_label_set_xalign(GTK_LABEL(runtime->retail_preparing_selection), 0.0F);
+    gtk_widget_add_css_class(runtime->retail_preparing_selection,
+                             "classic-preparing-selection");
+    gtk_box_append(GTK_BOX(runtime->retail_preparing_box),
+                   runtime->retail_preparing_selection);
+    gtk_widget_set_visible(runtime->retail_preparing_box, FALSE);
+    gtk_box_append(GTK_BOX(box), runtime->retail_preparing_box);
+    runtime->retail_manual_notice = gtk_label_new(
+        "Automatic preparation could not be completed. Continue with the real Microsoft page below, or use an existing ISO when available.");
+    gtk_label_set_xalign(GTK_LABEL(runtime->retail_manual_notice), 0.0F);
+    gtk_label_set_wrap(GTK_LABEL(runtime->retail_manual_notice), TRUE);
+    gtk_widget_add_css_class(runtime->retail_manual_notice, "classic-warning");
+    gtk_widget_set_visible(runtime->retail_manual_notice, FALSE);
+    gtk_box_append(GTK_BOX(box), runtime->retail_manual_notice);
     runtime->retail_browser_box = gtk_box_new(
         GTK_ORIENTATION_VERTICAL, 8);
     gtk_widget_set_size_request(runtime->retail_browser_box, 600, 320);
@@ -2315,16 +2630,20 @@ static GtkWidget *build_download_page(
     gtk_box_append(GTK_BOX(actions), runtime->retail_existing_iso_button);
 #else
     runtime->retail_browser_box = NULL;
+    runtime->retail_preparing_box = NULL;
+    runtime->retail_preparing_selection = NULL;
+    runtime->retail_manual_notice = NULL;
     runtime->retail_retry_button = NULL;
     runtime->retail_existing_iso_button = NULL;
 #endif
     gtk_box_append(GTK_BOX(box), runtime->download_progress);
-    gtk_box_append(GTK_BOX(box), runtime->download_detail);
+    gtk_box_append(GTK_BOX(box), download_details);
+    gtk_widget_set_visible(runtime->download_detail, FALSE);
     gtk_box_append(GTK_BOX(box), actions);
     add_classic_label(
         box,
-        "You can configure installation options while Windows downloads. Leaving this page does not cancel the transfer.",
-        "classic-muted", TRUE);
+        "You can continue configuring installation settings while Windows downloads. ClassicSetup keeps the transfer running in the background.",
+        "classic-download-information", TRUE);
     return box;
 }
 
@@ -2582,7 +2901,10 @@ static void update_navigation(struct classicsetup_gui_runtime *runtime)
     gtk_widget_set_sensitive(runtime->next_button, can_next);
     gtk_button_set_label(
         GTK_BUTTON(runtime->next_button),
-        summary ? "Install" : "Next");
+        summary ? "Install" :
+        (runtime->session->page == CLASSICSETUP_GUI_PAGE_DOWNLOAD &&
+         runtime->download_task_active)
+            ? "Continue Setup >" : "Next >");
     update_sidebar_progress(runtime);
     if (summary) {
         update_summary(runtime);

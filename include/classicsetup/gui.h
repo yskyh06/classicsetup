@@ -67,6 +67,13 @@ enum classicsetup_gui_source_change_requirement {
     CLASSICSETUP_GUI_SOURCE_CHANGE_DISCARD_VERIFIED
 };
 
+enum classicsetup_gui_retail_source_mode {
+    CLASSICSETUP_GUI_RETAIL_AUTOMATIC,
+    CLASSICSETUP_GUI_RETAIL_MICROSOFT_PAGE,
+    CLASSICSETUP_GUI_RETAIL_EXISTING_ISO,
+    CLASSICSETUP_GUI_RETAIL_CUSTOM
+};
+
 struct classicsetup_gui_session {
     enum classicsetup_gui_entry_mode entry_mode;
     enum classicsetup_gui_page page;
@@ -79,6 +86,9 @@ struct classicsetup_gui_session {
     bool has_selected_disk;
     enum classicsetup_gui_windows_version windows_version;
     enum classicsetup_source_backend source_backend;
+    enum classicsetup_gui_retail_source_mode retail_source_mode;
+    bool retail_fido_attempted;
+    bool retail_webview_started;
     struct classicsetup_source_catalog source_catalog;
     struct classicsetup_source_resolve_diagnostics source_diagnostics;
     char selected_release_name[CLASSICSETUP_SOURCE_NAME_SIZE];
@@ -138,6 +148,16 @@ int classicsetup_gui_set_windows_version(
 int classicsetup_gui_set_source_backend(
     struct classicsetup_gui_session *session,
     enum classicsetup_source_backend backend);
+
+int classicsetup_gui_set_retail_source_mode(
+    struct classicsetup_gui_session *session,
+    enum classicsetup_gui_retail_source_mode mode);
+
+bool classicsetup_gui_retail_try_fido_once(
+    struct classicsetup_gui_session *session);
+
+bool classicsetup_gui_retail_start_webview_once(
+    struct classicsetup_gui_session *session);
 
 int classicsetup_gui_select_release(
     struct classicsetup_gui_session *session,

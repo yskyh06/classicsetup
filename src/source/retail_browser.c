@@ -98,9 +98,21 @@ static bool path_has_iso_suffix(const char *path)
     return strncasecmp(cursor, ".iso", 4) == 0;
 }
 
-const char *classicsetup_retail_browser_page_uri(void)
+const char *classicsetup_retail_browser_page_uri(
+    enum classicsetup_windows_language language)
 {
-    return "https://www.microsoft.com/ko-kr/software-download/windows11";
+    return language == CLASSICSETUP_WINDOWS_LANGUAGE_ENGLISH
+               ? "https://www.microsoft.com/en-us/software-download/windows11"
+               : "https://www.microsoft.com/ko-kr/software-download/windows11";
+}
+
+bool classicsetup_retail_browser_should_show_webview(
+    const struct classicsetup_retail_browser_status *status)
+{
+    return status != NULL &&
+           (status->full_page_fallback ||
+            status->stage ==
+                CLASSICSETUP_RETAIL_BROWSER_WAITING_FOR_USER_DOWNLOAD_CLICK);
 }
 
 void classicsetup_retail_browser_status_reset(

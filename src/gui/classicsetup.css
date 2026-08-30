@@ -27,7 +27,7 @@ window {
 }
 
 .classicsetup-progress-pane {
-    background: rgba(17, 70, 166, 0.88);
+    background: linear-gradient(90deg, #1550b5, #316ed2);
     border-right: 1px solid #5f8fdf;
     color: #ffffff;
     padding: 24px 16px;
@@ -118,23 +118,39 @@ window {
 }
 
 .classicsetup-dialog-content {
-    background: #f6f6f4;
-    padding: 20px 24px 22px 24px;
+    background: #ece9e3;
+    padding: 12px 14px 16px 14px;
+}
+
+.classicsetup-page-header {
+    background: #ffffff;
+    border: 1px solid #a7a7a7;
+    padding: 12px 14px;
+}
+
+.classicsetup-page-icon {
+    background: #123f83;
+    border: 2px solid #d8e5f7;
+    color: #ffffff;
+    font-size: 17px;
+    font-weight: bold;
+    min-width: 34px;
+    min-height: 34px;
 }
 
 .classic-title {
-    color: #123f83;
-    font-size: 20px;
+    color: #111111;
+    font-size: 18px;
     font-weight: bold;
 }
 
 .classic-subtitle {
-    color: #35445a;
+    color: #222222;
     margin-bottom: 2px;
 }
 
 .classic-section-title {
-    color: #123f83;
+    color: #111111;
     font-weight: bold;
     margin-top: 3px;
 }
@@ -176,6 +192,80 @@ window {
     padding: 9px 11px;
 }
 
+.classic-source-option {
+    background: #f7f7f7;
+    border: 1px solid #a9a9a9;
+    padding: 7px 9px;
+}
+
+.classic-source-option:disabled {
+    color: #777777;
+    background: #e4e2dd;
+}
+
+.classic-source-icon {
+    background: #ffffff;
+    border: 1px solid #858585;
+    color: #123f83;
+    font-size: 18px;
+    font-weight: bold;
+    min-width: 30px;
+    min-height: 30px;
+}
+
+.classic-option-title {
+    color: #111111;
+    font-weight: bold;
+}
+
+.classic-option-description {
+    color: #333333;
+    font-size: 9pt;
+}
+
+.classic-download-details {
+    background: #ffffff;
+    border: 1px solid #aaa7a0;
+    padding: 7px 9px;
+}
+
+.classic-download-information {
+    background: #f7f7f7;
+    border-top: 1px solid #aaa7a0;
+    color: #222222;
+    padding: 9px 8px;
+}
+
+.classic-preparing-pane {
+    background: #ffffff;
+    border: 1px solid #9b9b9b;
+    padding: 14px;
+}
+
+.classic-preparing-selection {
+    background: #eef3fa;
+    border: 1px solid #8999ad;
+    color: #111111;
+    padding: 8px 10px;
+}
+
+.classic-sidebar-download {
+    background: rgba(4, 45, 119, 0.72);
+    border: 1px solid #8eb0e8;
+    color: #ffffff;
+    padding: 9px;
+}
+
+.classic-sidebar-download progressbar trough {
+    min-height: 10px;
+    background: #ffffff;
+    border: 1px solid #183968;
+}
+
+.classic-sidebar-download progressbar progress {
+    background: #28a631;
+}
+
 .classic-status,
 .classicsetup-status-box {
     background: #edf3fb;
@@ -215,6 +305,6 @@ progressbar trough {
 }
 
 progressbar progress {
-    background: #2d6fbd;
+    background: #27a83a;
     border-radius: 0;
 }

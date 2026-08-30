@@ -309,6 +309,7 @@ static void test_retail_browser_policy_and_state(void)
     assert(classicsetup_retail_browser_transition(
                &status,
                CLASSICSETUP_RETAIL_BROWSER_WAITING_FOR_MICROSOFT) == 0);
+    assert(!classicsetup_retail_browser_should_show_webview(&status));
     assert(classicsetup_retail_browser_transition(
                &status,
                CLASSICSETUP_RETAIL_BROWSER_WAITING_FOR_USER_DOWNLOAD_CLICK) ==
@@ -317,7 +318,12 @@ static void test_retail_browser_policy_and_state(void)
                &status, CLASSICSETUP_RETAIL_BROWSER_COMPLETE) != 0);
 
     assert(classicsetup_retail_browser_navigation_is_allowed(
-        classicsetup_retail_browser_page_uri()));
+        classicsetup_retail_browser_page_uri(
+            CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN)));
+    assert(strstr(classicsetup_retail_browser_page_uri(
+                      CLASSICSETUP_WINDOWS_LANGUAGE_ENGLISH),
+                  "/en-us/") != NULL);
+    assert(classicsetup_retail_browser_should_show_webview(&status));
     assert(!classicsetup_retail_browser_navigation_is_allowed(
         "https://example.com/windows11"));
     assert(!classicsetup_retail_browser_navigation_is_allowed(
@@ -363,6 +369,26 @@ static void test_retail_browser_policy_and_state(void)
     classicsetup_retail_browser_clear_uri(&release);
 }
 
+static void test_retail_source_fallback_is_single_shot(void)
+{
+    struct classicsetup_gui_session session;
+
+    classicsetup_gui_session_reset(&session);
+    assert(session.retail_source_mode ==
+           CLASSICSETUP_GUI_RETAIL_AUTOMATIC);
+    assert(classicsetup_gui_retail_try_fido_once(&session));
+    assert(!classicsetup_gui_retail_try_fido_once(&session));
+    assert(classicsetup_gui_retail_start_webview_once(&session));
+    assert(!classicsetup_gui_retail_start_webview_once(&session));
+
+    classicsetup_gui_session_reset(&session);
+    assert(classicsetup_gui_set_retail_source_mode(
+               &session,
+               CLASSICSETUP_GUI_RETAIL_MICROSOFT_PAGE) == 0);
+    assert(!classicsetup_gui_retail_try_fido_once(&session));
+    assert(classicsetup_gui_retail_start_webview_once(&session));
+}
+
 int main(void)
 {
     test_page_navigation();
@@ -373,6 +399,7 @@ int main(void)
     test_network_presentation_supports_multiple_ethernet();
     test_cascading_source_selection_and_lifecycle();
     test_retail_browser_policy_and_state();
+    test_retail_source_fallback_is_single_shot();
     test_gtk_disabled_result();
     return 0;
 }
