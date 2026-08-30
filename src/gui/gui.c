@@ -28,13 +28,14 @@ void classicsetup_gui_session_reset_for_entry(
                         ? CLASSICSETUP_GUI_PAGE_NETWORK
                         : CLASSICSETUP_GUI_PAGE_DISK;
     session->windows_version = CLASSICSETUP_GUI_WINDOWS_11;
-    session->source_backend = CLASSICSETUP_ENABLE_UUP
-                                  ? CLASSICSETUP_SOURCE_MICROSOFT_UUP
-                                  : CLASSICSETUP_SOURCE_MICROSOFT_RETAIL;
+    session->source_backend = CLASSICSETUP_SOURCE_MICROSOFT_RETAIL;
     classicsetup_network_snapshot_reset(&session->network);
     classicsetup_source_catalog_reset(&session->source_catalog);
     classicsetup_download_status_reset(&session->download);
     classicsetup_uup_status_reset(&session->uup_status);
+    classicsetup_retail_status_reset(&session->retail_status);
+    classicsetup_retail_browser_status_reset(
+        &session->retail_browser_status);
 }
 
 int classicsetup_gui_set_source_backend(
@@ -349,6 +350,9 @@ void classicsetup_gui_discard_downloaded_source(
     }
     classicsetup_download_status_reset(&session->download);
     classicsetup_uup_status_reset(&session->uup_status);
+    classicsetup_retail_status_reset(&session->retail_status);
+    classicsetup_retail_browser_status_reset(
+        &session->retail_browser_status);
     memset(&session->verified_source, 0,
            sizeof(session->verified_source));
     classicsetup_source_resolve_diagnostics_reset(
@@ -369,11 +373,9 @@ bool classicsetup_gui_summary_is_ready(
            session->options_placeholder &&
            classicsetup_download_is_ready(
                &session->download, &session->workspace) &&
-           (session->source_backend !=
-                CLASSICSETUP_SOURCE_MICROSOFT_UUP ||
-            (session->verified_source.verified &&
-             session->verified_source.kind ==
-                 CLASSICSETUP_VERIFIED_SOURCE_ISO));
+           session->verified_source.verified &&
+           session->verified_source.kind ==
+               CLASSICSETUP_VERIFIED_SOURCE_ISO;
 }
 
 void classicsetup_gui_network_presentation_reset(

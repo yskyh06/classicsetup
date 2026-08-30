@@ -14,6 +14,9 @@ option(CLASSICSETUP_ENABLE_DOWNLOAD
 option(CLASSICSETUP_ENABLE_UUP
     "Build the pinned Microsoft UUP acquisition backend"
     ON)
+option(CLASSICSETUP_ENABLE_WEBKIT_RETAIL
+    "Build the browser-mediated Microsoft Retail flow when WebKitGTK is available"
+    ON)
 set(CLASSICSETUP_UUP_TOOL_ROOT
     "/usr/lib/classicsetup/tools/uupmediacreator"
     CACHE PATH "Pinned bundled UUPMediaCreator installation directory")
@@ -32,6 +35,14 @@ set(CLASSICSETUP_UUP_BUNDLE_DIR "" CACHE PATH
     "Pre-staged, hash-verified UUPMediaCreator bundle for packaging")
 set(CLASSICSETUP_WORKSPACE_ROOT "" CACHE PATH
     "Optional persistent base directory for ClassicSetup workspaces")
+set(CLASSICSETUP_PWSH_PATH "" CACHE FILEPATH
+    "Optional packaged PowerShell 7 executable for the Retail resolver")
+set(CLASSICSETUP_FIDO_LINUX_SCRIPT
+    "/usr/lib/classicsetup/tools/fido/fido-linux.ps1" CACHE FILEPATH
+    "Pinned ClassicSetup Linux Fido resolver script")
+set(CLASSICSETUP_FIDO_LINUX_SHA256
+    "cfd466e79ae8c687a09447249534a99903ed5c52ce3b0cc4fb71475058ab66f7"
+    CACHE STRING "Pinned SHA-256 of fido-linux.ps1")
 
 add_compile_definitions(
     CLASSICSETUP_CONFIGURED_WORKSPACE_ROOT="${CLASSICSETUP_WORKSPACE_ROOT}")
@@ -39,6 +50,7 @@ add_compile_definitions(
 set(CLASSICSETUP_GTK_FRONTEND src/gui/gtk_stub.c)
 set(CLASSICSETUP_NETWORK_BACKEND src/network/network_manager_stub.c)
 set(CLASSICSETUP_GTK_ENABLED OFF)
+set(CLASSICSETUP_WEBKIT_RETAIL_ENABLED OFF)
 if(CLASSICSETUP_ENABLE_GTK)
     if(PkgConfig_FOUND)
         pkg_check_modules(GTK4 QUIET IMPORTED_TARGET gtk4)
@@ -56,8 +68,23 @@ else()
     message(STATUS "ClassicSetup GTK4 frontend: disabled by option")
 endif()
 
+if(CLASSICSETUP_GTK_ENABLED AND CLASSICSETUP_ENABLE_WEBKIT_RETAIL)
+    pkg_check_modules(WEBKITGTK6 QUIET IMPORTED_TARGET webkitgtk-6.0)
+    if(WEBKITGTK6_FOUND)
+        set(CLASSICSETUP_WEBKIT_RETAIL_ENABLED ON)
+        message(STATUS "ClassicSetup WebKit Retail: enabled (${WEBKITGTK6_VERSION})")
+    else()
+        message(STATUS "ClassicSetup WebKit Retail: disabled (webkitgtk-6.0 not found)")
+    endif()
+elseif(CLASSICSETUP_ENABLE_WEBKIT_RETAIL)
+    message(STATUS "ClassicSetup WebKit Retail: disabled (GTK frontend unavailable)")
+else()
+    message(STATUS "ClassicSetup WebKit Retail: disabled by option")
+endif()
+
 set(CLASSICSETUP_SOURCE_BACKEND src/source/microsoft_source_stub.c)
 set(CLASSICSETUP_DOWNLOAD_BACKEND src/source/download_stub.c)
+set(CLASSICSETUP_RETAIL_BACKEND src/source/retail_stub.c)
 set(CLASSICSETUP_DOWNLOAD_ENABLED OFF)
 if(CLASSICSETUP_ENABLE_DOWNLOAD AND PkgConfig_FOUND)
     pkg_check_modules(LIBCURL QUIET IMPORTED_TARGET libcurl)
@@ -66,6 +93,7 @@ if(CLASSICSETUP_ENABLE_DOWNLOAD AND PkgConfig_FOUND)
         set(CLASSICSETUP_SOURCE_BACKEND
             src/source/microsoft_source_curl.c)
         set(CLASSICSETUP_DOWNLOAD_BACKEND src/source/download_curl.c)
+        set(CLASSICSETUP_RETAIL_BACKEND src/source/retail_fido.c)
         set(CLASSICSETUP_DOWNLOAD_ENABLED ON)
         message(STATUS "ClassicSetup Windows download: enabled")
     else()
@@ -98,6 +126,8 @@ add_executable(classicsetup
     src/source/download_model.c
     ${CLASSICSETUP_DOWNLOAD_BACKEND}
     ${CLASSICSETUP_SOURCE_BACKEND}
+    ${CLASSICSETUP_RETAIL_BACKEND}
+    src/source/retail_browser.c
     src/source/windows_source.c
     src/source/uup.c
     src/source/workspace.c
@@ -140,6 +170,9 @@ target_compile_definitions(classicsetup PRIVATE
     CLASSICSETUP_UUP_DOTNET_ROOT="${CLASSICSETUP_UUP_DOTNET_ROOT}"
     CLASSICSETUP_WIMLIB_EXECUTABLE="${CLASSICSETUP_WIMLIB_EXECUTABLE}"
     CLASSICSETUP_UUP_ISO_EXTRACTOR="${CLASSICSETUP_UUP_ISO_EXTRACTOR}"
+    CLASSICSETUP_PWSH_PATH="${CLASSICSETUP_PWSH_PATH}"
+    CLASSICSETUP_FIDO_LINUX_SCRIPT="${CLASSICSETUP_FIDO_LINUX_SCRIPT}"
+    CLASSICSETUP_FIDO_LINUX_SHA256="${CLASSICSETUP_FIDO_LINUX_SHA256}"
 )
 if(CLASSICSETUP_ENABLE_UUP)
     message(STATUS "ClassicSetup Microsoft UUP backend: enabled (bundled runtime required)")
@@ -161,6 +194,13 @@ if(CLASSICSETUP_DOWNLOAD_ENABLED)
     )
     target_compile_definitions(classicsetup PRIVATE
         CLASSICSETUP_DOWNLOAD_ENABLED=1)
+    install(FILES
+        tools/fido/fido-linux.ps1
+        DESTINATION lib/classicsetup/tools/fido
+        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
+                    GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+    install(FILES tools/fido/LICENSE packaging/fido.manifest
+        DESTINATION share/classicsetup/fido)
 else()
     target_compile_definitions(classicsetup PRIVATE
         CLASSICSETUP_DOWNLOAD_ENABLED=0)
@@ -174,6 +214,14 @@ if(CLASSICSETUP_GTK_ENABLED)
     target_link_libraries(classicsetup PRIVATE PkgConfig::GTK4)
 else()
     target_compile_definitions(classicsetup PRIVATE CLASSICSETUP_ENABLE_GTK=0)
+endif()
+if(CLASSICSETUP_WEBKIT_RETAIL_ENABLED)
+    target_compile_definitions(classicsetup PRIVATE
+        CLASSICSETUP_ENABLE_WEBKIT_RETAIL=1)
+    target_link_libraries(classicsetup PRIVATE PkgConfig::WEBKITGTK6)
+else()
+    target_compile_definitions(classicsetup PRIVATE
+        CLASSICSETUP_ENABLE_WEBKIT_RETAIL=0)
 endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -211,6 +259,8 @@ if(BUILD_TESTING)
         src/source/download_model.c
         src/source/windows_source.c
         src/source/uup.c
+        src/source/retail_stub.c
+        src/source/retail_browser.c
         src/source/workspace.c
     )
 
@@ -234,6 +284,8 @@ if(BUILD_TESTING)
         tests/source_test.c
         src/source/download_model.c
         ${CLASSICSETUP_DOWNLOAD_BACKEND}
+        ${CLASSICSETUP_RETAIL_BACKEND}
+        src/core/process.c
         src/source/windows_source.c
         src/source/workspace.c
     )
@@ -244,7 +296,14 @@ if(BUILD_TESTING)
     )
     target_include_directories(classicsetup_source_test PRIVATE include)
     target_compile_definitions(classicsetup_source_test PRIVATE
-        CLASSICSETUP_DOWNLOAD_ENABLED=$<BOOL:${CLASSICSETUP_DOWNLOAD_ENABLED}>)
+        CLASSICSETUP_DOWNLOAD_ENABLED=$<BOOL:${CLASSICSETUP_DOWNLOAD_ENABLED}>
+        CLASSICSETUP_PWSH_PATH="${CLASSICSETUP_PWSH_PATH}"
+        CLASSICSETUP_FIDO_LINUX_SCRIPT="${CMAKE_CURRENT_SOURCE_DIR}/tools/fido/fido-linux.ps1"
+        CLASSICSETUP_FIDO_LINUX_SHA256="${CLASSICSETUP_FIDO_LINUX_SHA256}"
+        CLASSICSETUP_TEST_FIDO_SCRIPT="${CMAKE_CURRENT_SOURCE_DIR}/tools/fido/fido-linux.ps1"
+        CLASSICSETUP_TEST_FIDO_SHA256="${CLASSICSETUP_FIDO_LINUX_SHA256}"
+        CLASSICSETUP_WIMLIB_EXECUTABLE="${CLASSICSETUP_WIMLIB_EXECUTABLE}"
+        CLASSICSETUP_UUP_ISO_EXTRACTOR="${CLASSICSETUP_UUP_ISO_EXTRACTOR}")
     if(CLASSICSETUP_DOWNLOAD_ENABLED)
         target_link_libraries(classicsetup_source_test PRIVATE
             PkgConfig::LIBCURL
@@ -560,5 +619,10 @@ if(BUILD_TESTING)
         COMMAND ${CMAKE_COMMAND}
             -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_back_key_policy.cmake
+    )
+    add_test(
+        NAME fido_runtime_staging
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/fido_staging_test.sh
+            ${CMAKE_CURRENT_SOURCE_DIR}
     )
 endif()

@@ -1,0 +1,133 @@
+classicsetup_recommended_test: \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/Scrt1.o \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/crti.o \
+  /usr/lib/gcc/x86_64-linux-gnu/15/crtbeginS.o \
+  CMakeFiles/classicsetup_recommended_test.dir/tests/recommended_test.c.o \
+  CMakeFiles/classicsetup_recommended_test.dir/src/config.c.o \
+  CMakeFiles/classicsetup_recommended_test.dir/src/core/apply.c.o \
+  CMakeFiles/classicsetup_recommended_test.dir/src/core/disk.c.o \
+  CMakeFiles/classicsetup_recommended_test.dir/src/core/environment.c.o \
+  CMakeFiles/classicsetup_recommended_test.dir/src/core/format.c.o \
+  CMakeFiles/classicsetup_recommended_test.dir/src/core/format_apply.c.o \
+  CMakeFiles/classicsetup_recommended_test.dir/src/core/partition.c.o \
+  CMakeFiles/classicsetup_recommended_test.dir/src/core/partition_plan.c.o \
+  CMakeFiles/classicsetup_recommended_test.dir/src/core/process.c.o \
+  CMakeFiles/classicsetup_recommended_test.dir/src/core/recommended.c.o \
+  CMakeFiles/classicsetup_recommended_test.dir/src/core/setup_mode.c.o \
+  CMakeFiles/classicsetup_recommended_test.dir/src/core/system_disk.c.o \
+  CMakeFiles/classicsetup_recommended_test.dir/src/tui/tui.c.o \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libcurses.so \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libcurses.so \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libcurses.so \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libncurses.so.6 \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libtinfo.so \
+  /usr/lib/x86_64-linux-gnu/libform.so \
+  /usr/lib/gcc/x86_64-linux-gnu/15/libgcc.a \
+  /usr/lib/gcc/x86_64-linux-gnu/15/libgcc_s.so \
+  /usr/lib/gcc/x86_64-linux-gnu/15/libgcc_s.so \
+  /usr/lib/gcc/x86_64-linux-gnu/15/libgcc_s.so \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libgcc_s.so.1 \
+  /usr/lib/gcc/x86_64-linux-gnu/15/libgcc.a \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libc.so \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libc.so \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libc.so \
+  /usr/lib/x86_64-linux-gnu/libc.so.6 \
+  /usr/lib/x86_64-linux-gnu/libc_nonshared.a \
+  /lib64/ld-linux-x86-64.so.2 \
+  /usr/lib/gcc/x86_64-linux-gnu/15/libgcc.a \
+  /usr/lib/gcc/x86_64-linux-gnu/15/libgcc_s.so \
+  /usr/lib/gcc/x86_64-linux-gnu/15/libgcc_s.so \
+  /usr/lib/gcc/x86_64-linux-gnu/15/libgcc_s.so \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libgcc_s.so.1 \
+  /usr/lib/gcc/x86_64-linux-gnu/15/libgcc.a \
+  /usr/lib/gcc/x86_64-linux-gnu/15/crtendS.o \
+  /usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/crtn.o \
+  /lib64/ld-linux-x86-64.so.2
+
+/usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/Scrt1.o:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/crti.o:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/crtbeginS.o:
+
+CMakeFiles/classicsetup_recommended_test.dir/tests/recommended_test.c.o:
+
+CMakeFiles/classicsetup_recommended_test.dir/src/config.c.o:
+
+CMakeFiles/classicsetup_recommended_test.dir/src/core/apply.c.o:
+
+CMakeFiles/classicsetup_recommended_test.dir/src/core/disk.c.o:
+
+CMakeFiles/classicsetup_recommended_test.dir/src/core/environment.c.o:
+
+CMakeFiles/classicsetup_recommended_test.dir/src/core/format.c.o:
+
+CMakeFiles/classicsetup_recommended_test.dir/src/core/format_apply.c.o:
+
+CMakeFiles/classicsetup_recommended_test.dir/src/core/partition.c.o:
+
+CMakeFiles/classicsetup_recommended_test.dir/src/core/partition_plan.c.o:
+
+CMakeFiles/classicsetup_recommended_test.dir/src/core/process.c.o:
+
+CMakeFiles/classicsetup_recommended_test.dir/src/core/recommended.c.o:
+
+CMakeFiles/classicsetup_recommended_test.dir/src/core/setup_mode.c.o:
+
+CMakeFiles/classicsetup_recommended_test.dir/src/core/system_disk.c.o:
+
+CMakeFiles/classicsetup_recommended_test.dir/src/tui/tui.c.o:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libcurses.so:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libcurses.so:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libcurses.so:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libncurses.so.6:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libtinfo.so:
+
+/usr/lib/x86_64-linux-gnu/libform.so:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/libgcc.a:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/libgcc_s.so:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/libgcc_s.so:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/libgcc_s.so:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libgcc_s.so.1:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/libgcc.a:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libc.so:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libc.so:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libc.so:
+
+/usr/lib/x86_64-linux-gnu/libc.so.6:
+
+/usr/lib/x86_64-linux-gnu/libc_nonshared.a:
+
+/lib64/ld-linux-x86-64.so.2:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/libgcc.a:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/libgcc_s.so:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/libgcc_s.so:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/libgcc_s.so:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/libgcc_s.so.1:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/libgcc.a:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/crtendS.o:
+
+/usr/lib/gcc/x86_64-linux-gnu/15/../../../x86_64-linux-gnu/crtn.o:
+
+/lib64/ld-linux-x86-64.so.2:

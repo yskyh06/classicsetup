@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include "classicsetup/download.h"
+#include "classicsetup/retail.h"
 #include "classicsetup/windows_source.h"
 #include "classicsetup/workspace.h"
 
@@ -376,15 +377,93 @@ static void test_download_backend_fallback(void)
     struct classicsetup_windows_release release = {0};
     struct classicsetup_workspace workspace = {0};
     struct classicsetup_download_status status;
+    struct classicsetup_verified_windows_source verified_source;
     atomic_bool cancel_requested;
 
     atomic_init(&cancel_requested, false);
     assert(classicsetup_download_windows_iso(
                &release, &workspace, &cancel_requested,
-               NULL, NULL, &status) != 0);
+               NULL, NULL, &status, &verified_source) != 0);
     assert(status.state == CLASSICSETUP_DOWNLOAD_FAILED);
     assert(status.error ==
            CLASSICSETUP_DOWNLOAD_ERROR_BACKEND_UNAVAILABLE);
+#endif
+}
+
+static void test_retail_model_and_resolver(void)
+{
+#if CLASSICSETUP_DOWNLOAD_ENABLED
+    struct classicsetup_source_catalog catalog;
+    struct classicsetup_retail_status status;
+    struct classicsetup_windows_release release;
+    struct classicsetup_verified_windows_source verified_source;
+    atomic_bool cancel_requested;
+    char *arguments[22];
+    char directory[] = "/tmp/classicsetup-retail-test-XXXXXX";
+    char resolver[PATH_MAX];
+    FILE *file;
+
+    assert(classicsetup_retail_recommended_catalog(
+               CLASSICSETUP_WINDOWS_11, &catalog) == 0);
+    assert(catalog.release_count == 1);
+    release = catalog.releases[0];
+    assert(release.architecture == CLASSICSETUP_ARCH_X64);
+    assert(release.language == CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN);
+    assert(classicsetup_retail_build_fido_argv(
+               "/usr/bin/pwsh", CLASSICSETUP_TEST_FIDO_SCRIPT,
+               &release, arguments,
+               sizeof(arguments) / sizeof(arguments[0])) == 0);
+    assert(strcmp(arguments[1], "-NoLogo") == 0);
+    assert(strcmp(arguments[5], CLASSICSETUP_TEST_FIDO_SCRIPT) == 0);
+    assert(strcmp(arguments[15], "x64") == 0);
+    assert(arguments[17] == NULL);
+    assert(classicsetup_retail_validate_script(
+               CLASSICSETUP_TEST_FIDO_SCRIPT,
+               CLASSICSETUP_TEST_FIDO_SHA256) == 0);
+
+    assert(mkdtemp(directory) != NULL);
+    assert(snprintf(resolver, sizeof(resolver), "%s/pwsh", directory) > 0);
+    file = fopen(resolver, "w");
+    assert(file != NULL);
+    assert(fputs("#!/bin/sh\nprintf '%s\\n' "
+                 "'https://software.download.prss.microsoft.com/test.iso?token=secret'\n",
+                 file) >= 0);
+    assert(fclose(file) == 0);
+    assert(chmod(resolver, 0700) == 0);
+    assert(setenv("CLASSICSETUP_PWSH", resolver, 1) == 0);
+    assert(setenv("CLASSICSETUP_FIDO_SCRIPT",
+                  CLASSICSETUP_TEST_FIDO_SCRIPT, 1) == 0);
+    atomic_init(&cancel_requested, false);
+    assert(classicsetup_retail_resolve(
+               &release, &cancel_requested, NULL, NULL, &status) == 0);
+    assert(release.resolved);
+    assert(strcmp(status.delivery_host,
+                  "software.download.prss.microsoft.com") == 0);
+    assert(strstr(status.detail, "secret") == NULL);
+    assert(classicsetup_retail_parse_wim_metadata(
+               &release,
+               "Name: Windows 11 Pro\n"
+               "Architecture: x86_64\n"
+               "Default Language: ko-KR\n"
+               "Edition ID: Professional\n"
+               "Build: 26100\n"
+               "Service Pack Build: 1\n",
+               "/private/windows.iso", &verified_source) == 0);
+    assert(verified_source.verified);
+    assert(strcmp(verified_source.build, "26100.1") == 0);
+    assert(strcmp(verified_source.edition, "Professional") == 0);
+    assert(verified_source.architecture == CLASSICSETUP_ARCH_X64);
+    assert(classicsetup_retail_parse_wim_metadata(
+               &release,
+               "Name: Windows 11 Pro\nArchitecture: ARM64\n"
+               "Default Language: ko-KR\n",
+               "/private/windows.iso", &verified_source) != 0);
+    memset(release.download_uri, 0, sizeof(release.download_uri));
+    release.resolved = false;
+    assert(unsetenv("CLASSICSETUP_PWSH") == 0);
+    assert(unsetenv("CLASSICSETUP_FIDO_SCRIPT") == 0);
+    assert(unlink(resolver) == 0);
+    assert(rmdir(directory) == 0);
 #endif
 }
 
@@ -395,5 +474,6 @@ int main(void)
     test_workspace_and_verification();
     test_workspace_root_policy();
     test_download_backend_fallback();
+    test_retail_model_and_resolver();
     return 0;
 }

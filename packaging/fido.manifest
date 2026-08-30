@@ -1,0 +1,12 @@
+upstream=https://github.com/pbatard/Fido
+tag=v1.70
+commit=3d47260b8915385c58e20c73e24b36e9a9536f3f
+release_asset=Fido.ps1.lzma
+release_asset_sha256=7153c6e68f77ef232126a04709385c5c96ebfc2b329de1bcc00a5d5598a785fd
+extracted_script_sha256=06214e340bf0f732d373498c8df9abc78585cdd9e4009b030fa52553fbbc7f23
+runtime_download_policy=never
+linux_port_source=Fido-v1.70
+linux_port_revision=classicsetup-m13-2
+linux_port_path=lib/classicsetup/tools/fido/fido-linux.ps1
+linux_port_sha256=cfd466e79ae8c687a09447249534a99903ed5c52ce3b0cc4fb71475058ab66f7
+linux_validation=windows-11-latest-korean-x64-signed-link-live-verified

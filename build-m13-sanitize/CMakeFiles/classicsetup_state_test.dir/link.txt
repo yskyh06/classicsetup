@@ -1,0 +1,1 @@
+/usr/bin/cc -fsanitize=address,undefined -fno-omit-frame-pointer -g -fsanitize=address,undefined -Wl,--dependency-file=CMakeFiles/classicsetup_state_test.dir/link.d CMakeFiles/classicsetup_state_test.dir/tests/state_test.c.o CMakeFiles/classicsetup_state_test.dir/src/state.c.o -o classicsetup_state_test

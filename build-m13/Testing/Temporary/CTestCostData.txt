@@ -1,0 +1,18 @@
+state_transitions 3 0.000558935
+gui_navigation 2 0.000743888
+windows_source_pipeline 3 0.00222533
+uup_backend_model 3 0.0357096
+network_model 3 0.000578354
+disk_scan 3 0.000588072
+partition_scan 3 0.000581672
+partition_plan 3 0.000675989
+format_plan 3 0.00040127
+apply_safety_and_render 3 0.00286745
+format_apply 3 0.00103414
+recommended_policy 3 0.00101549
+tui_compact_layout 3 0.000505051
+key_mapping 3 0.000360472
+tui_no_function_keys 3 0.00350182
+tui_back_key_policy 3 0.00247946
+fido_runtime_staging 2 0.897297
+---

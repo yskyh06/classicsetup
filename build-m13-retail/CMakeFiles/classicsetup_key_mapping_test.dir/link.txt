@@ -1,0 +1,1 @@
+/usr/bin/cc -g -Wl,--dependency-file=CMakeFiles/classicsetup_key_mapping_test.dir/link.d CMakeFiles/classicsetup_key_mapping_test.dir/tests/key_mapping_test.c.o CMakeFiles/classicsetup_key_mapping_test.dir/src/tui/keymap.c.o -o classicsetup_key_mapping_test  -lcurses /usr/lib/x86_64-linux-gnu/libform.so

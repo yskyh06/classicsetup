@@ -1,0 +1,26 @@
+CMakeFiles/classicsetup.dir/src/gui/gtk_stub.c.o: \
+ /home/yskyh06/linux-workspace/classicsetup/src/gui/gtk_stub.c \
+ /usr/include/stdc-predef.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/gui.h \
+ /usr/lib/gcc/x86_64-linux-gnu/15/include/stdbool.h \
+ /usr/lib/gcc/x86_64-linux-gnu/15/include/stddef.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/config.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/apply.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/disk.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/environment.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/install_mode.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/partition.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/partition_plan.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/process.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/system_disk.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/download.h \
+ /usr/lib/gcc/x86_64-linux-gnu/15/include/stdatomic.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/windows_source.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/workspace.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/format.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/format_apply.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/recommended.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/setup_mode.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/network.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/retail.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/uup.h

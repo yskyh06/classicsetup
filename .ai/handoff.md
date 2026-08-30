@@ -1,89 +1,104 @@
-# ClassicSetup Handoff
+# Current milestone
 
-## Current milestone
+M16-WEB-RETAIL prototype: conditionally embed the official Microsoft Windows
+11 page in GTK, capture the user's real Microsoft ISO download click, and hand
+the ephemeral URI to the existing ClassicSetup libcurl pipeline.
 
-- M12 workspace-root refinement for tmpfs environments.
-- The GTK UUP pipeline remains connected and preferred for the validated automatic Windows
-  source; final disk/image apply is still disconnected.
-- M7/M8 destructive safety, Recommended/Advanced disk policy, NetworkManager, source
-  discovery, payload verification, and ISO/WIM verification were not changed.
+# Changed files
 
-## Changed files
+- `CMakeLists.txt`: added optional `CLASSICSETUP_ENABLE_WEBKIT_RETAIL` and
+  `webkitgtk-6.0` detection/linking only for an enabled GTK frontend.
+- `include/classicsetup/retail_browser.h`: browser stages, safe URI policy,
+  capture, fallback, and URI-clearing API.
+- `src/source/retail_browser.c`: narrow Microsoft navigation/download policy
+  and backend-neutral browser state machine.
+- `include/classicsetup/gui.h`, `src/gui/gui.c`: browser state in the GUI
+  session and reset/discard lifecycle.
+- `src/gui/gtk_frontend.c`: ephemeral WebKit view, ordinary page preparation,
+  real-link capture, WebKit cancellation, and existing downloader handoff.
+- `tests/gui_test.c`: state, URI allow/reject, capture/clear, and full-page
+  fallback coverage.
 
-- `include/classicsetup/workspace.h`: workspace creation result/diagnostic types, selected
-  base path, reserve-aware creation, capacity, and diagnostic APIs.
-- `src/source/workspace.c`: configurable root selection, private child validation, selected
-  filesystem capacity checks, and cleanup path hardening.
-- `include/classicsetup/uup.h`, `src/source/uup.c`: shared 24 GiB reserve and workspace
-  diagnostic state; the pipeline rechecks the filesystem containing the actual workspace.
-- `src/gui/gtk_frontend.c`: reserve-aware workspace creation, unchanged user-facing
-  out-of-space message, and debug-only sanitized capacity diagnostics.
-- `CMakeLists.txt`: optional `CLASSICSETUP_WORKSPACE_ROOT` configure-time staging root.
-- `tests/source_test.c`: override, capacity, symlink, relative-path, and cleanup-boundary
-  regressions.
+# Implementation result
 
-## Implementation result
+- WebKitGTK is GTK-only and optional. GTK OFF and dependency-missing builds use
+  the existing frontend/stub paths without WebKit headers or linkage.
+- Ubuntu 26.04 provides GTK4-compatible `libwebkitgtk-6.0-dev`, pkg-config
+  module `webkitgtk-6.0`, version `2.52.3`.
+- The official page is
+  `https://www.microsoft.com/ko-kr/software-download/windows11`.
+- A live page-source check on 2026-08-30 confirmed current IDs:
+  `product-edition`, `submit-product-edition`, `product-languages`,
+  `submit-sku`, and `SoftwareDownload_DownloadLinks`.
+- Automation selects only a page-provided x64 edition and a page-provided
+  Korean/ko-KR language, then clicks Microsoft's normal confirmation controls.
+  It does not supply product/SKU IDs or interact with challenges.
+- If a challenge, missing DOM, script failure, or timeout is detected, the
+  complete Microsoft page remains visible for manual use.
+- Once the final area exists, CSS focuses the original Microsoft container;
+  no ClassicSetup replacement download button is created.
+- An ephemeral `WebKitNetworkSession` is used with persistent credential
+  storage disabled. No browser cookies/history/download database are written
+  to the ClassicSetup workspace.
+- Both WebKit `download-started` and navigation policy paths are handled.
+  WebKit's transfer is cancelled/ignored after accepting the real click.
+- Accepted delivery URIs must be absolute HTTPS, end in `.iso`, and use exactly
+  `software.download.prss.microsoft.com`. Unexpected top-level navigation is
+  blocked; arbitrary Microsoft subdomains are not accepted.
+- The signed URI is memory-only, never logged or stored in handoff, is wiped
+  from temporary release objects, and is re-obtained after Retry.
+- The URI is copied into the existing asynchronous libcurl download request;
+  `windows.iso.part`, free-space checks, TLS, progress/cancel, ISO/image
+  inspection, promotion, and cleanup remain owned by existing modules.
+- If the page exposes the official Korean SHA-256, it is captured and passed to
+  the existing verifier. Without it, no hash-verification claim is made.
+- Browser stages cover page preparation/waiting, user click, download,
+  ISO verification, image inspection, completion, failure, and cancellation.
+- Direct package footprint is about 122 MiB for WebKitGTK and JavaScriptCore
+  runtime libraries, before their supporting runtime dependencies; final
+  rootfs sizing remains pending.
+- Fido and msdl are retained unchanged, Mido remains rejected, and UUP remains
+  frozen. No destructive/storage/install execution code was modified or run.
 
-- Runtime root precedence is:
-  1. non-empty `CLASSICSETUP_WORKSPACE_ROOT` environment override;
-  2. non-empty CMake `CLASSICSETUP_WORKSPACE_ROOT` configured staging directory;
-  3. `/var/tmp`;
-  4. `/tmp` as the final fallback.
-- `/var/tmp` is therefore preferred over `/tmp` for multi-GiB artifacts. This fixes the
-  observed Ubuntu VM case where `/tmp` is a roughly 2.7 GiB tmpfs while the persistent root
-  filesystem has about 50 GiB free.
-- An explicit/configured root must be absolute, must be a real directory rather than a
-  symlink, and must be writable/searchable. Invalid explicit roots fail closed instead of
-  silently redirecting files elsewhere.
-- Under the selected base, ClassicSetup creates or validates a private
-  `classicsetup-<effective-uid>` directory owned by the process user with exact mode 0700,
-  then creates a unique `workspace-XXXXXX` child with mode 0700.
-- The workspace manager records both the selected base and unique root. Artifact cleanup
-  remains scoped to validated paths beneath that unique workspace and rejects empty, `.` or
-  `..` path components; it does not recursively remove the selected base or private parent.
-- `statvfs()` is run on the selected private parent before creation and again on the actual
-  unique workspace. The UUP pipeline repeats the check on its actual workspace path before
-  downloading. It no longer consults `/tmp` when another filesystem owns the workspace.
-- The conservative reserve remains 24 GiB (`CLASSICSETUP_UUP_WORKSPACE_RESERVE_BYTES`).
-  Insufficient capacity still presents `There is not enough temporary storage.`
-- Debug builds may report only the selected workspace root, available bytes/GiB, and required
-  bytes/GiB. No URL token, cookie, credential, or unrelated path is included.
-- No user home path is hardcoded. A production image may set the CMake staging root; local
-  development can use, for example, an absolute persistent path through the environment.
-- The existing UUP lifecycle remains unchanged: partial/conversion artifacts are
-  workspace-owned; verified source retention and cancellation/failure cleanup keep their
-  established boundaries.
+# Build/test result
 
-## Build/test result
+- GTK ON + WebKit Retail ON + UUP ON: built with the exact Ubuntu 2.52.3
+  packages extracted into an isolated `/tmp` SDK; no package was installed.
+- GTK ON + WebKit Retail OFF + UUP OFF: built.
+- GTK OFF + WebKit Retail request ON + UUP ON: built with WebKit cleanly
+  disabled because the GTK frontend is unavailable.
+- C17 with `-Wall -Wextra -Wpedantic`: zero project warnings.
+- CTest: 17/17 passed in all three normal build configurations.
+- ASan/UBSan: 16/16 applicable tests passed with leak detection disabled for
+  the ptrace-constrained environment; the UUP self-execution test was excluded.
+- `git diff --check`: passed.
+- The Microsoft public page and DOM were fetched successfully, but WebKitGTK is
+  not installed in this WSL host and no Ubuntu Desktop GUI live run occurred.
+- Therefore automatic preparation, final-control visibility, user-click
+  capture, and libcurl transfer start are implemented but not live verified.
 
-- Clean Debug GTK ON + UUP ON: build succeeds with C17 and no
-  `-Wall -Wextra -Wpedantic` warnings; CTest 16/16 passes.
-- Clean Debug GTK OFF + UUP ON: build succeeds with no warnings; CTest 16/16 passes.
-- ASan+UBSan GTK OFF + UUP ON: CTest 16/16 passes with leak detection disabled because
-  LeakSanitizer cannot operate under this environment's ptrace supervision.
-- Tests cover a small-capacity candidate versus a large alternate root, selected-root
-  insufficient capacity, relative override rejection, symlink-root rejection, 0700 private
-  ownership, diagnostic formatting, and cleanup escape prevention.
-- `git diff --check` passes. No ISO/UUP payload download or destructive disk operation ran.
+# Topics for ChatGPT to explain
 
-## Topics for ChatGPT to explain
+- WebKitGTK network-session privacy and GTK main-loop ownership.
+- `decide-policy` versus `download-started` and why both capture paths exist.
+- Fail-open-to-full-page DOM automation without challenge bypasses.
+- Narrow signed-URI policy, in-memory lifetime, and redaction boundaries.
+- Existing libcurl downloader reuse and minimal ISO/WIM verification.
+- Conditional dependency detection and expected rootfs size impact.
 
-- Why `/tmp` may be tmpfs and why `/var/tmp` is a safer default for large installer staging.
-- Environment/config/default precedence and why invalid explicit configuration fails closed.
-- `statvfs()` capacity checks on the filesystem that will actually own an artifact.
-- Secure temporary-directory construction with absolute paths, ownership, 0700 permissions,
-  symlink rejection, and unique `mkdtemp()` children.
-- Workspace ownership boundaries and why recursive cleanup must never escape the unique root.
-- Difference between user-facing storage errors and sanitized debug capacity diagnostics.
+# Issues/cautions
 
-## Issues/cautions
-
-- The 24 GiB gate is intentionally conservative and may need measurement-based refinement
-  for future direct-WIM or target-disk staging paths.
-- Intermediate ancestor symlink policy is delegated to the administrator-selected absolute
-  base; the selected base itself and ClassicSetup-owned child are validated and fail closed.
-- `/var/tmp` and `/tmp` fallback availability still depends on runtime permissions. If neither
-  is safe/usable, workspace creation fails rather than weakening ownership checks.
-- Actual GTK UUP multi-GiB transfer was not repeated for this refinement.
-- Direct WIM, final image apply, disk transaction, EFI/BCD, and boot configuration remain
-  future work; existing UUPMediaCreator/libwim rootfs ABI cautions remain applicable.
+- Install `libwebkitgtk-6.0-dev` on the Ubuntu Desktop validation VM; without
+  pkg-config module `webkitgtk-6.0`, the feature intentionally compiles out.
+- The M16 success gate is not yet live verified through GTK. Manual test:
+  launch ClassicSetup on Ubuntu Desktop, reach Download, open the Microsoft
+  page, confirm Windows 11/Korean/x64, click Microsoft's real x64 control,
+  verify WebKit disappears and libcurl starts, then Cancel promptly.
+- Microsoft can change its DOM or present a consent/challenge. The safe result
+  is the full official page, never guessed selectors or security automation.
+- Only `software.download.prss.microsoft.com` is approved for ISO delivery.
+  Any newly observed host requires explicit review before code changes.
+- Existing ISO UI remains disabled because that fallback is not implemented.
+- No full ISO was downloaded; ISO/WIM verification was not live exercised.
+- Final Install, partition/format apply, WIM apply, EFI, BCD, and reboot remain
+  disconnected and untouched.

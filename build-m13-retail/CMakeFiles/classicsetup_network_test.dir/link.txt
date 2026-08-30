@@ -1,0 +1,1 @@
+/usr/bin/cc -g -Wl,--dependency-file=CMakeFiles/classicsetup_network_test.dir/link.d CMakeFiles/classicsetup_network_test.dir/tests/network_test.c.o CMakeFiles/classicsetup_network_test.dir/src/network/network.c.o -o classicsetup_network_test

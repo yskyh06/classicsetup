@@ -1,0 +1,54 @@
+CMakeFiles/classicsetup.dir/src/app.c.o: \
+ /home/yskyh06/linux-workspace/classicsetup/src/app.c \
+ /usr/include/stdc-predef.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/app.h \
+ /usr/include/stdlib.h \
+ /usr/include/x86_64-linux-gnu/bits/libc-header-start.h \
+ /usr/include/features.h /usr/include/features-time64.h \
+ /usr/include/x86_64-linux-gnu/bits/wordsize.h \
+ /usr/include/x86_64-linux-gnu/bits/timesize.h \
+ /usr/include/x86_64-linux-gnu/sys/cdefs.h \
+ /usr/include/x86_64-linux-gnu/bits/long-double.h \
+ /usr/include/x86_64-linux-gnu/gnu/stubs.h \
+ /usr/include/x86_64-linux-gnu/gnu/stubs-64.h \
+ /usr/lib/gcc/x86_64-linux-gnu/15/include/stddef.h \
+ /usr/include/x86_64-linux-gnu/bits/floatn.h \
+ /usr/include/x86_64-linux-gnu/bits/floatn-common.h \
+ /usr/include/x86_64-linux-gnu/bits/stdlib-float.h /usr/include/string.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/after_format.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/apply.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/disk.h \
+ /usr/lib/gcc/x86_64-linux-gnu/15/include/stdbool.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/environment.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/install_mode.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/partition.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/partition_plan.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/process.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/system_disk.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/apply_tui.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/config.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/download.h \
+ /usr/lib/gcc/x86_64-linux-gnu/15/include/stdatomic.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/windows_source.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/workspace.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/format.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/format_apply.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/recommended.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/setup_mode.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/disk_selection.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/format_selection.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/format_apply_tui.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/gui.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/network.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/retail.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/uup.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/install_mode_selection.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/keyboard.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/license_agreement.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/partition_selection.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/quit.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/recommended_tui.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/setup_mode_selection.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/state.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/tui.h \
+ /home/yskyh06/linux-workspace/classicsetup/include/classicsetup/welcome.h

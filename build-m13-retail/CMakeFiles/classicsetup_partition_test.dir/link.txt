@@ -1,0 +1,1 @@
+/usr/bin/cc -g -Wl,--dependency-file=CMakeFiles/classicsetup_partition_test.dir/link.d CMakeFiles/classicsetup_partition_test.dir/tests/partition_test.c.o CMakeFiles/classicsetup_partition_test.dir/src/core/partition.c.o -o classicsetup_partition_test

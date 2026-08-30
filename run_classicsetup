@@ -1,0 +1,114 @@
+#!/bin/sh
+
+set -eu
+
+project_root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+find_pwsh()
+{
+    if [ -n "${CLASSICSETUP_PWSH:-}" ]; then
+        case "$CLASSICSETUP_PWSH" in
+            /*) ;;
+            *) echo "CLASSICSETUP_PWSH must be an absolute path." >&2; return 1 ;;
+        esac
+        if [ ! -x "$CLASSICSETUP_PWSH" ]; then
+            echo "CLASSICSETUP_PWSH is not executable." >&2
+            return 1
+        fi
+        printf '%s\n' "$CLASSICSETUP_PWSH"
+        return 0
+    fi
+
+    if command -v pwsh >/dev/null 2>&1; then
+        command -v pwsh
+        return 0
+    fi
+
+    for candidate in \
+        /opt/microsoft/powershell/7/pwsh \
+        "$project_root/tools/powershell/opt/microsoft/powershell/7/pwsh"
+    do
+        if [ -x "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+if ! pwsh_path=$(find_pwsh); then
+    if [ -n "${CLASSICSETUP_PWSH:-}" ]; then
+        exit 1
+    fi
+    pwsh_path=
+fi
+if [ -n "$pwsh_path" ]; then
+    CLASSICSETUP_PWSH=$pwsh_path
+    export CLASSICSETUP_PWSH
+fi
+
+if [ -n "${CLASSICSETUP_FIDO_SCRIPT:-}" ]; then
+    case "$CLASSICSETUP_FIDO_SCRIPT" in
+        /*) ;;
+        *) echo "CLASSICSETUP_FIDO_SCRIPT must be an absolute path." >&2; exit 1 ;;
+    esac
+    if [ ! -f "$CLASSICSETUP_FIDO_SCRIPT" ]; then
+        echo "CLASSICSETUP_FIDO_SCRIPT was not found." >&2
+        exit 1
+    fi
+else
+    if [ -f "$project_root/tools/fido/fido-linux.ps1" ]; then
+        CLASSICSETUP_FIDO_SCRIPT=$project_root/tools/fido/fido-linux.ps1
+    elif [ -f /usr/lib/classicsetup/tools/fido/fido-linux.ps1 ]; then
+        CLASSICSETUP_FIDO_SCRIPT=/usr/lib/classicsetup/tools/fido/fido-linux.ps1
+    fi
+    export CLASSICSETUP_FIDO_SCRIPT
+fi
+
+if [ -n "${CLASSICSETUP_FIDO_SCRIPT:-}" ]; then
+    expected_fido_hash=cfd466e79ae8c687a09447249534a99903ed5c52ce3b0cc4fb71475058ab66f7
+    actual_fido_hash=$(sha256sum "$CLASSICSETUP_FIDO_SCRIPT" | awk '{print $1}')
+    if [ "$actual_fido_hash" != "$expected_fido_hash" ]; then
+        echo "The pinned Fido script failed SHA-256 verification." >&2
+        exit 1
+    fi
+fi
+
+if [ -z "${CLASSICSETUP_UUP_TOOL_ROOT:-}" ] &&
+   [ -x "$project_root/tools/uupmediacreator/UUPDownload" ]; then
+    CLASSICSETUP_UUP_TOOL_ROOT=$project_root/tools/uupmediacreator
+    export CLASSICSETUP_UUP_TOOL_ROOT
+fi
+if [ -z "${CLASSICSETUP_UUP_CONVERTER_ROOT:-}" ] &&
+   [ -x "$project_root/tools/uupmediacreator/UUPMediaConverter" ]; then
+    CLASSICSETUP_UUP_CONVERTER_ROOT=$project_root/tools/uupmediacreator
+    export CLASSICSETUP_UUP_CONVERTER_ROOT
+fi
+
+if [ "${1:-}" = "--print-runtime" ]; then
+    printf 'pwsh=%s\n' "${CLASSICSETUP_PWSH:-<unavailable>}"
+    printf 'fido=%s\n' "${CLASSICSETUP_FIDO_SCRIPT:-<unavailable>}"
+    printf 'uup=%s\n' "${CLASSICSETUP_UUP_TOOL_ROOT:-<unavailable>}"
+    printf 'workspace=%s\n' "${CLASSICSETUP_WORKSPACE_ROOT:-/var/tmp then /tmp}"
+    exit 0
+fi
+
+classicsetup_binary=${CLASSICSETUP_BINARY:-$project_root/build/classicsetup}
+if [ ! -x "$classicsetup_binary" ]; then
+    echo "ClassicSetup executable was not found: $classicsetup_binary" >&2
+    exit 1
+fi
+
+if [ "${CLASSICSETUP_RUN_WITH_SUDO:-0}" = 1 ]; then
+    exec sudo env \
+        CLASSICSETUP_PWSH="${CLASSICSETUP_PWSH:-}" \
+        CLASSICSETUP_FIDO_SCRIPT="${CLASSICSETUP_FIDO_SCRIPT:-}" \
+        CLASSICSETUP_UUP_TOOL_ROOT="${CLASSICSETUP_UUP_TOOL_ROOT:-}" \
+        CLASSICSETUP_UUP_CONVERTER_ROOT="${CLASSICSETUP_UUP_CONVERTER_ROOT:-}" \
+        CLASSICSETUP_UUP_DOTNET_ROOT="${CLASSICSETUP_UUP_DOTNET_ROOT:-}" \
+        CLASSICSETUP_WORKSPACE_ROOT="${CLASSICSETUP_WORKSPACE_ROOT:-}" \
+        CLASSICSETUP_DESTRUCTIVE_UNLOCK="${CLASSICSETUP_DESTRUCTIVE_UNLOCK:-}" \
+        "$classicsetup_binary" "$@"
+fi
+
+exec "$classicsetup_binary" "$@"

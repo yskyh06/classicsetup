@@ -62,6 +62,7 @@ int classicsetup_download_windows_iso(
     atomic_bool *cancel_requested,
     classicsetup_download_progress_callback progress,
     void *progress_data,
-    struct classicsetup_download_status *status);
+    struct classicsetup_download_status *status,
+    struct classicsetup_verified_windows_source *verified_source);
 
 #endif

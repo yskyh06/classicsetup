@@ -1,0 +1,259 @@
+Start testing: Aug 29 22:40 KST
+----------------------------------------------------------
+1/17 Testing: state_transitions
+1/17 Test: state_transitions
+Command: "/home/yskyh06/linux-workspace/classicsetup/build-m13/classicsetup_state_test"
+Directory: /home/yskyh06/linux-workspace/classicsetup/build-m13
+"state_transitions" start time: Aug 29 22:40 KST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"state_transitions" end time: Aug 29 22:40 KST
+"state_transitions" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/17 Testing: gui_navigation
+2/17 Test: gui_navigation
+Command: "/home/yskyh06/linux-workspace/classicsetup/build-m13/classicsetup_gui_test"
+Directory: /home/yskyh06/linux-workspace/classicsetup/build-m13
+"gui_navigation" start time: Aug 29 22:40 KST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"gui_navigation" end time: Aug 29 22:40 KST
+"gui_navigation" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/17 Testing: windows_source_pipeline
+3/17 Test: windows_source_pipeline
+Command: "/home/yskyh06/linux-workspace/classicsetup/build-m13/classicsetup_source_test"
+Directory: /home/yskyh06/linux-workspace/classicsetup/build-m13
+"windows_source_pipeline" start time: Aug 29 22:40 KST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"windows_source_pipeline" end time: Aug 29 22:40 KST
+"windows_source_pipeline" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/17 Testing: uup_backend_model
+4/17 Test: uup_backend_model
+Command: "/home/yskyh06/linux-workspace/classicsetup/build-m13/classicsetup_uup_test"
+Directory: /home/yskyh06/linux-workspace/classicsetup/build-m13
+"uup_backend_model" start time: Aug 29 22:40 KST
+Output:
+----------------------------------------------------------
+uup backend tests passed
+<end of output>
+Test time =   0.11 sec
+----------------------------------------------------------
+Test Passed.
+"uup_backend_model" end time: Aug 29 22:40 KST
+"uup_backend_model" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/17 Testing: network_model
+5/17 Test: network_model
+Command: "/home/yskyh06/linux-workspace/classicsetup/build-m13/classicsetup_network_test"
+Directory: /home/yskyh06/linux-workspace/classicsetup/build-m13
+"network_model" start time: Aug 29 22:40 KST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"network_model" end time: Aug 29 22:40 KST
+"network_model" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/17 Testing: disk_scan
+6/17 Test: disk_scan
+Command: "/home/yskyh06/linux-workspace/classicsetup/build-m13/classicsetup_disk_test"
+Directory: /home/yskyh06/linux-workspace/classicsetup/build-m13
+"disk_scan" start time: Aug 29 22:40 KST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"disk_scan" end time: Aug 29 22:40 KST
+"disk_scan" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/17 Testing: partition_scan
+7/17 Test: partition_scan
+Command: "/home/yskyh06/linux-workspace/classicsetup/build-m13/classicsetup_partition_test"
+Directory: /home/yskyh06/linux-workspace/classicsetup/build-m13
+"partition_scan" start time: Aug 29 22:40 KST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"partition_scan" end time: Aug 29 22:40 KST
+"partition_scan" time elapsed: 00:00:00
+----------------------------------------------------------
+
+8/17 Testing: partition_plan
+8/17 Test: partition_plan
+Command: "/home/yskyh06/linux-workspace/classicsetup/build-m13/classicsetup_partition_plan_test"
+Directory: /home/yskyh06/linux-workspace/classicsetup/build-m13
+"partition_plan" start time: Aug 29 22:40 KST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"partition_plan" end time: Aug 29 22:40 KST
+"partition_plan" time elapsed: 00:00:00
+----------------------------------------------------------
+
+9/17 Testing: format_plan
+9/17 Test: format_plan
+Command: "/home/yskyh06/linux-workspace/classicsetup/build-m13/classicsetup_format_test"
+Directory: /home/yskyh06/linux-workspace/classicsetup/build-m13
+"format_plan" start time: Aug 29 22:40 KST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"format_plan" end time: Aug 29 22:40 KST
+"format_plan" time elapsed: 00:00:00
+----------------------------------------------------------
+
+10/17 Testing: apply_safety_and_render
+10/17 Test: apply_safety_and_render
+Command: "/home/yskyh06/linux-workspace/classicsetup/build-m13/classicsetup_apply_test"
+Directory: /home/yskyh06/linux-workspace/classicsetup/build-m13
+"apply_safety_and_render" start time: Aug 29 22:40 KST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"apply_safety_and_render" end time: Aug 29 22:40 KST
+"apply_safety_and_render" time elapsed: 00:00:00
+----------------------------------------------------------
+
+11/17 Testing: format_apply
+11/17 Test: format_apply
+Command: "/home/yskyh06/linux-workspace/classicsetup/build-m13/classicsetup_format_apply_test"
+Directory: /home/yskyh06/linux-workspace/classicsetup/build-m13
+"format_apply" start time: Aug 29 22:40 KST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"format_apply" end time: Aug 29 22:40 KST
+"format_apply" time elapsed: 00:00:00
+----------------------------------------------------------
+
+12/17 Testing: recommended_policy
+12/17 Test: recommended_policy
+Command: "/home/yskyh06/linux-workspace/classicsetup/build-m13/classicsetup_recommended_test"
+Directory: /home/yskyh06/linux-workspace/classicsetup/build-m13
+"recommended_policy" start time: Aug 29 22:40 KST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"recommended_policy" end time: Aug 29 22:40 KST
+"recommended_policy" time elapsed: 00:00:00
+----------------------------------------------------------
+
+13/17 Testing: tui_compact_layout
+13/17 Test: tui_compact_layout
+Command: "/home/yskyh06/linux-workspace/classicsetup/build-m13/classicsetup_tui_layout_test"
+Directory: /home/yskyh06/linux-workspace/classicsetup/build-m13
+"tui_compact_layout" start time: Aug 29 22:40 KST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"tui_compact_layout" end time: Aug 29 22:40 KST
+"tui_compact_layout" time elapsed: 00:00:00
+----------------------------------------------------------
+
+14/17 Testing: key_mapping
+14/17 Test: key_mapping
+Command: "/home/yskyh06/linux-workspace/classicsetup/build-m13/classicsetup_key_mapping_test"
+Directory: /home/yskyh06/linux-workspace/classicsetup/build-m13
+"key_mapping" start time: Aug 29 22:40 KST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"key_mapping" end time: Aug 29 22:40 KST
+"key_mapping" time elapsed: 00:00:00
+----------------------------------------------------------
+
+15/17 Testing: tui_no_function_keys
+15/17 Test: tui_no_function_keys
+Command: "/usr/bin/cmake" "-DSOURCE_DIR=/home/yskyh06/linux-workspace/classicsetup" "-P" "/home/yskyh06/linux-workspace/classicsetup/tests/check_no_function_keys.cmake"
+Directory: /home/yskyh06/linux-workspace/classicsetup/build-m13
+"tui_no_function_keys" start time: Aug 29 22:40 KST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"tui_no_function_keys" end time: Aug 29 22:40 KST
+"tui_no_function_keys" time elapsed: 00:00:00
+----------------------------------------------------------
+
+16/17 Testing: tui_back_key_policy
+16/17 Test: tui_back_key_policy
+Command: "/usr/bin/cmake" "-DSOURCE_DIR=/home/yskyh06/linux-workspace/classicsetup" "-P" "/home/yskyh06/linux-workspace/classicsetup/tests/check_back_key_policy.cmake"
+Directory: /home/yskyh06/linux-workspace/classicsetup/build-m13
+"tui_back_key_policy" start time: Aug 29 22:40 KST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"tui_back_key_policy" end time: Aug 29 22:40 KST
+"tui_back_key_policy" time elapsed: 00:00:00
+----------------------------------------------------------
+
+17/17 Testing: fido_runtime_staging
+17/17 Test: fido_runtime_staging
+Command: "/home/yskyh06/linux-workspace/classicsetup/tests/fido_staging_test.sh" "/home/yskyh06/linux-workspace/classicsetup"
+Directory: /home/yskyh06/linux-workspace/classicsetup/build-m13
+"fido_runtime_staging" start time: Aug 29 22:40 KST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   1.79 sec
+----------------------------------------------------------
+Test Passed.
+"fido_runtime_staging" end time: Aug 29 22:40 KST
+"fido_runtime_staging" time elapsed: 00:00:01
+----------------------------------------------------------
+
+End testing: Aug 29 22:40 KST

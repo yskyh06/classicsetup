@@ -7,6 +7,8 @@
 #include "classicsetup/config.h"
 #include "classicsetup/download.h"
 #include "classicsetup/network.h"
+#include "classicsetup/retail.h"
+#include "classicsetup/retail_browser.h"
 #include "classicsetup/uup.h"
 
 enum {
@@ -89,6 +91,8 @@ struct classicsetup_gui_session {
     bool has_selected_release;
     struct classicsetup_download_status download;
     struct classicsetup_uup_status uup_status;
+    struct classicsetup_retail_status retail_status;
+    struct classicsetup_retail_browser_status retail_browser_status;
     struct classicsetup_verified_windows_source verified_source;
     struct classicsetup_workspace workspace;
     bool options_placeholder;

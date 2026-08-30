@@ -1,0 +1,33 @@
+Start testing: Aug 29 22:39 KST
+----------------------------------------------------------
+2/17 Testing: gui_navigation
+2/17 Test: gui_navigation
+Command: "/home/yskyh06/linux-workspace/classicsetup/build-m13-sanitize/classicsetup_gui_test"
+Directory: /home/yskyh06/linux-workspace/classicsetup/build-m13-sanitize
+"gui_navigation" start time: Aug 29 22:39 KST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"gui_navigation" end time: Aug 29 22:39 KST
+"gui_navigation" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/17 Testing: windows_source_pipeline
+3/17 Test: windows_source_pipeline
+Command: "/home/yskyh06/linux-workspace/classicsetup/build-m13-sanitize/classicsetup_source_test"
+Directory: /home/yskyh06/linux-workspace/classicsetup/build-m13-sanitize
+"windows_source_pipeline" start time: Aug 29 22:39 KST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"windows_source_pipeline" end time: Aug 29 22:39 KST
+"windows_source_pipeline" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Aug 29 22:39 KST

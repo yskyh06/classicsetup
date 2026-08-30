@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "classicsetup/download.h"
+#include "classicsetup/retail.h"
 
 #include <curl/curl.h>
 #include <fcntl.h>
@@ -183,13 +184,19 @@ static void fail_status(struct classicsetup_download_status *status,
     (void)snprintf(status->message, sizeof(status->message), "%s", message);
 }
 
+static bool download_cancel_callback(void *context)
+{
+    return context != NULL && atomic_load((atomic_bool *)context);
+}
+
 int classicsetup_download_windows_iso(
     const struct classicsetup_windows_release *release,
     struct classicsetup_workspace *workspace,
     atomic_bool *cancel_requested,
     classicsetup_download_progress_callback progress,
     void *progress_data,
-    struct classicsetup_download_status *status)
+    struct classicsetup_download_status *status,
+    struct classicsetup_verified_windows_source *verified_source)
 {
     struct transfer_context context = {0};
     unsigned long long required_size;
@@ -202,13 +209,16 @@ int classicsetup_download_windows_iso(
     int file_descriptor = -1;
     int result = -1;
     bool curl_initialized = false;
+    struct classicsetup_process_result inspect_result;
+    int inspect_status;
 
     if (release == NULL || workspace == NULL || !workspace->valid ||
-        status == NULL || !release->resolved ||
+        status == NULL || verified_source == NULL || !release->resolved ||
         !classicsetup_windows_source_uri_is_official(release->download_uri)) {
         return -1;
     }
     classicsetup_download_status_reset(status);
+    memset(verified_source, 0, sizeof(*verified_source));
     status->state = CLASSICSETUP_DOWNLOAD_PREPARING;
     required_size = release->expected_size != 0
                         ? release->expected_size : DOWNLOAD_SPACE_FALLBACK;
@@ -310,12 +320,30 @@ int classicsetup_download_windows_iso(
                     "The downloaded Windows image could not be verified.");
         goto done;
     }
+    (void)snprintf(status->message, sizeof(status->message), "%s",
+                   "Inspecting the Windows installation image...");
+    notify(&context);
+    inspect_status = classicsetup_retail_inspect_iso(
+        release, workspace, download_cancel_callback, cancel_requested,
+        verified_source, &inspect_result);
+    if (inspect_status != 0) {
+        fail_status(status,
+                    inspect_status == 1
+                        ? CLASSICSETUP_DOWNLOAD_ERROR_CANCELLED
+                        : CLASSICSETUP_DOWNLOAD_ERROR_ISO,
+                    inspect_status == 1
+                        ? "Download cancelled."
+                        : "The Windows installation image metadata could not be read.");
+        goto done;
+    }
     if (classicsetup_workspace_promote_verified_iso(workspace) != 0) {
         fail_status(status, CLASSICSETUP_DOWNLOAD_ERROR_WRITE,
                     "The verified Windows image could not be finalized.");
         goto done;
     }
     classicsetup_workspace_cleanup_success(workspace);
+    (void)snprintf(verified_source->path, sizeof(verified_source->path), "%s",
+                   workspace->iso_final_path);
     status->state = CLASSICSETUP_DOWNLOAD_COMPLETE;
     status->error = CLASSICSETUP_DOWNLOAD_ERROR_NONE;
     status->progress_fraction = 1.0;
@@ -323,7 +351,7 @@ int classicsetup_download_windows_iso(
         status->message, sizeof(status->message), "%s",
         release->official_hash_available
             ? "Download completed and verified using an official SHA-256 hash."
-            : "Download completed. Official hash was unavailable; basic source checks passed.");
+            : "Windows installation image verified.");
     result = 0;
 done:
     if (context.file != NULL) {
@@ -336,6 +364,7 @@ done:
         curl_global_cleanup();
     }
     if (result != 0) {
+        memset(verified_source, 0, sizeof(*verified_source));
         if (status != NULL &&
             status->state == CLASSICSETUP_DOWNLOAD_CANCELLED) {
             classicsetup_workspace_cleanup_cancel(workspace);

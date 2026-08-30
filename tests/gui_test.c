@@ -43,12 +43,7 @@ static void test_session_and_disk_selection(void)
     assert(session.entry_mode == CLASSICSETUP_GUI_ENTRY_RECOMMENDED);
     assert(session.page == CLASSICSETUP_GUI_PAGE_DISK);
     assert(session.windows_version == CLASSICSETUP_GUI_WINDOWS_11);
-#if CLASSICSETUP_ENABLE_UUP
-    assert(session.source_backend ==
-           CLASSICSETUP_SOURCE_MICROSOFT_UUP);
-#else
     assert(session.source_backend == CLASSICSETUP_SOURCE_MICROSOFT_RETAIL);
-#endif
     assert(session.network.state == CLASSICSETUP_NETWORK_UNAVAILABLE);
     assert(!classicsetup_network_can_continue(&session.network));
     session.firmware = CLASSICSETUP_FIRMWARE_UEFI;
@@ -160,9 +155,8 @@ static void test_source_selection_and_summary_gate(void)
     session.workspace.verified_iso = true;
     session.download.state = CLASSICSETUP_DOWNLOAD_COMPLETE;
     session.download.error = CLASSICSETUP_DOWNLOAD_ERROR_NONE;
-#if CLASSICSETUP_ENABLE_UUP
     session.verified_source.backend =
-        CLASSICSETUP_SOURCE_MICROSOFT_UUP;
+        CLASSICSETUP_SOURCE_MICROSOFT_RETAIL;
     session.verified_source.kind = CLASSICSETUP_VERIFIED_SOURCE_ISO;
     session.verified_source.family = CLASSICSETUP_WINDOWS_11;
     session.verified_source.architecture = CLASSICSETUP_ARCH_X64;
@@ -171,7 +165,6 @@ static void test_source_selection_and_summary_gate(void)
     (void)strcpy(session.verified_source.build, "26100.1");
     (void)strcpy(session.verified_source.edition, "Professional");
     session.verified_source.verified = true;
-#endif
     assert(classicsetup_gui_summary_is_ready(&session));
     assert(classicsetup_gui_set_windows_version(
                &session, CLASSICSETUP_GUI_WINDOWS_10) != 0);
@@ -300,6 +293,76 @@ static void test_cascading_source_selection_and_lifecycle(void)
     assert(session.download.state == CLASSICSETUP_DOWNLOAD_NOT_STARTED);
 }
 
+static void test_retail_browser_policy_and_state(void)
+{
+    struct classicsetup_retail_browser_status status;
+    struct classicsetup_windows_release release = {0};
+    const char *signed_uri =
+        "https://software.download.prss.microsoft.com/dbazure/"
+        "Win11_Korean_x64.iso?token=not-logged";
+
+    classicsetup_retail_browser_status_reset(&status);
+    assert(status.stage == CLASSICSETUP_RETAIL_BROWSER_IDLE);
+    assert(classicsetup_retail_browser_transition(
+               &status,
+               CLASSICSETUP_RETAIL_BROWSER_PREPARING_MICROSOFT_PAGE) == 0);
+    assert(classicsetup_retail_browser_transition(
+               &status,
+               CLASSICSETUP_RETAIL_BROWSER_WAITING_FOR_MICROSOFT) == 0);
+    assert(classicsetup_retail_browser_transition(
+               &status,
+               CLASSICSETUP_RETAIL_BROWSER_WAITING_FOR_USER_DOWNLOAD_CLICK) ==
+           0);
+    assert(classicsetup_retail_browser_transition(
+               &status, CLASSICSETUP_RETAIL_BROWSER_COMPLETE) != 0);
+
+    assert(classicsetup_retail_browser_navigation_is_allowed(
+        classicsetup_retail_browser_page_uri()));
+    assert(!classicsetup_retail_browser_navigation_is_allowed(
+        "https://example.com/windows11"));
+    assert(!classicsetup_retail_browser_navigation_is_allowed(
+        "https://support.microsoft.com/windows11"));
+    assert(classicsetup_retail_browser_delivery_uri_is_allowed(signed_uri));
+    assert(!classicsetup_retail_browser_delivery_uri_is_allowed(
+        "http://software.download.prss.microsoft.com/windows.iso"));
+    assert(!classicsetup_retail_browser_delivery_uri_is_allowed(
+        "https://software.download.prss.microsoft.com.evil/windows.iso"));
+    assert(!classicsetup_retail_browser_delivery_uri_is_allowed(
+        "https://software.download.prss.microsoft.com/windows.exe"));
+    assert(classicsetup_retail_browser_capture_download(
+               signed_uri, &release, &status) == 0);
+    assert(status.stage == CLASSICSETUP_RETAIL_BROWSER_DOWNLOADING);
+    assert(status.cancel_webkit_download);
+    assert(strcmp(status.delivery_host,
+                  "software.download.prss.microsoft.com") == 0);
+    assert(release.resolved);
+    assert(strcmp(release.download_uri, signed_uri) == 0);
+    assert(strstr(status.delivery_host, "token") == NULL);
+    classicsetup_retail_browser_clear_uri(&release);
+    assert(!release.resolved);
+    assert(release.download_uri[0] == '\0');
+
+    assert(classicsetup_retail_browser_transition(
+               &status, CLASSICSETUP_RETAIL_BROWSER_VERIFYING_ISO) == 0);
+    assert(classicsetup_retail_browser_transition(
+               &status, CLASSICSETUP_RETAIL_BROWSER_INSPECTING_IMAGE) == 0);
+    assert(classicsetup_retail_browser_transition(
+               &status, CLASSICSETUP_RETAIL_BROWSER_COMPLETE) == 0);
+
+    classicsetup_retail_browser_status_reset(&status);
+    assert(classicsetup_retail_browser_transition(
+               &status,
+               CLASSICSETUP_RETAIL_BROWSER_PREPARING_MICROSOFT_PAGE) == 0);
+    classicsetup_retail_browser_fallback_to_full_page(&status);
+    assert(status.full_page_fallback);
+    assert(status.stage ==
+           CLASSICSETUP_RETAIL_BROWSER_WAITING_FOR_MICROSOFT);
+    assert(classicsetup_retail_browser_capture_download(
+               signed_uri, &release, &status) == 0);
+    assert(status.cancel_webkit_download);
+    classicsetup_retail_browser_clear_uri(&release);
+}
+
 int main(void)
 {
     test_page_navigation();
@@ -309,6 +372,7 @@ int main(void)
     test_source_selection_and_summary_gate();
     test_network_presentation_supports_multiple_ethernet();
     test_cascading_source_selection_and_lifecycle();
+    test_retail_browser_policy_and_state();
     test_gtk_disabled_result();
     return 0;
 }
