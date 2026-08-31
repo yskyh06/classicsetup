@@ -1,5 +1,6 @@
 #include "classicsetup/download.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 void classicsetup_download_status_reset(
@@ -20,4 +21,11 @@ bool classicsetup_download_is_ready(
            workspace->verified_iso &&
            status->state == CLASSICSETUP_DOWNLOAD_COMPLETE &&
            status->error == CLASSICSETUP_DOWNLOAD_ERROR_NONE;
+}
+
+bool classicsetup_download_keep_failed_image_enabled(void)
+{
+    const char *value = getenv("CLASSICSETUP_KEEP_FAILED_IMAGE");
+
+    return value != NULL && strcmp(value, "1") == 0;
 }

@@ -609,7 +609,8 @@ int classicsetup_retail_inspect_iso(
     classicsetup_process_cancel_callback cancel_callback,
     void *cancel_context,
     struct classicsetup_verified_windows_source *source,
-    struct classicsetup_process_result *result)
+    struct classicsetup_process_result *result,
+    struct classicsetup_retail_inspection_diagnostics *diagnostics)
 {
     static const char *const members[] = {
         "sources/install.wim", "sources/install.esd"
@@ -623,6 +624,12 @@ int classicsetup_retail_inspect_iso(
     long image_count;
     int run_result;
 
+    if (diagnostics != NULL) {
+        memset(diagnostics, 0, sizeof(*diagnostics));
+        diagnostics->stage = CLASSICSETUP_RETAIL_INSPECTION_PREREQUISITES;
+        diagnostics->extractor_exit_status = -1;
+        diagnostics->wimlib_exit_status = -1;
+    }
     if (release == NULL || workspace == NULL || !workspace->valid ||
         source == NULL || result == NULL ||
         tool_available(CLASSICSETUP_UUP_ISO_EXTRACTOR) != 0 ||
@@ -640,6 +647,11 @@ int classicsetup_retail_inspect_iso(
             return -1;
         }
         (void)unlink(image_path);
+        if (diagnostics != NULL) {
+            diagnostics->stage = index == 0
+                ? CLASSICSETUP_RETAIL_INSPECTION_EXTRACT_WIM
+                : CLASSICSETUP_RETAIL_INSPECTION_EXTRACT_ESD;
+        }
         arguments[0] = (char *)CLASSICSETUP_UUP_ISO_EXTRACTOR;
         arguments[1] = "e";
         arguments[2] = "-y";
@@ -650,11 +662,20 @@ int classicsetup_retail_inspect_iso(
         run_result = classicsetup_run_process_cancellable(
             CLASSICSETUP_UUP_ISO_EXTRACTOR, arguments, cancel_callback,
             cancel_context, result);
+        if (diagnostics != NULL) {
+            diagnostics->extractor_exit_status =
+                result->exited ? result->exit_status : -1;
+            diagnostics->output_truncated = result->output_truncated != 0;
+        }
         if (run_result == 1) {
             return 1;
         }
         if (run_result == 0 && result->exited && result->exit_status == 0 &&
             access(image_path, R_OK) == 0) {
+            if (diagnostics != NULL) {
+                diagnostics->install_wim_found = index == 0;
+                diagnostics->install_esd_found = index == 1;
+            }
             break;
         }
     }
@@ -665,9 +686,17 @@ int classicsetup_retail_inspect_iso(
     arguments[1] = "info";
     arguments[2] = image_path;
     arguments[3] = NULL;
+    if (diagnostics != NULL) {
+        diagnostics->stage = CLASSICSETUP_RETAIL_INSPECTION_IMAGE_COUNT;
+    }
     run_result = classicsetup_run_process_cancellable(
         CLASSICSETUP_WIMLIB_EXECUTABLE, arguments, cancel_callback,
         cancel_context, result);
+    if (diagnostics != NULL) {
+        diagnostics->wimlib_exit_status =
+            result->exited ? result->exit_status : -1;
+        diagnostics->output_truncated = result->output_truncated != 0;
+    }
     if (run_result != 0 || !result->exited || result->exit_status != 0 ||
         (count_text = strstr(result->output, "Image Count:")) == NULL) {
         (void)unlink(image_path);
@@ -679,11 +708,26 @@ int classicsetup_retail_inspect_iso(
         (void)unlink(image_path);
         return -1;
     }
+    if (diagnostics != NULL) {
+        diagnostics->image_count = image_count;
+        diagnostics->stage = CLASSICSETUP_RETAIL_INSPECTION_IMAGE_METADATA;
+    }
     arguments[3] = "1";
     arguments[4] = NULL;
     run_result = classicsetup_run_process_cancellable(
         CLASSICSETUP_WIMLIB_EXECUTABLE, arguments, cancel_callback,
         cancel_context, result);
+    if (diagnostics != NULL) {
+        diagnostics->wimlib_exit_status =
+            result->exited ? result->exit_status : -1;
+        diagnostics->output_truncated = result->output_truncated != 0;
+        (void)copy_info(result->output, "Architecture:",
+                        diagnostics->architecture,
+                        sizeof(diagnostics->architecture));
+        (void)copy_info(result->output, "Default Language:",
+                        diagnostics->language,
+                        sizeof(diagnostics->language));
+    }
     if (run_result != 0 || !result->exited || result->exit_status != 0 ||
         classicsetup_retail_parse_wim_metadata(
             release, result->output, workspace->iso_final_path, source) != 0) {
@@ -691,5 +735,8 @@ int classicsetup_retail_inspect_iso(
         return run_result == 1 ? 1 : -1;
     }
     (void)unlink(image_path);
+    if (diagnostics != NULL) {
+        diagnostics->stage = CLASSICSETUP_RETAIL_INSPECTION_COMPLETE;
+    }
     return 0;
 }

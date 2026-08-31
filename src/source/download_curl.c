@@ -189,6 +189,56 @@ static bool download_cancel_callback(void *context)
     return context != NULL && atomic_load((atomic_bool *)context);
 }
 
+static const char *inspection_stage_name(
+    enum classicsetup_retail_inspection_stage stage)
+{
+    static const char *const names[] = {
+        "none", "prerequisites", "extract-install-wim",
+        "extract-install-esd", "read-image-count", "read-image-metadata",
+        "complete"
+    };
+
+    return (size_t)stage < sizeof(names) / sizeof(names[0])
+               ? names[stage] : "unknown";
+}
+
+static void report_inspection_failure(
+    const struct classicsetup_workspace *workspace,
+    const struct classicsetup_retail_inspection_diagnostics *diagnostics,
+    bool retained)
+{
+    struct stat info;
+    const char *path = retained ? workspace->iso_final_path
+                                : workspace->iso_partial_path;
+    unsigned long long size =
+        stat(path, &info) == 0 && S_ISREG(info.st_mode)
+            ? (unsigned long long)info.st_size : 0;
+
+    (void)fprintf(
+        stderr,
+        "ClassicSetup ISO inspection diagnostic: path=%s size=%llu "
+        "regular=%s iso9660=yes stage=%s install_wim=%s install_esd=%s "
+        "extractor_exit=%d wimlib_exit=%d image_count=%ld "
+        "architecture=%s language=%s output_truncated=%s retained=%s\n",
+        path, size, size != 0 ? "yes" : "no",
+        inspection_stage_name(diagnostics->stage),
+        diagnostics->install_wim_found ? "yes" : "no",
+        diagnostics->install_esd_found ? "yes" : "no",
+        diagnostics->extractor_exit_status,
+        diagnostics->wimlib_exit_status, diagnostics->image_count,
+        diagnostics->architecture[0] != '\0'
+            ? diagnostics->architecture : "unavailable",
+        diagnostics->language[0] != '\0'
+            ? diagnostics->language : "unavailable",
+        diagnostics->output_truncated ? "yes" : "no",
+        retained ? "yes" : "no");
+    if (retained) {
+        (void)fprintf(stderr,
+            "ClassicSetup retained the completed ISO for diagnosis: %s\n",
+            workspace->iso_final_path);
+    }
+}
+
 int classicsetup_download_windows_iso(
     const struct classicsetup_windows_release *release,
     struct classicsetup_workspace *workspace,
@@ -210,6 +260,7 @@ int classicsetup_download_windows_iso(
     int result = -1;
     bool curl_initialized = false;
     struct classicsetup_process_result inspect_result;
+    struct classicsetup_retail_inspection_diagnostics inspect_diagnostics;
     int inspect_status;
 
     if (release == NULL || workspace == NULL || !workspace->valid ||
@@ -325,8 +376,23 @@ int classicsetup_download_windows_iso(
     notify(&context);
     inspect_status = classicsetup_retail_inspect_iso(
         release, workspace, download_cancel_callback, cancel_requested,
-        verified_source, &inspect_result);
+        verified_source, &inspect_result, &inspect_diagnostics);
     if (inspect_status != 0) {
+        bool retained = false;
+
+        if (inspect_status != 1 &&
+            classicsetup_download_keep_failed_image_enabled() &&
+            classicsetup_workspace_retain_completed_iso(workspace) == 0) {
+            retained = true;
+            status->diagnostic_image_retained = true;
+            (void)snprintf(status->diagnostic_image_path,
+                           sizeof(status->diagnostic_image_path), "%s",
+                           workspace->iso_final_path);
+        }
+        if (inspect_status != 1) {
+            report_inspection_failure(
+                workspace, &inspect_diagnostics, retained);
+        }
         fail_status(status,
                     inspect_status == 1
                         ? CLASSICSETUP_DOWNLOAD_ERROR_CANCELLED

@@ -5,7 +5,7 @@
 #include <stdbool.h>
 
 enum {
-    CLASSICSETUP_PROCESS_OUTPUT_SIZE = 2048
+    CLASSICSETUP_PROCESS_OUTPUT_SIZE = 65536
 };
 
 struct classicsetup_process_result {
@@ -13,6 +13,7 @@ struct classicsetup_process_result {
     int exit_status;
     int signaled;
     int signal_number;
+    int output_truncated;
     char output[CLASSICSETUP_PROCESS_OUTPUT_SIZE];
 };
 

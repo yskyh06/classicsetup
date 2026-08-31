@@ -448,6 +448,22 @@ int classicsetup_workspace_promote_verified_iso(
     return 0;
 }
 
+int classicsetup_workspace_retain_completed_iso(
+    struct classicsetup_workspace *workspace)
+{
+    struct stat info;
+
+    if (workspace == NULL || !workspace->valid || workspace->verified_iso ||
+        workspace->diagnostic_iso_retained ||
+        lstat(workspace->iso_partial_path, &info) != 0 ||
+        !S_ISREG(info.st_mode) || S_ISLNK(info.st_mode) || info.st_size <= 0 ||
+        rename(workspace->iso_partial_path, workspace->iso_final_path) != 0) {
+        return -1;
+    }
+    workspace->diagnostic_iso_retained = true;
+    return 0;
+}
+
 void classicsetup_workspace_cleanup_cancel(
     struct classicsetup_workspace *workspace)
 {
@@ -489,7 +505,7 @@ void classicsetup_workspace_cleanup_after_install(
         return;
     }
     classicsetup_workspace_cleanup_success(workspace);
-    if (!keep_iso) {
+    if (!keep_iso && !workspace->diagnostic_iso_retained) {
         remove_file(workspace, workspace->iso_final_path);
         workspace->verified_iso = false;
     }
@@ -498,7 +514,8 @@ void classicsetup_workspace_cleanup_after_install(
     remove_file(workspace, workspace->iso_debug_path);
     (void)remove_tree(workspace, workspace->uup_path);
     (void)remove_tree(workspace, workspace->image_path);
-    if (!workspace->verified_iso && !workspace->verified_wim) {
+    if (!workspace->verified_iso && !workspace->verified_wim &&
+        !workspace->diagnostic_iso_retained) {
         (void)rmdir(workspace->root_path);
         memset(workspace, 0, sizeof(*workspace));
     }

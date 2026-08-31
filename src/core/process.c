@@ -33,7 +33,8 @@ static int write_all(int descriptor, const char *data, size_t length)
     return 0;
 }
 
-static void read_output(int descriptor, char *output, size_t output_size)
+static void read_output(int descriptor, char *output, size_t output_size,
+                        int *truncated)
 {
     char discarded[256];
     size_t used = 0;
@@ -55,6 +56,9 @@ static void read_output(int descriptor, char *output, size_t output_size)
     output[used] = '\0';
 
     while (read(descriptor, discarded, sizeof(discarded)) > 0) {
+        if (truncated != NULL) {
+            *truncated = 1;
+        }
     }
 }
 
@@ -120,14 +124,16 @@ int classicsetup_run_process_with_input(
     if (write_all(input_pipe[1], input, strlen(input)) != 0) {
         sigaction(SIGPIPE, &previous_pipe, NULL);
         close(input_pipe[1]);
-        read_output(output_pipe[0], result->output, sizeof(result->output));
+        read_output(output_pipe[0], result->output, sizeof(result->output),
+                    &result->output_truncated);
         close(output_pipe[0]);
         waitpid(child, &status, 0);
         return -1;
     }
     sigaction(SIGPIPE, &previous_pipe, NULL);
     close(input_pipe[1]);
-    read_output(output_pipe[0], result->output, sizeof(result->output));
+    read_output(output_pipe[0], result->output, sizeof(result->output),
+                &result->output_truncated);
     close(output_pipe[0]);
 
     while (waitpid(child, &status, 0) < 0) {
@@ -178,6 +184,7 @@ static ssize_t append_available_output(
             if (required > capacity) {
                 size_t discard = required - capacity;
 
+                result->output_truncated = 1;
                 memmove(result->output, result->output + discard,
                         *used - discard);
                 *used -= discard;

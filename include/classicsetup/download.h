@@ -36,6 +36,8 @@ struct classicsetup_download_status {
     unsigned long long total_bytes;
     double progress_fraction;
     double bytes_per_second;
+    bool diagnostic_image_retained;
+    char diagnostic_image_path[CLASSICSETUP_WORKSPACE_PATH_SIZE];
     char message[CLASSICSETUP_SOURCE_ERROR_SIZE];
 };
 
@@ -49,6 +51,8 @@ void classicsetup_download_status_reset(
 bool classicsetup_download_is_ready(
     const struct classicsetup_download_status *status,
     const struct classicsetup_workspace *workspace);
+
+bool classicsetup_download_keep_failed_image_enabled(void);
 
 int classicsetup_verify_source_file(
     const char *path,

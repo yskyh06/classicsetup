@@ -86,7 +86,8 @@ int classicsetup_retail_inspect_iso(
     classicsetup_process_cancel_callback cancel_callback,
     void *cancel_context,
     struct classicsetup_verified_windows_source *source,
-    struct classicsetup_process_result *result)
+    struct classicsetup_process_result *result,
+    struct classicsetup_retail_inspection_diagnostics *diagnostics)
 {
     (void)release;
     (void)workspace;
@@ -94,6 +95,10 @@ int classicsetup_retail_inspect_iso(
     (void)cancel_context;
     (void)source;
     (void)result;
+    if (diagnostics != NULL) {
+        memset(diagnostics, 0, sizeof(*diagnostics));
+        diagnostics->stage = CLASSICSETUP_RETAIL_INSPECTION_PREREQUISITES;
+    }
     return -1;
 }
 

@@ -32,6 +32,7 @@ struct classicsetup_workspace {
     bool valid;
     bool verified_iso;
     bool verified_wim;
+    bool diagnostic_iso_retained;
     char base_path[CLASSICSETUP_WORKSPACE_PATH_SIZE];
     char root_path[CLASSICSETUP_WORKSPACE_PATH_SIZE];
     char iso_final_path[CLASSICSETUP_WORKSPACE_PATH_SIZE];
@@ -79,6 +80,9 @@ bool classicsetup_workspace_has_space(
     unsigned long long *available_bytes);
 
 int classicsetup_workspace_promote_verified_iso(
+    struct classicsetup_workspace *workspace);
+
+int classicsetup_workspace_retain_completed_iso(
     struct classicsetup_workspace *workspace);
 
 int classicsetup_workspace_promote_verified_wim(

@@ -42,6 +42,28 @@ struct classicsetup_retail_status {
     char detail[CLASSICSETUP_SOURCE_ERROR_SIZE];
 };
 
+enum classicsetup_retail_inspection_stage {
+    CLASSICSETUP_RETAIL_INSPECTION_NONE,
+    CLASSICSETUP_RETAIL_INSPECTION_PREREQUISITES,
+    CLASSICSETUP_RETAIL_INSPECTION_EXTRACT_WIM,
+    CLASSICSETUP_RETAIL_INSPECTION_EXTRACT_ESD,
+    CLASSICSETUP_RETAIL_INSPECTION_IMAGE_COUNT,
+    CLASSICSETUP_RETAIL_INSPECTION_IMAGE_METADATA,
+    CLASSICSETUP_RETAIL_INSPECTION_COMPLETE
+};
+
+struct classicsetup_retail_inspection_diagnostics {
+    enum classicsetup_retail_inspection_stage stage;
+    bool install_wim_found;
+    bool install_esd_found;
+    bool output_truncated;
+    int extractor_exit_status;
+    int wimlib_exit_status;
+    long image_count;
+    char architecture[32];
+    char language[32];
+};
+
 typedef void (*classicsetup_retail_progress_callback)(
     const struct classicsetup_retail_status *status,
     void *context);
@@ -89,7 +111,8 @@ int classicsetup_retail_inspect_iso(
     classicsetup_process_cancel_callback cancel_callback,
     void *cancel_context,
     struct classicsetup_verified_windows_source *source,
-    struct classicsetup_process_result *result);
+    struct classicsetup_process_result *result,
+    struct classicsetup_retail_inspection_diagnostics *diagnostics);
 
 int classicsetup_retail_parse_wim_metadata(
     const struct classicsetup_windows_release *release,

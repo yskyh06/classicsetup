@@ -249,6 +249,8 @@ static void test_workspace_and_verification(void)
 {
     struct classicsetup_workspace first;
     struct classicsetup_workspace second;
+    struct classicsetup_workspace retained;
+    struct classicsetup_workspace failed_default;
     struct classicsetup_download_status status;
     unsigned long long available = 0;
     struct stat info;
@@ -289,6 +291,42 @@ static void test_workspace_and_verification(void)
     classicsetup_workspace_cleanup_cancel(&second);
     assert(access(second.iso_partial_path, F_OK) != 0);
     classicsetup_workspace_cleanup_after_install(&second, false);
+
+    assert(unsetenv("CLASSICSETUP_KEEP_FAILED_IMAGE") == 0 ||
+           getenv("CLASSICSETUP_KEEP_FAILED_IMAGE") == NULL);
+    assert(!classicsetup_download_keep_failed_image_enabled());
+    assert(setenv("CLASSICSETUP_KEEP_FAILED_IMAGE", "true", 1) == 0);
+    assert(!classicsetup_download_keep_failed_image_enabled());
+    assert(unsetenv("CLASSICSETUP_KEEP_FAILED_IMAGE") == 0);
+    assert(classicsetup_workspace_create(&failed_default) == 0);
+    write_iso_fixture(failed_default.iso_partial_path, 1);
+    classicsetup_workspace_cleanup_failure(&failed_default);
+    assert(access(failed_default.iso_partial_path, F_OK) != 0);
+    assert(access(failed_default.iso_final_path, F_OK) != 0);
+    classicsetup_workspace_cleanup_after_install(&failed_default, false);
+
+    assert(setenv("CLASSICSETUP_KEEP_FAILED_IMAGE", "1", 1) == 0);
+    assert(classicsetup_download_keep_failed_image_enabled());
+    assert(classicsetup_workspace_create(&retained) == 0);
+    write_iso_fixture(retained.iso_partial_path, 1);
+#if CLASSICSETUP_DOWNLOAD_ENABLED
+    assert(classicsetup_verify_source_file(
+               retained.iso_partial_path, 32774, "", &error) == 0);
+#endif
+    assert(classicsetup_workspace_retain_completed_iso(&retained) == 0);
+    assert(retained.diagnostic_iso_retained);
+    assert(!retained.verified_iso);
+    assert(access(retained.iso_partial_path, F_OK) != 0);
+    assert(access(retained.iso_final_path, R_OK) == 0);
+    classicsetup_workspace_cleanup_failure(&retained);
+    classicsetup_workspace_cleanup_after_install(&retained, false);
+    assert(retained.valid);
+    assert(access(retained.iso_final_path, R_OK) == 0);
+    assert(strstr(retained.iso_final_path, "http") == NULL);
+    retained.diagnostic_iso_retained = false;
+    classicsetup_workspace_cleanup_after_install(&retained, false);
+    assert(!retained.valid);
+    assert(unsetenv("CLASSICSETUP_KEEP_FAILED_IMAGE") == 0);
 }
 
 static void test_workspace_root_policy(void)
@@ -390,7 +428,7 @@ static void test_download_backend_fallback(void)
 #endif
 }
 
-static void test_retail_model_and_resolver(void)
+static void test_retail_model_and_resolver(const char *self_path)
 {
 #if CLASSICSETUP_DOWNLOAD_ENABLED
     struct classicsetup_source_catalog catalog;
@@ -404,6 +442,10 @@ static void test_retail_model_and_resolver(void)
     char wrong_script[PATH_MAX];
     char resolved_script[PATH_MAX];
     FILE *file;
+    struct classicsetup_process_result process_result;
+    char *large_metadata_arguments[] = {
+        (char *)self_path, "--large-metadata", NULL
+    };
 
     assert(classicsetup_retail_recommended_catalog(
                CLASSICSETUP_WINDOWS_11, &catalog) == 0);
@@ -431,6 +473,14 @@ static void test_retail_model_and_resolver(void)
                "Name: Windows 11 Pro\nArchitecture: x86_64\n"
                "Default Language: en-US\n",
                "/private/windows.iso", &verified_source) == 0);
+    assert(classicsetup_run_process_cancellable(
+               self_path, large_metadata_arguments, NULL, NULL,
+               &process_result) == 0);
+    assert(process_result.exited && process_result.exit_status == 0);
+    assert(!process_result.output_truncated);
+    assert(classicsetup_retail_parse_wim_metadata(
+               &release, process_result.output, "/private/windows.iso",
+               &verified_source) == 0);
     release = catalog.releases[0];
     assert(classicsetup_retail_validate_script(
                CLASSICSETUP_TEST_FIDO_SCRIPT,
@@ -541,13 +591,31 @@ static void test_retail_model_and_resolver(void)
 #endif
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+    char self_path[PATH_MAX];
+    ssize_t length;
+
+    if (argc > 1 && strcmp(argv[1], "--large-metadata") == 0) {
+        size_t index;
+
+        (void)puts("Name: Windows 11 Pro\nArchitecture: x86_64\n"
+                   "Default Language: en-US\nEdition ID: Professional\n"
+                   "Build: 26100\nService Pack Build: 1");
+        for (index = 0; index < 8192; ++index) {
+            (void)putchar('x');
+        }
+        (void)putchar('\n');
+        return 0;
+    }
+    length = readlink("/proc/self/exe", self_path, sizeof(self_path) - 1);
+    assert(length > 0 && (size_t)length < sizeof(self_path));
+    self_path[length] = '\0';
     test_source_mapping_and_policy();
     test_source_resolve_diagnostics();
     test_workspace_and_verification();
     test_workspace_root_policy();
     test_download_backend_fallback();
-    test_retail_model_and_resolver();
+    test_retail_model_and_resolver(self_path);
     return 0;
 }
