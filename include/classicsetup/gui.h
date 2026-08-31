@@ -159,6 +159,9 @@ bool classicsetup_gui_retail_try_fido_once(
 bool classicsetup_gui_retail_start_webview_once(
     struct classicsetup_gui_session *session);
 
+int classicsetup_gui_restart_retail_acquisition(
+    struct classicsetup_gui_session *session);
+
 int classicsetup_gui_select_release(
     struct classicsetup_gui_session *session,
     size_t index);

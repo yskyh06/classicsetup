@@ -3,12 +3,22 @@
 set -eu
 
 project_root=$1
+build_root=$2
 expected_hash=cfd466e79ae8c687a09447249534a99903ed5c52ce3b0cc4fb71475058ab66f7
 fido_script=$project_root/tools/fido/fido-linux.ps1
+fido_license=$project_root/tools/fido/LICENSE.txt
+runtime_fido_script=$build_root/lib/classicsetup/tools/fido/fido-linux.ps1
+runtime_fido_license=$build_root/lib/classicsetup/tools/fido/LICENSE.txt
 
 test -f "$fido_script"
 actual_hash=$(sha256sum "$fido_script" | awk '{print $1}')
 test "$actual_hash" = "$expected_hash"
+test -f "$runtime_fido_script"
+runtime_hash=$(sha256sum "$runtime_fido_script" | awk '{print $1}')
+test "$runtime_hash" = "$expected_hash"
+cmp -s "$fido_script" "$runtime_fido_script"
+test -r "$runtime_fido_license"
+cmp -s "$fido_license" "$runtime_fido_license"
 grep -q "^tag=v1.70$" "$project_root/packaging/fido.manifest"
 grep -q "^commit=3d47260b8915385c58e20c73e24b36e9a9536f3f$" \
     "$project_root/packaging/fido.manifest"

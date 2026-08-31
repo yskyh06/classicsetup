@@ -44,6 +44,14 @@ int classicsetup_retail_validate_script(
     return -1;
 }
 
+int classicsetup_retail_resolve_script(
+    char *resolved, size_t resolved_size)
+{
+    (void)resolved;
+    (void)resolved_size;
+    return -1;
+}
+
 int classicsetup_retail_build_fido_argv(
     const char *pwsh, const char *script,
     const struct classicsetup_windows_release *release,

@@ -21,6 +21,18 @@
 #ifndef CLASSICSETUP_FIDO_LINUX_SHA256
 #define CLASSICSETUP_FIDO_LINUX_SHA256 ""
 #endif
+#ifndef CLASSICSETUP_FIDO_INSTALLED_SCRIPT
+#define CLASSICSETUP_FIDO_INSTALLED_SCRIPT \
+    "/usr/lib/classicsetup/tools/fido/fido-linux.ps1"
+#endif
+#ifndef CLASSICSETUP_FIDO_BUILD_RELATIVE_DIR
+#define CLASSICSETUP_FIDO_BUILD_RELATIVE_DIR \
+    "lib/classicsetup/tools/fido"
+#endif
+#ifndef CLASSICSETUP_FIDO_INSTALL_RELATIVE_DIR
+#define CLASSICSETUP_FIDO_INSTALL_RELATIVE_DIR \
+    "lib/classicsetup/tools/fido"
+#endif
 #ifndef CLASSICSETUP_WIMLIB_EXECUTABLE
 #define CLASSICSETUP_WIMLIB_EXECUTABLE "/usr/bin/wimlib-imagex"
 #endif
@@ -271,14 +283,66 @@ static bool cancel_requested(void *context)
     return context != NULL && atomic_load((atomic_bool *)context);
 }
 
-static int script_path(char *resolved, size_t resolved_size)
+static int executable_relative_script(char *resolved, size_t resolved_size)
+{
+    char executable[CLASSICSETUP_WORKSPACE_PATH_SIZE];
+    char *separator;
+    ssize_t length = readlink("/proc/self/exe", executable,
+                              sizeof(executable) - 1);
+    int written;
+    static const char *const formats[] = {
+        "%s/" CLASSICSETUP_FIDO_BUILD_RELATIVE_DIR "/fido-linux.ps1",
+        "%s/../" CLASSICSETUP_FIDO_INSTALL_RELATIVE_DIR "/fido-linux.ps1"
+    };
+    size_t index;
+
+    if (length <= 0 || (size_t)length >= sizeof(executable)) {
+        return -1;
+    }
+    executable[length] = '\0';
+    separator = strrchr(executable, '/');
+    if (separator == NULL) {
+        return -1;
+    }
+    *separator = '\0';
+    for (index = 0; index < sizeof(formats) / sizeof(formats[0]); ++index) {
+        written = snprintf(resolved, resolved_size, formats[index], executable);
+        if (written > 0 && (size_t)written < resolved_size &&
+            access(resolved, R_OK) == 0) {
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int classicsetup_retail_resolve_script(
+    char *resolved, size_t resolved_size)
 {
     const char *override = getenv("CLASSICSETUP_FIDO_SCRIPT");
-    const char *path = override != NULL && override[0] != '\0'
-                           ? override : CLASSICSETUP_FIDO_LINUX_SCRIPT;
+    const char *candidates[] = {
+        CLASSICSETUP_FIDO_INSTALLED_SCRIPT,
+        CLASSICSETUP_FIDO_LINUX_SCRIPT
+    };
+    size_t index;
 
-    return path[0] == '/' && copy_path(path, resolved, resolved_size) == 0
-               ? 0 : -1;
+    if (override != NULL && override[0] != '\0') {
+        return override[0] == '/' &&
+                       copy_path(override, resolved, resolved_size) == 0
+                   ? 0 : -1;
+    }
+    if (executable_relative_script(resolved, resolved_size) == 0) {
+        return 0;
+    }
+    for (index = 0; index < sizeof(candidates) / sizeof(candidates[0]);
+         ++index) {
+        if (candidates[index][0] == '/' &&
+            access(candidates[index], R_OK) == 0 &&
+            copy_path(candidates[index], resolved, resolved_size) == 0) {
+            return 0;
+        }
+    }
+    return copy_path(CLASSICSETUP_FIDO_INSTALLED_SCRIPT,
+                     resolved, resolved_size);
 }
 
 static int parse_signed_url(char *output,
@@ -351,7 +415,8 @@ int classicsetup_retail_resolve(
                progress, progress_context);
         return -1;
     }
-    if (script_path(script, sizeof(script)) != 0 || access(script, R_OK) != 0) {
+    if (classicsetup_retail_resolve_script(script, sizeof(script)) != 0 ||
+        access(script, R_OK) != 0) {
         report(status, CLASSICSETUP_RETAIL_FAILED,
                CLASSICSETUP_RETAIL_ERROR_SCRIPT_MISSING,
                classicsetup_retail_error_message(

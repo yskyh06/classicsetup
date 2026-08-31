@@ -401,6 +401,8 @@ static void test_retail_model_and_resolver(void)
     char *arguments[22];
     char directory[] = "/tmp/classicsetup-retail-test-XXXXXX";
     char resolver[PATH_MAX];
+    char wrong_script[PATH_MAX];
+    char resolved_script[PATH_MAX];
     FILE *file;
 
     assert(classicsetup_retail_recommended_catalog(
@@ -433,9 +435,18 @@ static void test_retail_model_and_resolver(void)
     assert(classicsetup_retail_validate_script(
                CLASSICSETUP_TEST_FIDO_SCRIPT,
                CLASSICSETUP_TEST_FIDO_SHA256) == 0);
+    assert(unsetenv("CLASSICSETUP_FIDO_SCRIPT") == 0);
+    assert(classicsetup_retail_resolve_script(
+               resolved_script, sizeof(resolved_script)) == 0);
+    assert(strstr(resolved_script,
+                  "/lib/classicsetup/tools/fido/fido-linux.ps1") != NULL);
+    assert(classicsetup_retail_validate_script(
+               resolved_script, CLASSICSETUP_TEST_FIDO_SHA256) == 0);
 
     assert(mkdtemp(directory) != NULL);
     assert(snprintf(resolver, sizeof(resolver), "%s/pwsh", directory) > 0);
+    assert(snprintf(wrong_script, sizeof(wrong_script), "%s/wrong.ps1",
+                    directory) > 0);
     file = fopen(resolver, "w");
     assert(file != NULL);
     assert(fputs("#!/bin/sh\nprintf '%s\\n' "
@@ -443,10 +454,59 @@ static void test_retail_model_and_resolver(void)
                  file) >= 0);
     assert(fclose(file) == 0);
     assert(chmod(resolver, 0700) == 0);
+
+    assert(setenv("CLASSICSETUP_PWSH", "/does/not/exist/pwsh", 1) == 0);
+    release = catalog.releases[0];
+    atomic_init(&cancel_requested, false);
+    assert(classicsetup_retail_resolve(
+               &release, &cancel_requested, NULL, NULL, &status) != 0);
+    assert(status.error == CLASSICSETUP_RETAIL_ERROR_PWSH_MISSING);
+
     assert(setenv("CLASSICSETUP_PWSH", resolver, 1) == 0);
+    assert(setenv("CLASSICSETUP_FIDO_SCRIPT", "/does/not/exist/fido.ps1", 1) == 0);
+    release = catalog.releases[0];
+    assert(classicsetup_retail_resolve(
+               &release, &cancel_requested, NULL, NULL, &status) != 0);
+    assert(status.error == CLASSICSETUP_RETAIL_ERROR_SCRIPT_MISSING);
+
+    file = fopen(wrong_script, "w");
+    assert(file != NULL);
+    assert(fputs("not the pinned resolver\n", file) >= 0);
+    assert(fclose(file) == 0);
+    assert(setenv("CLASSICSETUP_FIDO_SCRIPT", wrong_script, 1) == 0);
+    release = catalog.releases[0];
+    assert(classicsetup_retail_resolve(
+               &release, &cancel_requested, NULL, NULL, &status) != 0);
+    assert(status.error == CLASSICSETUP_RETAIL_ERROR_SCRIPT_HASH);
+
     assert(setenv("CLASSICSETUP_FIDO_SCRIPT",
                   CLASSICSETUP_TEST_FIDO_SCRIPT, 1) == 0);
-    atomic_init(&cancel_requested, false);
+    file = fopen(resolver, "w");
+    assert(file != NULL);
+    assert(fputs("#!/bin/sh\nexit 9\n", file) >= 0);
+    assert(fclose(file) == 0);
+    release = catalog.releases[0];
+    assert(classicsetup_retail_resolve(
+               &release, &cancel_requested, NULL, NULL, &status) != 0);
+    assert(status.error == CLASSICSETUP_RETAIL_ERROR_PROCESS);
+    assert(status.child_exit_status == 9);
+
+    file = fopen(resolver, "w");
+    assert(file != NULL);
+    assert(fputs("#!/bin/sh\nprintf 'first\\nsecond\\n'\n", file) >= 0);
+    assert(fclose(file) == 0);
+    release = catalog.releases[0];
+    assert(classicsetup_retail_resolve(
+               &release, &cancel_requested, NULL, NULL, &status) != 0);
+    assert(status.error == CLASSICSETUP_RETAIL_ERROR_NO_LINK);
+
+    file = fopen(resolver, "w");
+    assert(file != NULL);
+    assert(fputs("#!/bin/sh\nprintf '%s\\n' "
+                 "'https://software.download.prss.microsoft.com/test.iso?token=secret'\n",
+                 file) >= 0);
+    assert(fclose(file) == 0);
+    release = catalog.releases[0];
     assert(classicsetup_retail_resolve(
                &release, &cancel_requested, NULL, NULL, &status) == 0);
     assert(release.resolved);
@@ -475,6 +535,7 @@ static void test_retail_model_and_resolver(void)
     release.resolved = false;
     assert(unsetenv("CLASSICSETUP_PWSH") == 0);
     assert(unsetenv("CLASSICSETUP_FIDO_SCRIPT") == 0);
+    assert(unlink(wrong_script) == 0);
     assert(unlink(resolver) == 0);
     assert(rmdir(directory) == 0);
 #endif

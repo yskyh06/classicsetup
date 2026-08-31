@@ -65,6 +65,10 @@ int classicsetup_retail_validate_script(
     const char *path,
     const char *expected_sha256);
 
+int classicsetup_retail_resolve_script(
+    char *resolved,
+    size_t resolved_size);
+
 int classicsetup_retail_build_fido_argv(
     const char *pwsh,
     const char *script,

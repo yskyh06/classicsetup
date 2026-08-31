@@ -379,6 +379,16 @@ static void test_retail_source_fallback_is_single_shot(void)
     assert(classicsetup_gui_retail_try_fido_once(&session));
     assert(!classicsetup_gui_retail_try_fido_once(&session));
     assert(classicsetup_gui_retail_start_webview_once(&session));
+
+    session.download.state = CLASSICSETUP_DOWNLOAD_CANCELLED;
+    session.download.bytes_received = 50ULL * 1024ULL * 1024ULL;
+    session.download.total_bytes = 7620ULL * 1024ULL * 1024ULL;
+    assert(classicsetup_gui_restart_retail_acquisition(&session) == 0);
+    assert(session.download.state == CLASSICSETUP_DOWNLOAD_NOT_STARTED);
+    assert(!session.retail_fido_attempted);
+    assert(!session.retail_webview_started);
+    assert(classicsetup_gui_retail_try_fido_once(&session));
+    assert(classicsetup_gui_retail_start_webview_once(&session));
     assert(!classicsetup_gui_retail_start_webview_once(&session));
 
     classicsetup_gui_session_reset(&session);

@@ -2237,6 +2237,11 @@ static void start_retail_browser(
     }
     classicsetup_retail_browser_status_reset(
         &runtime->session->retail_browser_status);
+    classicsetup_download_status_reset(&runtime->session->download);
+    runtime->session->download.state = CLASSICSETUP_DOWNLOAD_PREPARING;
+    (void)snprintf(runtime->session->download.message,
+                   sizeof(runtime->session->download.message), "%s",
+                   "Preparing Microsoft download...");
     (void)classicsetup_retail_browser_transition(
         &runtime->session->retail_browser_status,
         CLASSICSETUP_RETAIL_BROWSER_PREPARING_MICROSOFT_PAGE);
@@ -2269,6 +2274,15 @@ static void on_download_start_clicked(GtkButton *button, gpointer user_data)
     (void)button;
     if (runtime->session->source_backend ==
         CLASSICSETUP_SOURCE_MICROSOFT_RETAIL) {
+        if (runtime->session->retail_source_mode ==
+                CLASSICSETUP_GUI_RETAIL_AUTOMATIC &&
+            (runtime->session->download.state ==
+                 CLASSICSETUP_DOWNLOAD_CANCELLED ||
+             runtime->session->download.state ==
+                 CLASSICSETUP_DOWNLOAD_FAILED)) {
+            (void)classicsetup_gui_restart_retail_acquisition(
+                runtime->session);
+        }
         if (runtime->session->retail_source_mode ==
                 CLASSICSETUP_GUI_RETAIL_AUTOMATIC &&
             classicsetup_gui_retail_try_fido_once(runtime->session)) {

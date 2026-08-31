@@ -95,6 +95,21 @@ bool classicsetup_gui_retail_start_webview_once(
     return true;
 }
 
+int classicsetup_gui_restart_retail_acquisition(
+    struct classicsetup_gui_session *session)
+{
+    if (session == NULL ||
+        classicsetup_gui_source_change_requirement(session) !=
+            CLASSICSETUP_GUI_SOURCE_CHANGE_ALLOWED ||
+        (session->download.state != CLASSICSETUP_DOWNLOAD_CANCELLED &&
+         session->download.state != CLASSICSETUP_DOWNLOAD_FAILED)) {
+        return -1;
+    }
+    reset_retail_acquisition(session);
+    classicsetup_download_status_reset(&session->download);
+    return 0;
+}
+
 int classicsetup_gui_set_source_backend(
     struct classicsetup_gui_session *session,
     enum classicsetup_source_backend backend)

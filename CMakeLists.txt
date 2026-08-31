@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 project(classicsetup LANGUAGES C)
 
+include(GNUInstallDirs)
 find_package(Curses REQUIRED)
 find_package(PkgConfig QUIET)
 
@@ -43,6 +44,43 @@ set(CLASSICSETUP_FIDO_LINUX_SCRIPT
 set(CLASSICSETUP_FIDO_LINUX_SHA256
     "cfd466e79ae8c687a09447249534a99903ed5c52ce3b0cc4fb71475058ab66f7"
     CACHE STRING "Pinned SHA-256 of fido-linux.ps1")
+set(CLASSICSETUP_FIDO_INSTALLED_SCRIPT
+    "${CMAKE_INSTALL_FULL_LIBDIR}/classicsetup/tools/fido/fido-linux.ps1")
+set(CLASSICSETUP_FIDO_BUILD_RELATIVE_DIR
+    "lib/classicsetup/tools/fido")
+set(CLASSICSETUP_FIDO_BUILD_DIR
+    "${CMAKE_BINARY_DIR}/${CLASSICSETUP_FIDO_BUILD_RELATIVE_DIR}")
+set(CLASSICSETUP_FIDO_SOURCE_SCRIPT
+    "${CMAKE_SOURCE_DIR}/tools/fido/fido-linux.ps1")
+set(CLASSICSETUP_FIDO_SOURCE_LICENSE
+    "${CMAKE_SOURCE_DIR}/tools/fido/LICENSE.txt")
+set(CLASSICSETUP_FIDO_BUILD_SCRIPT
+    "${CLASSICSETUP_FIDO_BUILD_DIR}/fido-linux.ps1")
+set(CLASSICSETUP_FIDO_BUILD_LICENSE
+    "${CLASSICSETUP_FIDO_BUILD_DIR}/LICENSE.txt")
+add_custom_command(
+    OUTPUT
+        "${CLASSICSETUP_FIDO_BUILD_SCRIPT}"
+        "${CLASSICSETUP_FIDO_BUILD_LICENSE}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "${CLASSICSETUP_FIDO_BUILD_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CLASSICSETUP_FIDO_SOURCE_SCRIPT}"
+        "${CLASSICSETUP_FIDO_BUILD_SCRIPT}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CLASSICSETUP_FIDO_SOURCE_LICENSE}"
+        "${CLASSICSETUP_FIDO_BUILD_LICENSE}"
+    DEPENDS
+        "${CLASSICSETUP_FIDO_SOURCE_SCRIPT}"
+        "${CLASSICSETUP_FIDO_SOURCE_LICENSE}"
+    COMMENT "Staging pinned Fido Linux resolver assets"
+    VERBATIM)
+add_custom_target(classicsetup_fido_asset ALL
+    DEPENDS
+        "${CLASSICSETUP_FIDO_BUILD_SCRIPT}"
+        "${CLASSICSETUP_FIDO_BUILD_LICENSE}")
+message(STATUS
+    "ClassicSetup Fido build assets: ${CLASSICSETUP_FIDO_BUILD_DIR}")
 
 add_compile_definitions(
     CLASSICSETUP_CONFIGURED_WORKSPACE_ROOT="${CLASSICSETUP_WORKSPACE_ROOT}")
@@ -149,6 +187,7 @@ add_executable(classicsetup
     src/tui/tui.c
     src/tui/welcome.c
 )
+add_dependencies(classicsetup classicsetup_fido_asset)
 
 set_target_properties(classicsetup PROPERTIES
     C_STANDARD 17
@@ -162,6 +201,8 @@ target_include_directories(classicsetup PRIVATE
 )
 
 target_link_libraries(classicsetup PRIVATE ${CURSES_LIBRARIES})
+install(TARGETS classicsetup
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 target_compile_definitions(classicsetup PRIVATE
     CLASSICSETUP_ENABLE_UUP=$<BOOL:${CLASSICSETUP_ENABLE_UUP}>
@@ -172,6 +213,9 @@ target_compile_definitions(classicsetup PRIVATE
     CLASSICSETUP_UUP_ISO_EXTRACTOR="${CLASSICSETUP_UUP_ISO_EXTRACTOR}"
     CLASSICSETUP_PWSH_PATH="${CLASSICSETUP_PWSH_PATH}"
     CLASSICSETUP_FIDO_LINUX_SCRIPT="${CLASSICSETUP_FIDO_LINUX_SCRIPT}"
+    CLASSICSETUP_FIDO_INSTALLED_SCRIPT="${CLASSICSETUP_FIDO_INSTALLED_SCRIPT}"
+    CLASSICSETUP_FIDO_BUILD_RELATIVE_DIR="${CLASSICSETUP_FIDO_BUILD_RELATIVE_DIR}"
+    CLASSICSETUP_FIDO_INSTALL_RELATIVE_DIR="${CMAKE_INSTALL_LIBDIR}/classicsetup/tools/fido"
     CLASSICSETUP_FIDO_LINUX_SHA256="${CLASSICSETUP_FIDO_LINUX_SHA256}"
 )
 if(CLASSICSETUP_ENABLE_UUP)
@@ -196,11 +240,11 @@ if(CLASSICSETUP_DOWNLOAD_ENABLED)
         CLASSICSETUP_DOWNLOAD_ENABLED=1)
     install(FILES
         tools/fido/fido-linux.ps1
-        DESTINATION lib/classicsetup/tools/fido
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/classicsetup/tools/fido
         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
                     GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
-    install(FILES tools/fido/LICENSE packaging/fido.manifest
-        DESTINATION share/classicsetup/fido)
+    install(FILES tools/fido/LICENSE.txt packaging/fido.manifest
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/classicsetup/fido)
 else()
     target_compile_definitions(classicsetup PRIVATE
         CLASSICSETUP_DOWNLOAD_ENABLED=0)
@@ -289,6 +333,7 @@ if(BUILD_TESTING)
         src/source/windows_source.c
         src/source/workspace.c
     )
+    add_dependencies(classicsetup_source_test classicsetup_fido_asset)
     set_target_properties(classicsetup_source_test PROPERTIES
         C_STANDARD 17
         C_STANDARD_REQUIRED YES
@@ -624,5 +669,6 @@ if(BUILD_TESTING)
         NAME fido_runtime_staging
         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/fido_staging_test.sh
             ${CMAKE_CURRENT_SOURCE_DIR}
+            ${CMAKE_CURRENT_BINARY_DIR}
     )
 endif()
