@@ -47,6 +47,7 @@ void classicsetup_gui_session_reset_for_entry(
     classicsetup_retail_status_reset(&session->retail_status);
     classicsetup_retail_browser_status_reset(
         &session->retail_browser_status);
+    classicsetup_local_iso_catalog_reset(&session->local_iso_catalog);
 }
 
 int classicsetup_gui_set_retail_source_mode(
@@ -61,7 +62,27 @@ int classicsetup_gui_set_retail_source_mode(
         return -1;
     }
     session->retail_source_mode = mode;
+    if (mode != CLASSICSETUP_GUI_RETAIL_EXISTING_ISO) {
+        session->has_selected_local_iso = false;
+        session->selected_local_iso_index = 0;
+    }
     reset_retail_acquisition(session);
+    return 0;
+}
+
+int classicsetup_gui_select_local_iso(
+    struct classicsetup_gui_session *session,
+    size_t index)
+{
+    if (session == NULL ||
+        session->retail_source_mode != CLASSICSETUP_GUI_RETAIL_EXISTING_ISO ||
+        index >= session->local_iso_catalog.count ||
+        classicsetup_gui_source_change_requirement(session) !=
+            CLASSICSETUP_GUI_SOURCE_CHANGE_ALLOWED) {
+        return -1;
+    }
+    session->selected_local_iso_index = index;
+    session->has_selected_local_iso = true;
     return 0;
 }
 
@@ -385,6 +406,13 @@ bool classicsetup_gui_source_selection_is_valid(
             session->source_catalog.release_count) {
         return false;
     }
+    if (session->retail_source_mode ==
+            CLASSICSETUP_GUI_RETAIL_EXISTING_ISO &&
+        (!session->has_selected_local_iso ||
+         session->selected_local_iso_index >=
+             session->local_iso_catalog.count)) {
+        return false;
+    }
     return candidate_matches_release(
                &session->source_catalog.releases[
                    session->selected_release_index],
@@ -409,7 +437,8 @@ classicsetup_gui_source_change_requirement(
         session->download.state == CLASSICSETUP_DOWNLOAD_VERIFYING) {
         return CLASSICSETUP_GUI_SOURCE_CHANGE_CANCEL_DOWNLOAD;
     }
-    if (session->workspace.valid && session->workspace.verified_iso) {
+    if ((session->workspace.valid && session->workspace.verified_iso) ||
+        session->verified_source.verified) {
         return CLASSICSETUP_GUI_SOURCE_CHANGE_DISCARD_VERIFIED;
     }
     return CLASSICSETUP_GUI_SOURCE_CHANGE_ALLOWED;
@@ -450,8 +479,11 @@ bool classicsetup_gui_summary_is_ready(
            classicsetup_network_can_continue(&session->network) &&
            classicsetup_gui_source_selection_is_valid(session) &&
            session->options_placeholder &&
-           classicsetup_download_is_ready(
-               &session->download, &session->workspace) &&
+           (classicsetup_download_is_ready(
+                &session->download, &session->workspace) ||
+            (session->retail_source_mode ==
+                 CLASSICSETUP_GUI_RETAIL_EXISTING_ISO &&
+             session->download.state == CLASSICSETUP_DOWNLOAD_COMPLETE)) &&
            session->verified_source.verified &&
            session->verified_source.kind ==
                CLASSICSETUP_VERIFIED_SOURCE_ISO;

@@ -1,58 +1,36 @@
 # Current milestone
 
-Post-download Retail ISO metadata diagnosis and failed-image retention.
+Local Windows ISO discovery, selection, and read-only verification.
 
 # Changed files
 
-- `include/classicsetup/{download,process,retail,workspace}.h`: diagnostic state,
-  process truncation, and retained-image model.
-- `src/core/process.c`: larger captured tool output with truncation reporting.
-- `src/source/{download_curl,download_model,retail_fido,retail_stub,workspace}.c`:
-  safe inspection diagnostics and opt-in completed-ISO retention.
-- `tests/source_test.c`: retention/cleanup and long metadata-output tests.
-- `run_classicsetup`: preserves the diagnostic opt-in through its sudo path.
+- `include/classicsetup/{gui,local_iso,retail}.h`, `src/source/{local_iso,retail_fido,retail_stub}.c`: local ISO catalog and path-based metadata inspection.
+- `src/gui/{gui,gtk_frontend}.c`: existing-ISO selection, refresh, verification, readiness, and summary state.
+- `CMakeLists.txt`, `.gitignore`, `iso/README.md`: build wiring and repository ISO folder.
+- `tests/{gui,source}_test.c`: catalog, selection gate, and original-file preservation tests.
 
 # Implementation result
 
-- Confirmed lifecycle: libcurl writes `windows.iso.part`; basic size/ISO/hash
-  verification and WIM/ESD inspection both read that partial file. Only after
-  successful metadata inspection is it renamed to `windows.iso`.
-- On metadata failure, the common failure cleanup called
-  `classicsetup_workspace_cleanup_failure()`, which deleted the partial file.
-- `CLASSICSETUP_KEEP_FAILED_IMAGE=1` now renames a non-empty regular partial ISO
-  to `windows.iso` only after basic verification succeeded and metadata-only
-  inspection failed. It remains unverified and cannot become install-ready.
-- Default failures and cancelled/incomplete transfers retain the old cleanup.
-- Safe diagnostics report local path/size, ISO recognition, inspection stage,
-  WIM/ESD extraction, tool exit statuses, image count, architecture/language,
-  output truncation, and retention. No signed URI is formatted or logged.
-- A code defect consistent with the live failure was found: cancellable process
-  capture retained only the last 2,047 bytes, potentially discarding the leading
-  `Name` and `Architecture` fields from real `wimlib-imagex info` output. Capture
-  is now 65,535 bytes and exposes truncation.
-- The exact live failing inspection stage is not yet proven without the retained
-  ISO/manual result; no Microsoft request was made in this task.
+- `build/classicsetup` resolves the repository `iso/` directory relative to its executable; installed builds use the configured shared-data directory. `CLASSICSETUP_ISO_DIRECTORY` is an absolute-path override.
+- The source page lists up to 32 regular `.iso` files case-insensitively, sorted by name, with a refresh action. Symlinks and non-ISO files are ignored.
+- The selected file is not downloaded, copied, renamed, or deleted. Existing ISO verification reads it directly and uses a separate temporary workspace only for WIM/ESD extraction.
+- ISO filesystem, Windows family, Korean/English language, and x64 metadata must match the selected options before install readiness is granted.
+- Fido, WebView, libcurl download behavior, and destructive storage/install paths were not changed.
 
 # Build/test result
 
-- Build: passed with zero project warnings.
-- CTest: 17/17 passed.
-- Tests cover default cleanup, cancelled/incomplete cleanup, opt-in completed
-  image retention, exit-time preservation, strict env value, and 8 KiB metadata
-  output retaining parser-required fields.
-- `git diff --check`: passed.
+- GTK ON build: passed with zero project warnings; CTest 17/17 passed.
+- GTK OFF build: passed; CTest 17/17 passed.
+- Download backend OFF/stub build: passed; CTest 17/17 passed.
+- `git diff --check`: passed. No live Microsoft request or real ISO download was performed.
 
 # Topics for ChatGPT to explain
 
-- Why the ISO remains `.part` through metadata inspection and how diagnostic
-  retention differs from verified promotion.
-- How the next retained run identifies extraction, wimlib, or metadata mismatch.
+- Place ISO files directly in `classicsetup/iso`, choose **Use existing ISO**, select a file, then use **Use Selected ISO** to verify it.
+- Local ISO readiness depends on metadata matching the chosen Windows version, language, and x64 architecture.
 
 # Issues/cautions
 
-- Retained ISO path and manual `file`/`7z`/wimlib results are pending one user-run
-  Ubuntu VM download with `CLASSICSETUP_KEEP_FAILED_IMAGE=1`.
-- The extracted install image temporarily needs substantial additional free
-  space; extractor exit diagnostics will expose a space-related failure.
-- Fido, Microsoft requests, WebView, signed-link caching, and destructive storage
-  code were not changed.
+- Discovery is intentionally non-recursive and limited to 32 regular files in `iso/`.
+- A real Windows ISO still needs one manual GTK validation with installed `7z` and `wimlib-imagex`.
+- Existing ISO originals remain user-owned and are never removed by ClassicSetup cleanup.

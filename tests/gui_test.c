@@ -399,6 +399,42 @@ static void test_retail_source_fallback_is_single_shot(void)
     assert(classicsetup_gui_retail_start_webview_once(&session));
 }
 
+static void test_existing_iso_requires_selected_file(void)
+{
+    struct classicsetup_gui_session session;
+
+    classicsetup_gui_session_reset(&session);
+    session.source_catalog.state = CLASSICSETUP_SOURCE_READY;
+    session.source_catalog.release_count = 1;
+    session.source_catalog.releases[0].family = CLASSICSETUP_WINDOWS_11;
+    session.source_catalog.releases[0].language =
+        CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN;
+    session.source_catalog.releases[0].architecture = CLASSICSETUP_ARCH_X64;
+    (void)strcpy(session.source_catalog.releases[0].release_name,
+                 "Latest stable Retail");
+    assert(classicsetup_gui_select_release_name(
+               &session, "Latest stable Retail") == 0);
+    assert(classicsetup_gui_select_language(
+               &session, CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN) == 0);
+    assert(classicsetup_gui_select_architecture(
+               &session, CLASSICSETUP_ARCH_X64) == 0);
+    assert(classicsetup_gui_set_retail_source_mode(
+               &session, CLASSICSETUP_GUI_RETAIL_EXISTING_ISO) == 0);
+    assert(!classicsetup_gui_source_selection_is_valid(&session));
+    session.local_iso_catalog.count = 1;
+    (void)strcpy(session.local_iso_catalog.entries[0].name, "Windows.iso");
+    (void)strcpy(session.local_iso_catalog.entries[0].path,
+                 "/read-only/Windows.iso");
+    assert(classicsetup_gui_select_local_iso(&session, 0) == 0);
+    assert(classicsetup_gui_source_selection_is_valid(&session));
+    session.download.state = CLASSICSETUP_DOWNLOAD_COMPLETE;
+    session.verified_source.backend = CLASSICSETUP_SOURCE_EXISTING_ISO;
+    session.verified_source.kind = CLASSICSETUP_VERIFIED_SOURCE_ISO;
+    session.verified_source.verified = true;
+    assert(classicsetup_gui_source_change_requirement(&session) ==
+           CLASSICSETUP_GUI_SOURCE_CHANGE_DISCARD_VERIFIED);
+}
+
 int main(void)
 {
     test_page_navigation();
@@ -410,6 +446,7 @@ int main(void)
     test_cascading_source_selection_and_lifecycle();
     test_retail_browser_policy_and_state();
     test_retail_source_fallback_is_single_shot();
+    test_existing_iso_requires_selected_file();
     test_gtk_disabled_result();
     return 0;
 }

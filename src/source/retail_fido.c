@@ -612,6 +612,23 @@ int classicsetup_retail_inspect_iso(
     struct classicsetup_process_result *result,
     struct classicsetup_retail_inspection_diagnostics *diagnostics)
 {
+    return classicsetup_retail_inspect_iso_path(
+        release, workspace, workspace != NULL ? workspace->iso_partial_path : NULL,
+        workspace != NULL ? workspace->iso_final_path : NULL,
+        cancel_callback, cancel_context, source, result, diagnostics);
+}
+
+int classicsetup_retail_inspect_iso_path(
+    const struct classicsetup_windows_release *release,
+    struct classicsetup_workspace *workspace,
+    const char *iso_path,
+    const char *verified_path,
+    classicsetup_process_cancel_callback cancel_callback,
+    void *cancel_context,
+    struct classicsetup_verified_windows_source *source,
+    struct classicsetup_process_result *result,
+    struct classicsetup_retail_inspection_diagnostics *diagnostics)
+{
     static const char *const members[] = {
         "sources/install.wim", "sources/install.esd"
     };
@@ -631,6 +648,7 @@ int classicsetup_retail_inspect_iso(
         diagnostics->wimlib_exit_status = -1;
     }
     if (release == NULL || workspace == NULL || !workspace->valid ||
+        iso_path == NULL || verified_path == NULL ||
         source == NULL || result == NULL ||
         tool_available(CLASSICSETUP_UUP_ISO_EXTRACTOR) != 0 ||
         tool_available(CLASSICSETUP_WIMLIB_EXECUTABLE) != 0 ||
@@ -656,7 +674,7 @@ int classicsetup_retail_inspect_iso(
         arguments[1] = "e";
         arguments[2] = "-y";
         arguments[3] = output_option;
-        arguments[4] = workspace->iso_partial_path;
+        arguments[4] = (char *)iso_path;
         arguments[5] = (char *)members[index];
         arguments[6] = NULL;
         run_result = classicsetup_run_process_cancellable(
@@ -730,7 +748,7 @@ int classicsetup_retail_inspect_iso(
     }
     if (run_result != 0 || !result->exited || result->exit_status != 0 ||
         classicsetup_retail_parse_wim_metadata(
-            release, result->output, workspace->iso_final_path, source) != 0) {
+            release, result->output, verified_path, source) != 0) {
         (void)unlink(image_path);
         return run_result == 1 ? 1 : -1;
     }

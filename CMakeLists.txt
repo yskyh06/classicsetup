@@ -162,6 +162,7 @@ add_executable(classicsetup
     src/network/network.c
     ${CLASSICSETUP_NETWORK_BACKEND}
     src/source/download_model.c
+    src/source/local_iso.c
     ${CLASSICSETUP_DOWNLOAD_BACKEND}
     ${CLASSICSETUP_SOURCE_BACKEND}
     ${CLASSICSETUP_RETAIL_BACKEND}
@@ -217,6 +218,7 @@ target_compile_definitions(classicsetup PRIVATE
     CLASSICSETUP_FIDO_BUILD_RELATIVE_DIR="${CLASSICSETUP_FIDO_BUILD_RELATIVE_DIR}"
     CLASSICSETUP_FIDO_INSTALL_RELATIVE_DIR="${CMAKE_INSTALL_LIBDIR}/classicsetup/tools/fido"
     CLASSICSETUP_FIDO_LINUX_SHA256="${CLASSICSETUP_FIDO_LINUX_SHA256}"
+    CLASSICSETUP_INSTALLED_ISO_DIRECTORY="${CMAKE_INSTALL_FULL_DATADIR}/classicsetup/iso"
 )
 if(CLASSICSETUP_ENABLE_UUP)
     message(STATUS "ClassicSetup Microsoft UUP backend: enabled (bundled runtime required)")
@@ -301,6 +303,8 @@ if(BUILD_TESTING)
         src/core/process.c
         src/network/network.c
         src/source/download_model.c
+        src/source/download_stub.c
+        src/source/local_iso.c
         src/source/windows_source.c
         src/source/uup.c
         src/source/retail_stub.c
@@ -327,6 +331,7 @@ if(BUILD_TESTING)
     add_executable(classicsetup_source_test
         tests/source_test.c
         src/source/download_model.c
+        src/source/local_iso.c
         ${CLASSICSETUP_DOWNLOAD_BACKEND}
         ${CLASSICSETUP_RETAIL_BACKEND}
         src/core/process.c

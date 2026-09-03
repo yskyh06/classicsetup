@@ -102,6 +102,24 @@ int classicsetup_retail_inspect_iso(
     return -1;
 }
 
+int classicsetup_retail_inspect_iso_path(
+    const struct classicsetup_windows_release *release,
+    struct classicsetup_workspace *workspace,
+    const char *iso_path,
+    const char *verified_path,
+    classicsetup_process_cancel_callback cancel_callback,
+    void *cancel_context,
+    struct classicsetup_verified_windows_source *source,
+    struct classicsetup_process_result *result,
+    struct classicsetup_retail_inspection_diagnostics *diagnostics)
+{
+    (void)iso_path;
+    (void)verified_path;
+    return classicsetup_retail_inspect_iso(
+        release, workspace, cancel_callback, cancel_context, source, result,
+        diagnostics);
+}
+
 int classicsetup_retail_parse_wim_metadata(
     const struct classicsetup_windows_release *release,
     const char *wimlib_output,

@@ -6,6 +6,7 @@
 
 #include "classicsetup/config.h"
 #include "classicsetup/download.h"
+#include "classicsetup/local_iso.h"
 #include "classicsetup/network.h"
 #include "classicsetup/retail.h"
 #include "classicsetup/retail_browser.h"
@@ -105,6 +106,9 @@ struct classicsetup_gui_session {
     struct classicsetup_retail_browser_status retail_browser_status;
     struct classicsetup_verified_windows_source verified_source;
     struct classicsetup_workspace workspace;
+    struct classicsetup_local_iso_catalog local_iso_catalog;
+    size_t selected_local_iso_index;
+    bool has_selected_local_iso;
     bool options_placeholder;
     struct classicsetup_network_snapshot network;
     bool advanced_plan_prepared;
@@ -152,6 +156,10 @@ int classicsetup_gui_set_source_backend(
 int classicsetup_gui_set_retail_source_mode(
     struct classicsetup_gui_session *session,
     enum classicsetup_gui_retail_source_mode mode);
+
+int classicsetup_gui_select_local_iso(
+    struct classicsetup_gui_session *session,
+    size_t index);
 
 bool classicsetup_gui_retail_try_fido_once(
     struct classicsetup_gui_session *session);

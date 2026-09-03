@@ -57,6 +57,11 @@ struct classicsetup_gui_runtime {
     GtkWidget *edition_value;
     GtkWidget *change_source_button;
     GtkWidget *retail_source_buttons[4];
+    GtkWidget *local_iso_box;
+    GtkWidget *local_iso_dropdown;
+    GtkStringList *local_iso_model;
+    GtkWidget *local_iso_status;
+    GtkWidget *local_iso_refresh_button;
     char release_choices[CLASSICSETUP_SOURCE_MAX_RELEASES]
                         [CLASSICSETUP_SOURCE_NAME_SIZE];
     size_t release_choice_count;
@@ -122,6 +127,8 @@ struct download_task_request {
     struct classicsetup_gui_runtime *runtime;
     struct classicsetup_windows_release release;
     enum classicsetup_source_backend backend;
+    enum classicsetup_gui_retail_source_mode retail_source_mode;
+    char local_iso_path[CLASSICSETUP_LOCAL_ISO_PATH_SIZE];
     bool pre_resolved;
 };
 
@@ -323,7 +330,13 @@ static gboolean page_is_complete(
         return classicsetup_gui_source_selection_is_valid(runtime->session);
     case CLASSICSETUP_GUI_PAGE_DOWNLOAD:
         return classicsetup_download_is_ready(
-            &runtime->session->download, &runtime->session->workspace);
+                   &runtime->session->download,
+                   &runtime->session->workspace) ||
+               (runtime->session->retail_source_mode ==
+                    CLASSICSETUP_GUI_RETAIL_EXISTING_ISO &&
+                runtime->session->download.state ==
+                    CLASSICSETUP_DOWNLOAD_COMPLETE &&
+                runtime->session->verified_source.verified);
     case CLASSICSETUP_GUI_PAGE_OPTIONS:
         return runtime->session->options_placeholder &&
                runtime->session->page > CLASSICSETUP_GUI_PAGE_OPTIONS;
@@ -472,6 +485,28 @@ static void clear_string_model(GtkStringList *model)
         model, 0, g_list_model_get_n_items(G_LIST_MODEL(model)), NULL);
 }
 
+static void refresh_local_iso_catalog(
+    struct classicsetup_gui_runtime *runtime)
+{
+    char directory[CLASSICSETUP_LOCAL_ISO_PATH_SIZE];
+
+    runtime->session->has_selected_local_iso = false;
+    runtime->session->selected_local_iso_index = 0;
+    if (classicsetup_local_iso_default_directory(
+            directory, sizeof(directory)) != 0 ||
+        classicsetup_local_iso_scan(
+            directory, &runtime->session->local_iso_catalog) != 0) {
+        if (runtime->session->local_iso_catalog.error[0] == '\0') {
+            (void)snprintf(runtime->session->local_iso_catalog.error,
+                           sizeof(runtime->session->local_iso_catalog.error),
+                           "%s",
+                           "Create the classicsetup/iso folder and place Windows ISO files in it.");
+        }
+        return;
+    }
+    (void)classicsetup_gui_select_local_iso(runtime->session, 0);
+}
+
 static const char *language_label(enum classicsetup_windows_language language)
 {
     return language == CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN
@@ -548,6 +583,45 @@ static void update_source_controls(
     clear_string_model(runtime->release_model);
     clear_string_model(runtime->language_model);
     clear_string_model(runtime->architecture_model);
+    if (runtime->local_iso_model != NULL) {
+        clear_string_model(runtime->local_iso_model);
+        for (index = 0;
+             index < runtime->session->local_iso_catalog.count; ++index) {
+            gtk_string_list_append(
+                runtime->local_iso_model,
+                runtime->session->local_iso_catalog.entries[index].name);
+        }
+        gtk_drop_down_set_selected(
+            GTK_DROP_DOWN(runtime->local_iso_dropdown),
+            runtime->session->has_selected_local_iso
+                ? (guint)runtime->session->selected_local_iso_index
+                : GTK_INVALID_LIST_POSITION);
+        gtk_widget_set_visible(
+            runtime->local_iso_box,
+            runtime->session->retail_source_mode ==
+                CLASSICSETUP_GUI_RETAIL_EXISTING_ISO);
+        gtk_widget_set_sensitive(
+            runtime->local_iso_dropdown,
+            editable && runtime->session->local_iso_catalog.count > 0);
+        gtk_widget_set_sensitive(runtime->local_iso_refresh_button, editable);
+        if (runtime->session->local_iso_catalog.count > 0) {
+            char local_status[256];
+
+            (void)snprintf(
+                local_status, sizeof(local_status),
+                "%zu ISO file(s) found in %.180s",
+                runtime->session->local_iso_catalog.count,
+                runtime->session->local_iso_catalog.directory);
+            gtk_label_set_text(GTK_LABEL(runtime->local_iso_status),
+                               local_status);
+        } else {
+            gtk_label_set_text(
+                GTK_LABEL(runtime->local_iso_status),
+                runtime->session->local_iso_catalog.error[0] != '\0'
+                    ? runtime->session->local_iso_catalog.error
+                    : "No Windows ISO files were found.");
+        }
+    }
 
     if (catalog->state == CLASSICSETUP_SOURCE_READY) {
         for (index = 0; index < catalog->release_count; ++index) {
@@ -702,7 +776,7 @@ static void update_source_controls(
             gtk_widget_set_sensitive(
                 runtime->retail_source_buttons[index],
                 editable && index <=
-                    CLASSICSETUP_GUI_RETAIL_MICROSOFT_PAGE);
+                    CLASSICSETUP_GUI_RETAIL_EXISTING_ISO);
         }
     }
     gtk_widget_set_visible(
@@ -949,7 +1023,22 @@ static void download_worker(
     result->release = request->release;
     classicsetup_download_status_reset(&result->status);
     result->status.state = CLASSICSETUP_DOWNLOAD_PREPARING;
-    if (request->backend ==
+    if (request->retail_source_mode ==
+        CLASSICSETUP_GUI_RETAIL_EXISTING_ISO) {
+        if (classicsetup_workspace_create(&result->workspace) != 0) {
+            result->status.state = CLASSICSETUP_DOWNLOAD_FAILED;
+            result->status.error = CLASSICSETUP_DOWNLOAD_ERROR_WRITE;
+            (void)snprintf(result->status.message,
+                           sizeof(result->status.message), "%s",
+                           "The temporary verification workspace could not be created.");
+        } else {
+            (void)classicsetup_local_iso_verify(
+                &result->release, request->local_iso_path,
+                &result->workspace, &runtime->download_cancel_requested,
+                download_progress_from_worker, runtime, &result->status,
+                &result->verified_source);
+        }
+    } else if (request->backend ==
         CLASSICSETUP_SOURCE_MICROSOFT_UUP) {
         struct classicsetup_uup_target target;
         struct classicsetup_workspace_diagnostics workspace_diagnostics;
@@ -1155,7 +1244,9 @@ static void start_download_release(
     if (runtime->download_task_active || runtime->source_task_active ||
         release == NULL ||
         !classicsetup_gui_source_selection_is_valid(runtime->session) ||
-        !classicsetup_network_can_continue(&runtime->session->network)) {
+        (runtime->session->retail_source_mode !=
+             CLASSICSETUP_GUI_RETAIL_EXISTING_ISO &&
+         !classicsetup_network_can_continue(&runtime->session->network))) {
         return;
     }
     if (runtime->session->workspace.valid &&
@@ -1172,6 +1263,15 @@ static void start_download_release(
     request->runtime = runtime;
     request->release = *release;
     request->backend = runtime->session->source_backend;
+    request->retail_source_mode = runtime->session->retail_source_mode;
+    if (runtime->session->retail_source_mode ==
+            CLASSICSETUP_GUI_RETAIL_EXISTING_ISO &&
+        runtime->session->has_selected_local_iso) {
+        (void)snprintf(
+            request->local_iso_path, sizeof(request->local_iso_path), "%s",
+            runtime->session->local_iso_catalog.entries[
+                runtime->session->selected_local_iso_index].path);
+    }
     request->pre_resolved = pre_resolved;
     task = g_task_new(NULL, NULL, download_finished, runtime);
     g_task_set_task_data(task, request, free_download_task_request);
@@ -1692,9 +1792,40 @@ static void on_retail_source_toggled(
     }
     value = GPOINTER_TO_INT(g_object_get_data(
         G_OBJECT(button), "classicsetup-retail-source"));
-    (void)classicsetup_gui_set_retail_source_mode(
-        runtime->session,
-        (enum classicsetup_gui_retail_source_mode)value);
+    if (classicsetup_gui_set_retail_source_mode(
+            runtime->session,
+            (enum classicsetup_gui_retail_source_mode)value) == 0) {
+        if (value == CLASSICSETUP_GUI_RETAIL_EXISTING_ISO) {
+            refresh_local_iso_catalog(runtime);
+        }
+        update_source_controls(runtime);
+        update_download_page(runtime);
+    }
+}
+
+static void on_local_iso_selected(
+    GtkDropDown *dropdown, GParamSpec *property, gpointer user_data)
+{
+    struct classicsetup_gui_runtime *runtime = user_data;
+    guint selected = gtk_drop_down_get_selected(dropdown);
+
+    (void)property;
+    if (!runtime->updating_source_controls &&
+        selected != GTK_INVALID_LIST_POSITION) {
+        (void)classicsetup_gui_select_local_iso(runtime->session, selected);
+        update_navigation(runtime);
+        update_download_page(runtime);
+    }
+}
+
+static void on_local_iso_refresh_clicked(
+    GtkButton *button, gpointer user_data)
+{
+    struct classicsetup_gui_runtime *runtime = user_data;
+
+    (void)button;
+    refresh_local_iso_catalog(runtime);
+    update_source_controls(runtime);
     update_download_page(runtime);
 }
 
@@ -1829,10 +1960,35 @@ static GtkWidget *build_windows_version_page(
                   CLASSICSETUP_GUI_RETAIL_AUTOMATIC])));
     gtk_box_append(GTK_BOX(box), build_source_option(
         runtime, CLASSICSETUP_GUI_RETAIL_EXISTING_ISO, "▣",
-        "Use existing ISO — Not available yet",
-        "Choose a local Windows ISO file.", FALSE,
+        "Use existing ISO",
+        "Choose a Windows ISO from the classicsetup/iso folder.", TRUE,
         GTK_CHECK_BUTTON(runtime->retail_source_buttons[
             CLASSICSETUP_GUI_RETAIL_AUTOMATIC])));
+    runtime->local_iso_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_widget_add_css_class(runtime->local_iso_box,
+                             "classic-source-summary");
+    add_classic_label(runtime->local_iso_box, "Available ISO files",
+                      "classic-section-title", FALSE);
+    runtime->local_iso_model = gtk_string_list_new(NULL);
+    runtime->local_iso_dropdown = gtk_drop_down_new(
+        G_LIST_MODEL(runtime->local_iso_model), NULL);
+    g_signal_connect(runtime->local_iso_dropdown, "notify::selected",
+                     G_CALLBACK(on_local_iso_selected), runtime);
+    gtk_box_append(GTK_BOX(runtime->local_iso_box),
+                   runtime->local_iso_dropdown);
+    runtime->local_iso_status = gtk_label_new("");
+    gtk_label_set_xalign(GTK_LABEL(runtime->local_iso_status), 0.0F);
+    gtk_label_set_wrap(GTK_LABEL(runtime->local_iso_status), TRUE);
+    gtk_box_append(GTK_BOX(runtime->local_iso_box),
+                   runtime->local_iso_status);
+    runtime->local_iso_refresh_button =
+        gtk_button_new_with_label("Refresh ISO List");
+    g_signal_connect(runtime->local_iso_refresh_button, "clicked",
+                     G_CALLBACK(on_local_iso_refresh_clicked), runtime);
+    gtk_box_append(GTK_BOX(runtime->local_iso_box),
+                   runtime->local_iso_refresh_button);
+    gtk_widget_set_visible(runtime->local_iso_box, FALSE);
+    gtk_box_append(GTK_BOX(box), runtime->local_iso_box);
     gtk_box_append(GTK_BOX(box), build_source_option(
         runtime, CLASSICSETUP_GUI_RETAIL_CUSTOM, "…",
         "Custom download — Future option",
@@ -2272,6 +2428,11 @@ static void on_download_start_clicked(GtkButton *button, gpointer user_data)
     struct classicsetup_gui_runtime *runtime = user_data;
 
     (void)button;
+    if (runtime->session->retail_source_mode ==
+        CLASSICSETUP_GUI_RETAIL_EXISTING_ISO) {
+        start_download(runtime);
+        return;
+    }
     if (runtime->session->source_backend ==
         CLASSICSETUP_SOURCE_MICROSOFT_RETAIL) {
         if (runtime->session->retail_source_mode ==
@@ -2369,7 +2530,10 @@ static void update_download_page(struct classicsetup_gui_runtime *runtime)
                        release->edition_name[0] != '\0'
                            ? release->edition_name
                            : "Edition selected after verification",
-                       runtime->session->source_backend ==
+                       runtime->session->retail_source_mode ==
+                               CLASSICSETUP_GUI_RETAIL_EXISTING_ISO
+                           ? "Existing ISO in classicsetup/iso"
+                           : runtime->session->source_backend ==
                                CLASSICSETUP_SOURCE_MICROSOFT_UUP
                            ? "Microsoft Windows Update"
                            : "Microsoft official ISO");
@@ -2467,12 +2631,21 @@ static void update_download_page(struct classicsetup_gui_runtime *runtime)
     gtk_widget_set_sensitive(
         runtime->download_start_button,
         classicsetup_gui_source_selection_is_valid(runtime->session) &&
-        classicsetup_network_can_continue(&runtime->session->network) &&
+        (runtime->session->retail_source_mode ==
+             CLASSICSETUP_GUI_RETAIL_EXISTING_ISO ||
+         classicsetup_network_can_continue(&runtime->session->network)) &&
         source_supported && !active &&
         status->state != CLASSICSETUP_DOWNLOAD_COMPLETE);
     gtk_button_set_label(
         GTK_BUTTON(runtime->download_start_button),
 #if CLASSICSETUP_ENABLE_WEBKIT_RETAIL
+        runtime->session->retail_source_mode ==
+                CLASSICSETUP_GUI_RETAIL_EXISTING_ISO
+            ? (status->state == CLASSICSETUP_DOWNLOAD_FAILED ||
+                       status->state == CLASSICSETUP_DOWNLOAD_CANCELLED
+                   ? "Verify Again"
+                   : "Use Selected ISO")
+            :
         runtime->session->source_backend ==
                 CLASSICSETUP_SOURCE_MICROSOFT_RETAIL
             ? (runtime->session->retail_source_mode ==
@@ -2482,6 +2655,13 @@ static void update_download_page(struct classicsetup_gui_runtime *runtime)
                    : "Open Microsoft Download Page")
             :
 #else
+        runtime->session->retail_source_mode ==
+                CLASSICSETUP_GUI_RETAIL_EXISTING_ISO
+            ? (status->state == CLASSICSETUP_DOWNLOAD_FAILED ||
+                       status->state == CLASSICSETUP_DOWNLOAD_CANCELLED
+                   ? "Verify Again"
+                   : "Use Selected ISO")
+            :
         runtime->session->source_backend ==
                 CLASSICSETUP_SOURCE_MICROSOFT_RETAIL
             ? (runtime->session->retail_source_mode ==
@@ -2841,7 +3021,9 @@ static void update_summary(struct classicsetup_gui_runtime *runtime)
         gtk_label_set_text(GTK_LABEL(runtime->summary_architecture), line);
         (void)snprintf(
             line, sizeof(line), "Source: %s",
-            source->backend == CLASSICSETUP_SOURCE_MICROSOFT_UUP
+            source->backend == CLASSICSETUP_SOURCE_EXISTING_ISO
+                ? "Existing ISO in classicsetup/iso"
+                : source->backend == CLASSICSETUP_SOURCE_MICROSOFT_UUP
                 ? "Microsoft Windows Update"
                 : "Microsoft official ISO");
     } else if (runtime->session->has_selected_release) {

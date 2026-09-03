@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include "classicsetup/download.h"
+#include "classicsetup/local_iso.h"
 #include "classicsetup/retail.h"
 #include "classicsetup/windows_source.h"
 #include "classicsetup/workspace.h"
@@ -34,6 +35,63 @@ static const char SKUS[] =
     "{\"Id\":\"21\",\"Language\":\"English\","
     "\"LocalizedLanguage\":\"English\","
     "\"ProductDisplayName\":\"Windows 11 25H2\"}]}";
+
+static void test_local_iso_scan(void)
+{
+    char directory[] = "/tmp/classicsetup-local-iso-XXXXXX";
+    char first[PATH_MAX];
+    char second[PATH_MAX];
+    char ignored[PATH_MAX];
+    char linked[PATH_MAX];
+    struct classicsetup_local_iso_catalog catalog;
+    struct classicsetup_windows_release release = {0};
+    struct classicsetup_workspace workspace;
+    struct classicsetup_download_status status;
+    struct classicsetup_verified_windows_source verified_source;
+    atomic_bool cancelled;
+    FILE *file;
+    char default_directory[PATH_MAX];
+
+    assert(mkdtemp(directory) != NULL);
+    assert(setenv("CLASSICSETUP_ISO_DIRECTORY", directory, 1) == 0);
+    assert(classicsetup_local_iso_default_directory(
+               default_directory, sizeof(default_directory)) == 0);
+    assert(strcmp(default_directory, directory) == 0);
+    assert(unsetenv("CLASSICSETUP_ISO_DIRECTORY") == 0);
+    assert(snprintf(first, sizeof(first), "%s/Z-Windows.ISO", directory) > 0);
+    assert(snprintf(second, sizeof(second), "%s/a-windows.iso", directory) > 0);
+    assert(snprintf(ignored, sizeof(ignored), "%s/readme.txt", directory) > 0);
+    assert(snprintf(linked, sizeof(linked), "%s/link.iso", directory) > 0);
+    file = fopen(first, "wb");
+    assert(file != NULL && fputs("one", file) >= 0 && fclose(file) == 0);
+    file = fopen(second, "wb");
+    assert(file != NULL && fputs("two", file) >= 0 && fclose(file) == 0);
+    file = fopen(ignored, "wb");
+    assert(file != NULL && fputs("ignore", file) >= 0 && fclose(file) == 0);
+    assert(symlink(first, linked) == 0);
+
+    assert(classicsetup_local_iso_scan(directory, &catalog) == 0);
+    assert(catalog.count == 2);
+    assert(strcmp(catalog.entries[0].name, "a-windows.iso") == 0);
+    assert(strcmp(catalog.entries[1].name, "Z-Windows.ISO") == 0);
+    assert(catalog.entries[0].size == 3);
+    release.family = CLASSICSETUP_WINDOWS_11;
+    release.language = CLASSICSETUP_WINDOWS_LANGUAGE_KOREAN;
+    release.architecture = CLASSICSETUP_ARCH_X64;
+    atomic_init(&cancelled, false);
+    assert(classicsetup_workspace_create(&workspace) == 0);
+    assert(classicsetup_local_iso_verify(
+               &release, second, &workspace, &cancelled, NULL, NULL,
+               &status, &verified_source) != 0);
+    assert(access(second, R_OK) == 0);
+    classicsetup_workspace_cleanup_after_install(&workspace, false);
+
+    assert(unlink(linked) == 0);
+    assert(unlink(ignored) == 0);
+    assert(unlink(second) == 0);
+    assert(unlink(first) == 0);
+    assert(rmdir(directory) == 0);
+}
 
 static void test_source_mapping_and_policy(void)
 {
@@ -588,6 +646,8 @@ static void test_retail_model_and_resolver(const char *self_path)
     assert(unlink(wrong_script) == 0);
     assert(unlink(resolver) == 0);
     assert(rmdir(directory) == 0);
+#else
+    (void)self_path;
 #endif
 }
 
@@ -612,6 +672,7 @@ int main(int argc, char **argv)
     assert(length > 0 && (size_t)length < sizeof(self_path));
     self_path[length] = '\0';
     test_source_mapping_and_policy();
+    test_local_iso_scan();
     test_source_resolve_diagnostics();
     test_workspace_and_verification();
     test_workspace_root_policy();

@@ -114,6 +114,17 @@ int classicsetup_retail_inspect_iso(
     struct classicsetup_process_result *result,
     struct classicsetup_retail_inspection_diagnostics *diagnostics);
 
+int classicsetup_retail_inspect_iso_path(
+    const struct classicsetup_windows_release *release,
+    struct classicsetup_workspace *workspace,
+    const char *iso_path,
+    const char *verified_path,
+    classicsetup_process_cancel_callback cancel_callback,
+    void *cancel_context,
+    struct classicsetup_verified_windows_source *source,
+    struct classicsetup_process_result *result,
+    struct classicsetup_retail_inspection_diagnostics *diagnostics);
+
 int classicsetup_retail_parse_wim_metadata(
     const struct classicsetup_windows_release *release,
     const char *wimlib_output,
